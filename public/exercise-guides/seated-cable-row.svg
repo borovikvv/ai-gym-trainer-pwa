@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" role="img" aria-label="Горизонтальная тяга: техника выполнения">
+  <rect width="960" height="640" rx="48" fill="#fff7ec"/>
+  <rect x="42" y="42" width="876" height="556" rx="38" fill="#fffaf2" stroke="#eadfce" stroke-width="4"/>
+  <text x="72" y="96" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="800" fill="#211b16">Горизонтальная тяга</text>
+  <text x="72" y="132" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#8a7b6b">Средняя спина · широчайшие</text>
+  
+  <rect x="176" y="486" width="310" height="32" rx="16" fill="#d8cab7" stroke="#5c4a3c" stroke-width="4"/>
+  <rect x="680" y="250" width="54" height="270" rx="18" fill="#5c4a3c"/>
+  <line x1="704" y1="350" x2="448" y2="386" stroke="#2b2621" stroke-width="7"/>
+  <circle cx="330" cy="296" r="28" fill="#f0a67d" stroke="#211b16" stroke-width="4"/>
+  <path d="M345 325 L415 455" stroke="#211b16" stroke-width="17" stroke-linecap="round"/>
+  <path d="M400 392 L448 386 M390 405 L448 386" stroke="#211b16" stroke-width="13" stroke-linecap="round"/>
+  <path d="M415 455 L330 520 M420 455 L535 520" stroke="#211b16" stroke-width="15" stroke-linecap="round"/>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#ff7a3d"/></marker></defs>
+  <path d="M650 330 C 650 345, 500 345, 500 384" fill="none" stroke="#ff7a3d" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <text x="575" y="331" text-anchor="middle" font-family="Inter, Arial" font-size="20" font-weight="800" fill="#ff7a3d">тяни локтями</text><rect x="70" y="392" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="92" cy="413" r="7" fill="#ff7a3d"/>
+  <text x="110" y="420" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">грудь открыта</text><rect x="70" y="446" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="92" cy="467" r="7" fill="#ff7a3d"/>
+  <text x="110" y="474" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">лопатки назад</text><rect x="70" y="500" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="92" cy="521" r="7" fill="#ff7a3d"/>
+  <text x="110" y="528" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">без рывка корпусом</text>
+</svg>

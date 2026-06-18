@@ -1,0 +1,8 @@
+{
+  "id": "leg-press",
+  "name": "Жим ногами",
+  "model": "gpt-image-2-medium",
+  "provider": "openai-codex",
+  "image": "/root/ai-gym-trainer-pwa/public/exercise-guides/leg-press-gpt.png",
+  "prompt": "Create a premium text-free instructional fitness illustration for a mobile personal trainer app.\n\nExercise: Жим ногами (leg-press)\nTarget muscles: quadriceps, glutes, hamstrings\nEquipment: 45-degree leg press machine\nMovement to show: leg press: feet on platform, knees bend under control, platform pressed away without locking knees.\n\nVisual style must match the existing exercise guide images in this product: realistic modern gym, clean premium editorial lighting, warm neutral tones, one athlete demonstrating correct technique, subtle ghost-position or motion arrows to show the movement path, uncluttered background, app-friendly 3/4 instructional composition.\n\nHard constraints:\n- No readable text, no letters, no numbers, no captions, no logos, no watermarks, no UI labels.\n- Do not include pseudo-text on machines, clothing, walls, screens, or equipment.\n- Avoid exaggerated anatomy, unsafe form, distorted hands, extra limbs, or impossible equipment.\n- Show correct, safe technique clearly enough that a gym user can understand the exercise from the image.\n- Landscape 3:2-ish composition suitable for a 3/4-screen exercise modal."
+}

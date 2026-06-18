@@ -1,0 +1,6 @@
+{
+  "prompt": "Generate one realistic instructional image for a mobile gym exercise guide.\nExercise: Pallof press anti-rotation cable press.\nShow a single adult athlete standing side-on to a cable machine, feet about shoulder-width, knees slightly bent, torso tall and braced. The cable pulley is set at mid-chest height to the athlete's side. The athlete holds a single cable handle with both hands and presses both hands straight forward away from the chest, arms extended in front of the sternum, resisting the sideways pull of the cable without rotating the torso. The cable should clearly run horizontally from the side into the hands. Correct technique must be obvious: neutral spine, hips square, shoulders down, core braced, no twisting. Modern gym, clean premium fitness app style, natural lighting, realistic anatomy, full-body view, high contrast, no clutter. Use subtle motion arrows or a faint ghosted start/end position only if helpful.\nStrictly no readable text, no letters, no numbers, no logos, no captions, no watermarks, no UI labels.",
+  "size": "1536x1024",
+  "quality": "medium",
+  "output": "/root/ai-gym-trainer-pwa/public/exercise-guides/pallof-press-gpt.png"
+}

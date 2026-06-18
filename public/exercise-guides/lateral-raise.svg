@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" role="img" aria-label="Разведения гантелей в стороны: техника выполнения">
+  <rect width="960" height="640" rx="48" fill="#fff7ec"/>
+  <rect x="42" y="42" width="876" height="556" rx="38" fill="#fffaf2" stroke="#eadfce" stroke-width="4"/>
+  <text x="72" y="96" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="800" fill="#211b16">Разведения гантелей в стороны</text>
+  <text x="72" y="132" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#8a7b6b">Средняя дельта</text>
+  
+  <circle cx="455" cy="190" r="28" fill="#f0a67d" stroke="#211b16" stroke-width="4"/>
+  <path d="M455 222 L455 318" stroke="#211b16" stroke-width="16" stroke-linecap="round"/>
+  <path d="M409 262 L501 262" stroke="#211b16" stroke-width="14" stroke-linecap="round"/>
+  <path d="M447 318 L403 410" stroke="#211b16" stroke-width="15" stroke-linecap="round"/>
+  <path d="M463 318 L507 410" stroke="#211b16" stroke-width="15" stroke-linecap="round"/>
+  <path d="M408 258 L330 315 M502 258 L580 315" stroke="#211b16" stroke-width="13" stroke-linecap="round"/>
+  <rect x="300" y="300" width="55" height="26" rx="10" fill="#2b2621"/><rect x="555" y="300" width="55" height="26" rx="10" fill="#2b2621"/>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#ff7a3d"/></marker></defs>
+  <path d="M630 380 C 630 328, 610 328, 610 300" fill="none" stroke="#ff7a3d" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <text x="620" y="314" text-anchor="middle" font-family="Inter, Arial" font-size="20" font-weight="800" fill="#ff7a3d">до уровня плеч</text><rect x="72" y="392" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="94" cy="413" r="7" fill="#ff7a3d"/>
+  <text x="112" y="420" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">локоть чуть согнут</text><rect x="72" y="446" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="94" cy="467" r="7" fill="#ff7a3d"/>
+  <text x="112" y="474" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">не поднимай плечи</text><rect x="72" y="500" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="94" cy="521" r="7" fill="#ff7a3d"/>
+  <text x="112" y="528" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">без рывка</text>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" role="img" aria-label="Румынская тяга: техника выполнения">
+  <rect width="960" height="640" rx="48" fill="#fff7ec"/>
+  <rect x="42" y="42" width="876" height="556" rx="38" fill="#fffaf2" stroke="#eadfce" stroke-width="4"/>
+  <text x="72" y="96" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="800" fill="#211b16">Румынская тяга</text>
+  <text x="72" y="132" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#8a7b6b">Задняя поверхность бедра · ягодицы</text>
+  
+  <line x1="320" y1="430" x2="640" y2="430" stroke="#2b2621" stroke-width="13" stroke-linecap="round"/>
+  <circle cx="292" cy="430" r="28" fill="#2b2621"/><circle cx="668" cy="430" r="28" fill="#2b2621"/>
+  <circle cx="430" cy="220" r="28" fill="#f0a67d" stroke="#211b16" stroke-width="4"/>
+  <path d="M440 252 L520 360" stroke="#211b16" stroke-width="17" stroke-linecap="round"/>
+  <path d="M500 338 L450 430 M525 352 L560 430" stroke="#211b16" stroke-width="13" stroke-linecap="round"/>
+  <path d="M520 360 L480 520 M525 360 L585 520" stroke="#211b16" stroke-width="15" stroke-linecap="round"/>
+  <path d="M448 520 L520 520 M560 520 L635 520" stroke="#211b16" stroke-width="11" stroke-linecap="round"/>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#ff7a3d"/></marker></defs>
+  <path d="M680 300 C 680 288, 590 288, 590 300" fill="none" stroke="#ff7a3d" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <text x="635" y="274" text-anchor="middle" font-family="Inter, Arial" font-size="20" font-weight="800" fill="#ff7a3d">таз назад</text><rect x="72" y="388" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="94" cy="409" r="7" fill="#ff7a3d"/>
+  <text x="112" y="416" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">штанга близко к ногам</text><rect x="72" y="442" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="94" cy="463" r="7" fill="#ff7a3d"/>
+  <text x="112" y="470" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">спина нейтрально</text><rect x="72" y="496" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="94" cy="517" r="7" fill="#ff7a3d"/>
+  <text x="112" y="524" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">колени мягкие</text>
+</svg>

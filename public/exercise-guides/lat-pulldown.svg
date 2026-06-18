@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" role="img" aria-label="Тяга верхнего блока: техника выполнения">
+  <rect width="960" height="640" rx="48" fill="#fff7ec"/>
+  <rect x="42" y="42" width="876" height="556" rx="38" fill="#fffaf2" stroke="#eadfce" stroke-width="4"/>
+  <text x="72" y="96" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="800" fill="#211b16">Тяга верхнего блока</text>
+  <text x="72" y="132" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#8a7b6b">Широчайшие · верх спины</text>
+  
+  <rect x="180" y="184" width="34" height="340" rx="12" fill="#5c4a3c"/><rect x="180" y="184" width="390" height="24" rx="12" fill="#5c4a3c"/>
+  <line x1="520" y1="208" x2="520" y2="292" stroke="#2b2621" stroke-width="7"/>
+  <line x1="410" y1="292" x2="630" y2="292" stroke="#2b2621" stroke-width="12" stroke-linecap="round"/>
+  <rect x="380" y="468" width="220" height="34" rx="17" fill="#d8cab7" stroke="#5c4a3c" stroke-width="4"/>
+  <circle cx="490" cy="350" r="28" fill="#f0a67d" stroke="#211b16" stroke-width="4"/>
+  <path d="M490 382 L490 468" stroke="#211b16" stroke-width="17" stroke-linecap="round"/>
+  <path d="M436 404 L410 292 M544 404 L630 292" stroke="#211b16" stroke-width="13" stroke-linecap="round"/>
+  <path d="M475 468 L450 538 M505 468 L530 538" stroke="#211b16" stroke-width="14" stroke-linecap="round"/>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#ff7a3d"/></marker></defs>
+  <path d="M660 290 C 660 317, 598 317, 598 368" fill="none" stroke="#ff7a3d" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <text x="629" y="303" text-anchor="middle" font-family="Inter, Arial" font-size="20" font-weight="800" fill="#ff7a3d">локти вниз</text><rect x="650" y="398" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="672" cy="419" r="7" fill="#ff7a3d"/>
+  <text x="690" y="426" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">корпус стабилен</text><rect x="650" y="452" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="672" cy="473" r="7" fill="#ff7a3d"/>
+  <text x="690" y="480" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">плечи не к ушам</text><rect x="650" y="506" width="300" height="42" rx="21" fill="#fff2df" stroke="#ead7a2" stroke-width="2"/>
+  <circle cx="672" cy="527" r="7" fill="#ff7a3d"/>
+  <text x="690" y="534" font-family="Inter, Arial" font-size="18" font-weight="750" fill="#211b16">тяни к верхней груди</text>
+</svg>
