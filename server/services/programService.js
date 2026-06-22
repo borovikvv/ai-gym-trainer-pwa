@@ -300,12 +300,13 @@ export async function loadRecentHistory(client, userId) {
 }
 
 export async function loadCoachStateForUser(client, userId, now = new Date()) {
-  const [profile, workoutDays, history] = await Promise.all([
-    loadUserProfile(client, userId),
-    loadUserWorkoutDays(client, userId),
-    loadRecentHistory(client, userId),
-  ])
-  return computeCoachState({ profile, workoutDays, history, now })
+  // Two-pass path: compute coachMemory first (which itself needs a first-pass
+  // coachState), then recompute coachState with coachMemory available so the
+  // mesocycle engine can use weeklyBalance.muscleSetCounts for early MRV
+  // triggers. Without this, /coach/state and /coach/memory would return
+  // inconsistent mesocycle state.
+  const { coachState } = await loadCoachMemoryForUser(client, userId, now)
+  return coachState
 }
 
 export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
@@ -316,7 +317,7 @@ export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
     loadRecentHistory(client, userId),
     loadRecentCoachDecisionLogs(client, userId),
   ])
-  // First pass: compute coachMemory without mesocycle MRV triggers (no coachMemory yet)
+  // First pass: coachState without coachMemory (mesocycle MRV triggers unavailable).
   const coachStatePass1 = computeCoachState({ profile, workoutDays, history, now })
   const coachMemory = computeCoachMemory({
     profile,
@@ -326,9 +327,9 @@ export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
     coachDecisionLogs,
     now,
   })
-  // Second pass: recompute coachState with coachMemory for accurate mesocycle MRV triggers
-  coachMemory._coachState = computeCoachState({ profile, workoutDays, history, coachMemory, now })
-  return coachMemory
+  // Second pass: coachState WITH coachMemory — mesocycle MRV triggers now work.
+  const coachState = computeCoachState({ profile, workoutDays, history, coachMemory, now })
+  return { coachMemory, coachState }
 }
 
 export async function loadRecentCoachDecisionLogs(client, userId) {

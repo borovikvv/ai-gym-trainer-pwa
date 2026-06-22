@@ -40,8 +40,8 @@ coachRoutes.get('/coach/state/:userId', async (req, res, next) => {
 
 coachRoutes.get('/coach/memory/:userId', async (req, res, next) => {
   try {
-    const coachMemory = await loadCoachMemoryForUser(pool, req.params.userId)
-    res.json({ ok: true, coachMemory, coachState: coachMemory._coachState ?? null })
+    const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, req.params.userId)
+    res.json({ ok: true, coachMemory, coachState })
   } catch (error) {
     next(error)
   }
