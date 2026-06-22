@@ -79,6 +79,7 @@ describe('CoachHome', () => {
         userHistory={[]}
         nextTargets={{}}
         coachMemory={null}
+        coachState={null}
         onSelectUser={vi.fn()}
         onOpenProfile={vi.fn()}
         onOpenLibrary={vi.fn()}
