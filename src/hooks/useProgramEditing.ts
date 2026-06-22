@@ -7,7 +7,7 @@ import {
   type ProgramExerciseUpdate,
 } from '../data/programApi'
 import type { ExerciseLog } from '../domain/workoutHistory'
-import { formatWeight } from './useWorkoutSession'
+import { formatWeight } from '../lib/format'
 
 export type ProgramExerciseEditDraft = {
   setsCount: string

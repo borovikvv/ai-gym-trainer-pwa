@@ -1,5 +1,6 @@
 import type { WorkoutDay } from '../data/mockProgram'
 import type { WorkoutSetInput } from './progression'
+import { roundWeight } from '../lib/format'
 
 const russianWeekdayOrder = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
@@ -136,8 +137,4 @@ function daysUntilWeekday(now: Date, weekday: string): number | null {
 
 function weekdayIndex(weekday: string): number {
   return russianWeekdayOrder.findIndex((day) => day.toLowerCase() === weekday.toLowerCase())
-}
-
-function roundWeight(value: number) {
-  return Number(value.toFixed(1))
 }

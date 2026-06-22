@@ -1,4 +1,5 @@
 import type { WorkoutHistoryEntry } from './workoutHistory'
+import { formatWeight, pluralRu } from '../lib/format'
 
 export type WorkoutDebrief = {
   summary: string
@@ -106,16 +107,4 @@ function buildWhy(entry: WorkoutHistoryEntry) {
   return reasons.length
     ? `Коррекция нужна потому что ${reasons.join(', ')}.`
     : 'Коррекция нужна по фактическим повторениям, весу и запасу в подходах.'
-}
-
-function formatWeight(weight: number) {
-  return Number.isInteger(weight) ? String(weight) : String(weight)
-}
-
-function pluralRu(count: number, one: string, few: string, many: string) {
-  const mod10 = count % 10
-  const mod100 = count % 100
-  if (mod10 === 1 && mod100 !== 11) return one
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
-  return many
 }

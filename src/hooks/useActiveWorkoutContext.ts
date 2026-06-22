@@ -11,10 +11,7 @@ import { getCanonicalExerciseId } from '../domain/exerciseIdentity'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { createDefaultQuestionnaire } from './useQuestionnaire'
 import { createSets } from './useWorkoutSession'
-
-function formatWeight(weight: number) {
-  return Number.isInteger(weight) ? String(weight) : String(weight)
-}
+import { formatWeight } from '../lib/format'
 
 function formatSetSummary(set: WorkoutSetInput, exercise?: Pick<ExercisePlan, 'id' | 'name' | 'muscleGroup'>) {
   if (exercise && isTimedExercise(exercise)) return `${set.reps} сек`

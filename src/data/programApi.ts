@@ -1,6 +1,7 @@
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { users as fallbackUsers, workoutDays as fallbackWorkoutDays, type ExercisePlan, type UserProfile, type WorkoutDay } from './mockProgram'
+import { formatWeight } from '../lib/format'
 
 const apiBaseUrl = import.meta.env.MODE === 'test' ? undefined : (import.meta.env.VITE_API_BASE_URL as string | undefined)
 
@@ -505,10 +506,6 @@ function buildPrescription(exercise: ApiExercisePlan | ExercisePlan) {
   }
   const weightText = exercise.targetWeight > 0 ? `${formatWeight(exercise.targetWeight)} кг` : 'вес тела'
   return `${exercise.setsCount}×${exercise.repMin}–${exercise.repMax} · рекомендовано ${weightText} · отдых ${exercise.restSeconds} сек`
-}
-
-function formatWeight(weight: number) {
-  return Number.isInteger(weight) ? String(weight) : String(weight)
 }
 
 function createFallbackQuestionnaire(user: UserProfile): UserQuestionnaire {
