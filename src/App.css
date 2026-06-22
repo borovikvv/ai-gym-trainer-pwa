@@ -1029,6 +1029,69 @@ select:disabled {
   border-radius: var(--radius-lg);
 }
 
+/* e1RM Sparkline Grid */
+.e1rm-sparkline-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 1px 2px 5px;
+}
+
+.e1rm-sparkline-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.e1rm-sparkline-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.e1rm-sparkline-card__header b {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.e1rm-sparkline-card__best {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.e1rm-sparkline-card__chart {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.e1rm-sparkline-card__chart svg {
+  flex-shrink: 0;
+}
+
+.e1rm-sparkline-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.e1rm-sparkline-card__muscle {
+  color: var(--text-tertiary);
+}
+
+.e1rm-trend--up {
+  color: var(--accent);
+}
+
+.e1rm-trend--down {
+  color: var(--danger);
+}
+
 .progress-details {
   padding: 0;
   border-radius: var(--radius-lg);

@@ -71,6 +71,7 @@ const dashboard: ProgressDashboard = {
       source: 'правила прогрессии',
     },
   ],
+  e1RMHistories: [],
 }
 
 describe('ProgressScreen', () => {
