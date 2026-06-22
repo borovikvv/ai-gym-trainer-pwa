@@ -87,4 +87,68 @@ describe('ProgressScreen', () => {
     expect(details).toBeInTheDocument()
     expect(details).not.toHaveAttribute('open')
   })
+
+  it('hides e1RM section when histories are empty', () => {
+    render(<ProgressScreen progressDashboard={dashboard} />)
+
+    // SectionList title 'Сила (e1RM)' should not appear when e1RMHistories is []
+    expect(screen.queryByRole('heading', { name: 'Сила (e1RM)' })).not.toBeInTheDocument()
+  })
+
+  it('renders e1RM sparklines and trend text when histories are non-empty', () => {
+    const dashboardWithE1RM: ProgressDashboard = {
+      ...dashboard,
+      e1RMHistories: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          muscleGroup: 'Грудь',
+          currentBest: 75,
+          trendDirection: 'up',
+          trendText: '+1,5 кг/нед',
+          sparkline: [
+            { x: 0, y: 70 },
+            { x: 1, y: 72 },
+            { x: 2, y: 75 },
+          ],
+          dataPointCount: 3,
+        },
+        {
+          exerciseId: 'lat-pulldown',
+          exerciseName: 'Тяга верхнего блока',
+          muscleGroup: 'Спина',
+          currentBest: 60,
+          trendDirection: 'flat',
+          trendText: 'стабильно',
+          sparkline: [
+            { x: 0, y: 58 },
+            { x: 1, y: 60 },
+            { x: 2, y: 60 },
+          ],
+          dataPointCount: 3,
+        },
+      ],
+    }
+
+    render(<ProgressScreen progressDashboard={dashboardWithE1RM} />)
+
+    // Section title appears
+    expect(screen.getByRole('heading', { name: 'Сила (e1RM)' })).toBeInTheDocument()
+
+    // Both exercises are rendered with their best e1RM
+    // Note: 'Жим лёжа' also appears in other sections, so use getAllByText.
+    expect(screen.getAllByText('Жим лёжа').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Тяга верхнего блока').length).toBeGreaterThan(0)
+
+    // currentBest is formatted as "{rounded} кг"
+    expect(screen.getByText('75 кг')).toBeInTheDocument()
+    expect(screen.getByText('60 кг')).toBeInTheDocument()
+
+    // Trend text is rendered
+    expect(screen.getByText('+1,5 кг/нед')).toBeInTheDocument()
+    expect(screen.getByText('стабильно')).toBeInTheDocument()
+
+    // SVG path is rendered (sparkline chart)
+    expect(document.querySelector('svg path')).toBeInTheDocument()
+  })
 })
