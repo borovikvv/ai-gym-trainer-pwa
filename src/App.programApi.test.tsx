@@ -117,6 +117,7 @@ describe('Coach Timeline database-backed program data', () => {
       }),
       loadPlannedWorkoutsFromApi: vi.fn().mockResolvedValue([]),
       loadCoachMemoryFromApi: vi.fn().mockResolvedValue(null),
+      loadCoachMemoryAndState: vi.fn().mockResolvedValue({ coachMemory: null, coachState: null }),
       createPlannedWorkoutInApi: vi.fn().mockResolvedValue(null),
       updatePlannedWorkoutInApi: vi.fn().mockResolvedValue([]),
       deletePlannedWorkoutFromApi: vi.fn().mockResolvedValue(undefined),

@@ -361,7 +361,7 @@ describe('Coach Timeline workout flow', () => {
         userId: 'vyacheslav',
         workoutDayId: 'day-a',
         workoutDayName: 'День A',
-        completedAt: '2026-06-04T19:30:00.000Z',
+        completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
         totalVolume: 1500,
         exercises: [
           {
