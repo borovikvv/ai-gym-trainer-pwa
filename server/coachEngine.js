@@ -1,5 +1,6 @@
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
+import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 
 export function recommendNextSet(input) {
   const exercise = input.exercise ?? {}
@@ -246,15 +247,4 @@ function matchesAnyTrainingArea(exerciseText, areas) {
 
 function normalizeText(value) {
   return String(value ?? '').trim().toLowerCase()
-}
-
-function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  if (['груд', 'жим', 'chest'].some((part) => normalized.includes(part))) return 'chest'
-  if (['спин', 'тяга', 'back'].some((part) => normalized.includes(part))) return 'back'
-  if (['ног', 'бедр', 'ягод', 'икр', 'присед', 'выпад', 'leg'].some((part) => normalized.includes(part))) return 'legs'
-  if (['плеч', 'дельт', 'shoulder'].some((part) => normalized.includes(part))) return 'shoulders'
-  if (['бицеп', 'трицеп', 'рук', 'arm'].some((part) => normalized.includes(part))) return 'arms'
-  if (['кор', 'пресс', 'планк', 'core'].some((part) => normalized.includes(part))) return 'core'
-  return 'other'
 }

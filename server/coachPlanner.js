@@ -1,4 +1,8 @@
 import { canonicalExerciseId } from './exerciseIdentity.js'
+import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { formatWeight, roundWeight } from './lib/format.js'
+import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
+import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 
 const russianWeekdayOrder = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 export const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер, спокойный и строгий по технике. Приоритеты: безопасность, постепенная прогрессия, восстановление, баланс недели, понятные короткие подсказки. Не гони пользователя в отказ без причины, не создавай две одинаковые ближайшие тренировки, не ставь запрещённые упражнения и не ломай цель анкеты.'
@@ -36,6 +40,38 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
     const qualityNote = workoutQualityScore !== null && workoutQualityScore < 60
       ? 'Качество прошлой тренировки низкое — снижаем объём и держим технику. '
       : ''
+
+    // Volume landmark awareness: clamp sets if weekly volume is approaching MRV
+    let muscleGroupSetsLast7Days = 0
+    const ageProfile = getUserTrainingPolicy(profile?.userId ?? profile)
+    const phase = ageProfile?.ageRecoveryProfile?.phase ?? 'adult'
+    const volumeMuscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
+    const landmarks = getVolumeLandmarks(volumeMuscleKey, phase)
+
+    if (landmarks) {
+      // Count sets for this muscle group in the last 7 days from history
+      const nowMs = new Date().getTime()
+      const sevenDaysAgoMs = nowMs - 7 * 86_400_000
+      for (const session of history ?? []) {
+        const sessionTime = new Date(session.completedAt ?? session.completed_at).getTime()
+        if (sessionTime < sevenDaysAgoMs) continue
+        for (const loggedExercise of session.exercises ?? []) {
+          const emk = normalizeMuscleGroup(`${loggedExercise.muscleGroup ?? loggedExercise.muscle_group ?? ''} ${loggedExercise.exerciseName ?? loggedExercise.name ?? ''}`)
+          if (emk === volumeMuscleKey) {
+            muscleGroupSetsLast7Days += (loggedExercise.sets ?? []).filter((s) => s?.completed !== false && Number(s?.reps) > 0).length
+          }
+        }
+      }
+      const volumeStatus = classifyVolumeStatus(muscleGroupSetsLast7Days, landmarks)
+      if (volumeStatus === 'at_mrv' || volumeStatus === 'above_mrv') {
+        setsCount = Math.min(setsCount, 2)
+      } else if (volumeStatus === 'above_mav') {
+        setsCount = Math.min(setsCount, 3)
+      }
+    }
+    const volumeRec = landmarks ? getVolumeRecommendation(volumeMuscleKey, muscleGroupSetsLast7Days, phase) : null
+    const volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
+
     const baseChange = {
       programExerciseId: exercise.programExerciseId,
       targetWeight: roundWeight(targetWeight),
@@ -48,7 +84,7 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
         ? `${exercise.name}: была боль в истории — вес не повышаем, техника и амплитуда важнее.`
         : hardRecent
           ? `${exercise.name}: после тяжёлой прошлой работы держим качество, без отказа.`
-          : `${qualityNote}${exercise.name}: ${recoveryNote}.`,
+          : `${qualityNote}${volumeNote}${exercise.name}: ${recoveryNote}.`,
     }
 
     const replacement = chooseLibraryReplacementForFatigue({ exercise, library, usedExerciseIds, coachState })
@@ -184,17 +220,6 @@ function exerciseMuscleKey(exercise) {
   return normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
 }
 
-function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  if (normalized.includes('груд') || normalized.includes('жим') || normalized.includes('chest')) return 'chest'
-  if (normalized.includes('спин') || normalized.includes('тяга') || normalized.includes('back')) return 'back'
-  if (normalized.includes('ног') || normalized.includes('бедр') || normalized.includes('ягод') || normalized.includes('икр') || normalized.includes('присед') || normalized.includes('выпад') || normalized.includes('leg')) return 'legs'
-  if (normalized.includes('плеч') || normalized.includes('дельт') || normalized.includes('shoulder')) return 'shoulders'
-  if (normalized.includes('бицеп') || normalized.includes('трицеп') || normalized.includes('рук') || normalized.includes('arm')) return 'arms'
-  if (normalized.includes('кор') || normalized.includes('пресс') || normalized.includes('планк') || normalized.includes('core')) return 'core'
-  return 'other'
-}
-
 function muscleLabel(key) {
   return {
     chest: 'грудь',
@@ -228,15 +253,7 @@ function formatTodayGoal(weight, setsCount, reps) {
   return Array.from({ length: setsCount }, () => `${formatWeight(weight)}×${reps}`).join('/')
 }
 
-function formatWeight(value) {
-  return Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 1 })
-}
-
 function clampNumber(value, min, max, fallback) {
   if (!Number.isFinite(value)) return fallback
   return Math.max(min, Math.min(max, value))
-}
-
-function roundWeight(value) {
-  return Number(Number(value).toFixed(1))
 }

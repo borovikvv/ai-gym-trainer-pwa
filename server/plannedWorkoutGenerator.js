@@ -1,6 +1,7 @@
 import { buildCoachDecision } from './coachDecision.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
+import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
@@ -451,17 +452,6 @@ function normalizeExerciseLibrary(exerciseLibrary) {
     weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
     restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
   })).filter((exercise) => exercise.id && exercise.name)
-}
-
-function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  if (normalized.includes('груд') || normalized.includes('жим лёжа') || normalized.includes('bench') || normalized.includes('chest')) return 'chest'
-  if (normalized.includes('спин') || normalized.includes('тяга верх') || normalized.includes('row') || normalized.includes('back')) return 'back'
-  if (normalized.includes('ног') || normalized.includes('бедр') || normalized.includes('ягод') || normalized.includes('икр') || normalized.includes('присед') || normalized.includes('выпад') || normalized.includes('deadlift') || normalized.includes('leg')) return 'legs'
-  if (normalized.includes('плеч') || normalized.includes('дельт') || normalized.includes('shoulder')) return 'shoulders'
-  if (normalized.includes('бицеп') || normalized.includes('трицеп') || normalized.includes('рук') || normalized.includes('curl') || normalized.includes('arm')) return 'arms'
-  if (normalized.includes('кор') || normalized.includes('пресс') || normalized.includes('планк') || normalized.includes('core')) return 'core'
-  return 'other'
 }
 
 function normalizePreferences(profile = {}) {

@@ -1,12 +1,4 @@
-const MUSCLE_LABELS = {
-  chest: 'Грудь',
-  back: 'Спина',
-  legs: 'Ноги',
-  shoulders: 'Плечи',
-  arms: 'Руки',
-  core: 'Кор',
-  other: 'Другое',
-}
+import { normalizeMuscleGroup, labelFor, MUSCLE_LABELS } from './lib/muscleGroups.js'
 
 const DEFAULT_PRIORITY = ['back', 'chest', 'arms', 'shoulders', 'core', 'legs']
 
@@ -117,21 +109,6 @@ function buildSummary({ type, priorityMuscleGroups, avoidMuscleGroups, loadPolic
       : 'Следующая тренировка — сбалансированная силовая работа'
   const loadText = loadPolicy === 'moderate_no_failure' ? 'без отказа' : loadPolicy === 'progressive_if_recovered' ? 'с осторожной прогрессией' : 'с контролируемой прогрессией'
   return `${typeText}: ${priority}, ${loadText}${avoid}.`
-}
-
-function labelFor(muscleKey) {
-  return MUSCLE_LABELS[muscleKey] ?? muscleKey
-}
-
-function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  if (normalized.includes('груд') || normalized.includes('жим лёжа') || normalized.includes('bench') || normalized.includes('chest')) return 'chest'
-  if (normalized.includes('спин') || normalized.includes('тяга') || normalized.includes('row') || normalized.includes('back')) return 'back'
-  if (normalized.includes('ног') || normalized.includes('бедр') || normalized.includes('ягод') || normalized.includes('икр') || normalized.includes('присед') || normalized.includes('выпад') || normalized.includes('deadlift') || normalized.includes('leg')) return 'legs'
-  if (normalized.includes('плеч') || normalized.includes('дельт') || normalized.includes('shoulder')) return 'shoulders'
-  if (normalized.includes('бицеп') || normalized.includes('трицеп') || normalized.includes('рук') || normalized.includes('curl') || normalized.includes('arm')) return 'arms'
-  if (normalized.includes('кор') || normalized.includes('пресс') || normalized.includes('планк') || normalized.includes('core')) return 'core'
-  return 'other'
 }
 
 function isReturningAfterBreak(profile = {}) {

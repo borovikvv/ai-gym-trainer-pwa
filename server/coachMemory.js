@@ -1,16 +1,7 @@
 import { canonicalExerciseId } from './exerciseIdentity.js'
+import { normalizeMuscleGroup, MUSCLE_LABELS } from './lib/muscleGroups.js'
 
 const TRAINER_PROFILE = 'Профиль тренера: персональный силовой тренер: безопасность, техника, постепенная прогрессия, восстановление и недельный баланс важнее случайного набора упражнений.'
-
-const MUSCLE_LABELS = {
-  chest: 'Грудь',
-  back: 'Спина',
-  legs: 'Ноги',
-  shoulders: 'Плечи',
-  arms: 'Руки',
-  core: 'Кор',
-  other: 'Другое',
-}
 
 export function computeCoachMemory({ profile = {}, exerciseLibrary = [], history = [], coachState = null, coachDecisionLogs = [], now = new Date() }) {
   const nowDate = new Date(now)
@@ -228,17 +219,6 @@ function normalizeExerciseLibrary(exerciseLibrary) {
     repMin: Number(exercise.repMin ?? exercise.rep_min ?? 8),
     repMax: Number(exercise.repMax ?? exercise.rep_max ?? 12),
   })).filter((exercise) => exercise.id && exercise.name)
-}
-
-function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  if (normalized.includes('груд') || normalized.includes('жим лёжа') || normalized.includes('bench') || normalized.includes('chest')) return 'chest'
-  if (normalized.includes('спин') || normalized.includes('тяга') || normalized.includes('row') || normalized.includes('back')) return 'back'
-  if (normalized.includes('ног') || normalized.includes('бедр') || normalized.includes('ягод') || normalized.includes('икр') || normalized.includes('присед') || normalized.includes('выпад') || normalized.includes('deadlift') || normalized.includes('leg')) return 'legs'
-  if (normalized.includes('плеч') || normalized.includes('дельт') || normalized.includes('shoulder')) return 'shoulders'
-  if (normalized.includes('бицеп') || normalized.includes('трицеп') || normalized.includes('рук') || normalized.includes('curl') || normalized.includes('arm')) return 'arms'
-  if (normalized.includes('кор') || normalized.includes('пресс') || normalized.includes('планк') || normalized.includes('core')) return 'core'
-  return 'other'
 }
 
 function completedSetsOf(exercise) {

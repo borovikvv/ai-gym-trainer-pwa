@@ -10,68 +10,7 @@ export type WorkoutDebrief = {
   qualityScore: number
 }
 
-export function computeWorkoutQualityScore(entry: WorkoutHistoryEntry): number {
-  const exercises = entry.exercises ?? []
-  if (exercises.length === 0) return 0
-
-  let score = 75
-  let allUnderControl = true
-
-  for (const exercise of exercises) {
-    if (exercise.pain) {
-      score -= 15
-      allUnderControl = false
-      continue
-    }
-
-    if (exercise.progressionType === 'increase') {
-      score += 5
-    } else if (['deload', 'pain', 'skip'].includes(exercise.progressionType)) {
-      score -= 5
-    }
-
-    const completedSets = exercise.sets.filter((set) => set.completed)
-    if (completedSets.length === 0) continue
-
-    let exerciseUnderControl = false
-    for (const set of completedSets) {
-      if (set.rpe >= 7 && set.rpe <= 8) {
-        score += 2
-        exerciseUnderControl = true
-      } else if (set.rpe === 9) {
-        score -= 2
-      } else if (set.rpe >= 10) {
-        score -= 5
-      }
-    }
-
-    if (exerciseUnderControl) {
-      score += 3
-    }
-
-    if (completedSets.every((set) => set.rpe && set.rpe <= 6)) {
-      score += 3
-    }
-
-    if (!exercise.pain && completedSets.some((set) => set.rpe && set.rpe <= 8)) {
-      if (!exerciseUnderControl) score += 2
-    }
-  }
-
-  const allExercises = exercises.filter((e) => !e.pain)
-  if (allExercises.length > 0 && allExercises.every((e) =>
-    e.sets.filter((s) => s.completed).some((s) => s.rpe && s.rpe <= 8)
-  )) {
-    score += 5
-  }
-
-  const totalVolume = entry.totalVolume ?? 0
-  if (totalVolume <= 0) score -= 20
-
-  return Math.max(0, Math.min(100, Math.round(score)))
-}
-
-export function buildWorkoutDebrief(entry: WorkoutHistoryEntry): WorkoutDebrief {
+export function buildWorkoutDebrief(entry: WorkoutHistoryEntry, serverQualityScore?: number): WorkoutDebrief {
   const exercises = entry.exercises ?? []
   const completedExercises = exercises.filter((exercise) => exercise.sets.some((set) => set.completed))
   const progressed = exercises
@@ -95,7 +34,7 @@ export function buildWorkoutDebrief(entry: WorkoutHistoryEntry): WorkoutDebrief 
     progressed: progressed.length ? progressed : ['Явной прогрессии по весу пока не добавляем, закрепляем качество.'],
     nextChanges: nextChanges.length ? nextChanges : ['Следующую тренировку строим от фактических подходов, без резкого скачка нагрузки.'],
     why: buildWhy(entry),
-    qualityScore: computeWorkoutQualityScore(entry),
+    qualityScore: serverQualityScore ?? 0,
   }
 }
 
