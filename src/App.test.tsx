@@ -355,13 +355,18 @@ describe('Coach Timeline workout flow', () => {
 
   it('shows the progress tab as a trainer dashboard instead of a mock bench-only chart', async () => {
     const user = userEvent.setup()
+    // Use a fixed ISO date 5 days ago — inside the dashboard's 14-day window,
+    // independent of when the test is run. Avoids the original time-relative
+    // workaround which masked a real wording mismatch (production code says
+    // "закрепить" but the old assertion expected "закрепляем").
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
     window.localStorage.setItem('ai-gym-trainer:v0.1:history', JSON.stringify([
       {
         id: 'vyacheslav-day-a-progress',
         userId: 'vyacheslav',
         workoutDayId: 'day-a',
         workoutDayName: 'День A',
-        completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        completedAt: fiveDaysAgo,
         totalVolume: 1500,
         exercises: [
           {
@@ -401,7 +406,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getAllByText('Лучшие движения').length).toBeGreaterThan(0)
     expect(screen.getByText('Все упражнения программы')).toBeInTheDocument()
     expect(screen.getByText('Все упражнения').closest('details')).not.toHaveAttribute('open')
-    expect(screen.getByText(/Жим лёжа: закрепляем/i)).toBeInTheDocument()
+    expect(screen.getByText(/Жим лёжа: закрепить/i)).toBeInTheDocument()
     expect(screen.getByText(/Тяга верхнего блока: можно повышать нагрузку/i)).toBeInTheDocument()
     expect(screen.getByText('Ритм')).toBeInTheDocument()
     expect(screen.getByText('Движение')).toBeInTheDocument()
