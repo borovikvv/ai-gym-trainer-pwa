@@ -1,3 +1,5 @@
+import { formatWeight, pluralRu } from './lib/format.js'
+
 export function computeWorkoutQualityScore(entry = {}) {
   const exercises = entry.exercises ?? []
   if (exercises.length === 0) return 0
@@ -116,16 +118,4 @@ function buildWhy(entry) {
   return reasons.length
     ? `Коррекция нужна потому что ${reasons.join(', ')}.`
     : 'Коррекция нужна по фактическим повторениям, весу и запасу в подходах.'
-}
-
-function formatWeight(weight) {
-  return Number.isInteger(Number(weight)) ? String(Number(weight)) : String(Number(weight))
-}
-
-function pluralRu(count, one, few, many) {
-  const mod10 = count % 10
-  const mod100 = count % 100
-  if (mod10 === 1 && mod100 !== 11) return one
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
-  return many
 }

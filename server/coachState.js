@@ -1,14 +1,6 @@
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
-
-const MUSCLE_ALIASES = [
-  { key: 'chest', match: ['груд', 'жим', 'chest'] },
-  { key: 'back', match: ['спин', 'тяга', 'back'] },
-  { key: 'legs', match: ['ног', 'квадриц', 'бедр', 'ягод', 'икр', 'присед', 'выпад', 'leg'] },
-  { key: 'shoulders', match: ['плеч', 'дельт', 'shoulder'] },
-  { key: 'arms', match: ['бицеп', 'трицеп', 'рук', 'arm'] },
-  { key: 'core', match: ['кор', 'пресс', 'планк', 'core'] },
-]
+import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 
 export function computeCoachState({ profile = {}, workoutDays = [], history = [], now = new Date(), lastWorkoutQualityScore = null }) {
   const nowDate = new Date(now)
@@ -231,14 +223,6 @@ function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, 
 
 function completedSetsOf(exercise) {
   return (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
-}
-
-function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  for (const alias of MUSCLE_ALIASES) {
-    if (alias.match.some((part) => normalized.includes(part))) return alias.key
-  }
-  return 'other'
 }
 
 function targetTextForStatus(status) {

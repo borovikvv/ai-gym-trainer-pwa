@@ -1,3 +1,6 @@
+import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { formatWeight, roundWeight } from './lib/format.js'
+
 export function buildWorkoutTodayPlan({ profile = {}, workoutDays = [], exerciseLibrary = [], coachState = {}, now = new Date() }) {
   const normalizedDays = normalizeWorkoutDays(workoutDays)
   const nextScheduled = chooseNextScheduledDay(normalizedDays, coachState)
@@ -198,25 +201,6 @@ function resolveTargetWeight(exercise) {
   if (text.includes('гантел')) return 10
   if (text.includes('блок') || text.includes('тренаж')) return 25
   return 0
-}
-
-function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  if (normalized.includes('груд') || normalized.includes('жим') || normalized.includes('chest')) return 'chest'
-  if (normalized.includes('спин') || normalized.includes('тяга') || normalized.includes('back')) return 'back'
-  if (normalized.includes('ног') || normalized.includes('бедр') || normalized.includes('ягод') || normalized.includes('икр') || normalized.includes('присед') || normalized.includes('выпад') || normalized.includes('leg')) return 'legs'
-  if (normalized.includes('плеч') || normalized.includes('дельт') || normalized.includes('shoulder')) return 'shoulders'
-  if (normalized.includes('бицеп') || normalized.includes('трицеп') || normalized.includes('рук') || normalized.includes('arm')) return 'arms'
-  if (normalized.includes('кор') || normalized.includes('пресс') || normalized.includes('планк') || normalized.includes('core')) return 'core'
-  return 'other'
-}
-
-function roundWeight(value) {
-  return Number(Number(value).toFixed(1))
-}
-
-function formatWeight(value) {
-  return Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 1 })
 }
 
 function formatDate(now) {
