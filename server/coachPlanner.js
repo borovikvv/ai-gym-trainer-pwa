@@ -31,7 +31,7 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
   const usedExerciseIds = new Set((workoutDays ?? []).flatMap((day) => (day.exercises ?? []).map((exercise) => canonicalExerciseId(exercise))))
   const changes = nextWorkoutDay.exercises.map((exercise) => {
     const recent = latestExerciseHistory(history, exercise.exerciseId)
-    const targetWeight = recent?.nextRecommendedWeight ?? exercise.targetWeight
+    let targetWeight = recent?.nextRecommendedWeight ?? exercise.targetWeight
     const hadPain = Boolean(recent?.pain)
     const hardRecent = (recent?.sets ?? []).some((set) => set.completed && set.rpe >= 9)
     let setsCount = daysUntilNext !== null && daysUntilNext <= 0 ? Math.max(2, Math.min(exercise.setsCount, 2)) : exercise.setsCount

@@ -332,3 +332,133 @@ describe('buildSafeCoachPlan — volume landmark clamping', () => {
     expect(plan.changes[0].setsCount).toBe(4)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Mesocycle deload integration (Phase 2)
+// ---------------------------------------------------------------------------
+
+describe('buildSafeCoachPlan — mesocycle deload integration', () => {
+  const profileAdult = {
+    userId: 'vyacheslav',
+    goal: 'сила',
+    workoutsPerWeek: 3,
+    trainingDays: ['Вторник', 'Четверг', 'Суббота'],
+    age: 30,
+  }
+
+  const workoutDayWithBench = {
+    id: 'day-deload-test',
+    name: 'День A',
+    label: 'Грудь',
+    sortOrder: 1,
+    exercises: [
+      {
+        programExerciseId: 'pe-bench-deload',
+        exerciseId: 'bench-press',
+        name: 'Жим лёжа',
+        muscleGroup: 'Грудь',
+        setsCount: 4,
+        repMin: 8,
+        repMax: 10,
+        targetWeight: 60,
+        weightStep: 2.5,
+        restSeconds: 120,
+      },
+    ],
+  }
+
+  function makeMesocycleDeload() {
+    return {
+      phase: 'deload',
+      phaseDescription: 'Разгрузочная неделя',
+      weekInCycle: 5,
+      cycleLength: 5,
+      loadingWeeks: 4,
+      deloadWeeks: 1,
+      isDeload: true,
+      deloadScheduled: false,
+      triggerReason: 'Запланированная разгрузка',
+      completionRatio: 1,
+      workoutsThisCycle: 12,
+      plannedWorkoutsThisCycle: 12,
+    }
+  }
+
+  it('applies deload reduction when coachState.mesocycle.isDeload is true', () => {
+    const plan = buildSafeCoachPlan({
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history: [],
+      coachState: { mesocycle: makeMesocycleDeload() },
+      exerciseLibrary: [],
+      workoutQualityScore: 80,
+      now: new Date(),
+    })
+
+    const change = plan.changes[0]
+    // applyDeloadReduction: setsCount = max(2, round(4 * 0.6)) = max(2, 2) = 2
+    expect(change.setsCount).toBe(2)
+    // targetWeight = 60 - 2.5 = 57.5
+    expect(change.targetWeight).toBe(57.5)
+    // repMin = max(6, 8) = 8 ; repMax = max(8+2, 10) = 10
+    expect(change.repMin).toBe(8)
+    expect(change.repMax).toBe(10)
+    // intensityTarget should be 'easy'
+    expect(change.intensityTarget).toBe('easy')
+    // coachFocus should mention 'разгрузка'
+    expect(change.coachFocus).toMatch(/разгруз/i)
+  })
+
+  it('does not apply deload when mesocycle.isDeload is false', () => {
+    const mesocycle = { ...makeMesocycleDeload(), isDeload: false, phase: 'loading', weekInCycle: 1 }
+    const plan = buildSafeCoachPlan({
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history: [],
+      coachState: { mesocycle },
+      exerciseLibrary: [],
+      workoutQualityScore: 80,
+      now: new Date(),
+    })
+
+    const change = plan.changes[0]
+    expect(change.setsCount).toBe(4) // original, not reduced
+    expect(change.targetWeight).toBe(60) // original
+    expect(change.intensityTarget).toBeUndefined()
+  })
+
+  it('handles null mesocycle gracefully (no deload)', () => {
+    const plan = buildSafeCoachPlan({
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history: [],
+      coachState: { mesocycle: null },
+      exerciseLibrary: [],
+      workoutQualityScore: 80,
+      now: new Date(),
+    })
+
+    const change = plan.changes[0]
+    expect(change.setsCount).toBe(4)
+    expect(change.targetWeight).toBe(60)
+    expect(change.intensityTarget).toBeUndefined()
+  })
+
+  it('handles null coachState gracefully (no deload, no crash)', () => {
+    const plan = buildSafeCoachPlan({
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history: [],
+      coachState: null,
+      exerciseLibrary: [],
+      workoutQualityScore: 80,
+      now: new Date(),
+    })
+
+    expect(plan.changes[0].setsCount).toBe(4)
+  })
+})
