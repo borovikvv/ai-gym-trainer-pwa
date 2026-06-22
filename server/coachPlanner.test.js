@@ -25,7 +25,7 @@ const workoutDays = [
     sortOrder: 2,
     exercises: [
       { programExerciseId: 'pe-rdl', exerciseId: 'romanian-deadlift', name: 'Румынская тяга', muscleGroup: 'Задняя поверхность бедра', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 47.5, weightStep: 2.5, restSeconds: 150 },
-      { programExerciseId: 'pe-incline', exerciseId: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь/плечи', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 14, weightStep: 2, restSeconds: 90 },
+      { programExerciseId: 'pe-incline', exerciseId: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 14, weightStep: 2, restSeconds: 90 },
     ],
   },
 ]
@@ -54,7 +54,7 @@ const completedWorkout = {
 
 const exerciseLibrary = [
   { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 40, weightStep: 2.5, restSeconds: 150 },
-  { id: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь/плечи', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 14, weightStep: 2, restSeconds: 90 },
+  { id: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 14, weightStep: 2, restSeconds: 90 },
   { id: 'hammer-curl', name: 'Молотковые сгибания', muscleGroup: 'Руки', setsCount: 2, repMin: 10, repMax: 12, targetWeight: 10, weightStep: 1, restSeconds: 75 },
   { id: 'lateral-raise', name: 'Разведения гантелей в стороны', muscleGroup: 'Плечи', setsCount: 2, repMin: 12, repMax: 15, targetWeight: 6, weightStep: 1, restSeconds: 75 },
 ]
