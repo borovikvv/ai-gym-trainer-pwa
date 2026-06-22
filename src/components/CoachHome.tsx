@@ -1,6 +1,6 @@
-import { BookOpen, Dumbbell } from 'lucide-react'
+import { BookOpen, Dumbbell, RotateCcw } from 'lucide-react'
 import type { UserProfile, WorkoutDay } from '../data/mockProgram'
-import type { CoachMemory, PlannedWorkout } from '../data/programApi'
+import type { CoachMemory, CoachState, MesocycleState } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
@@ -22,6 +22,7 @@ type CoachHomeProps = {
   userHistory: WorkoutHistoryEntry[]
   nextTargets: Record<string, number>
   coachMemory: CoachMemory | null
+  coachState: CoachState | null
   onSelectUser: (userId: string) => void
   onOpenProfile: () => void
   onOpenLibrary: () => void
@@ -34,6 +35,38 @@ type CoachHomeProps = {
   formatDateTime: (date: string) => string
   addDays: (date: string, days: number) => string
   todayDateInputValue: () => string
+}
+
+function mesocycleBadge(mesocycle: MesocycleState | null | undefined): { text: string; variant: 'deload' | 'scheduled' | 'loading' | 'intensification' } | null {
+  if (!mesocycle) return null
+  if (mesocycle.isDeload) {
+    return { text: 'Разгрузка', variant: 'deload' }
+  }
+  if (mesocycle.deloadScheduled) {
+    return { text: `Нед ${mesocycle.weekInCycle}/${mesocycle.loadingWeeks}`, variant: 'scheduled' }
+  }
+  return { text: `Нед ${mesocycle.weekInCycle}/${mesocycle.loadingWeeks}`, variant: mesocycle.phase === 'intensification' ? 'intensification' : 'loading' }
+}
+
+function MesocycleIndicator({ mesocycle }: { mesocycle: MesocycleState | null | undefined }) {
+  const badge = mesocycleBadge(mesocycle)
+  if (!badge) return null
+
+  const phaseLabel = mesocycle?.phaseDescription ?? ''
+  const isDeload = badge.variant === 'deload'
+
+  return (
+    <div className={`mesocycle-indicator mesocycle-indicator--${badge.variant}`} role="status" aria-label={phaseLabel}>
+      <RotateCcw size={14} aria-hidden="true" className={isDeload ? 'spin-icon' : ''} />
+      <span className="mesocycle-indicator__badge">{badge.text}</span>
+      {isDeload && mesocycle?.triggerReason && (
+        <span className="mesocycle-indicator__reason">{mesocycle.triggerReason}</span>
+      )}
+      {!isDeload && phaseLabel && (
+        <span className="mesocycle-indicator__phase">{phaseLabel}</span>
+      )}
+    </div>
+  )
 }
 
 export function CoachHome({
@@ -52,6 +85,7 @@ export function CoachHome({
   userHistory,
   nextTargets,
   coachMemory,
+  coachState,
   onSelectUser,
   onOpenProfile,
   onOpenLibrary,
@@ -135,6 +169,8 @@ export function CoachHome({
           </button>
         )}
       />
+
+      <MesocycleIndicator mesocycle={coachState?.mesocycle} />
 
       {extraDayPickerOpen && (
         <SectionList title="Вне плана">

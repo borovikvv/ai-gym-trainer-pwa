@@ -1,8 +1,9 @@
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { computeMesocycleState } from './mesocycle.js'
 
-export function computeCoachState({ profile = {}, workoutDays = [], history = [], now = new Date(), lastWorkoutQualityScore = null }) {
+export function computeCoachState({ profile = {}, workoutDays = [], history = [], now = new Date(), lastWorkoutQualityScore = null, coachMemory = null }) {
   const nowDate = new Date(now)
   const normalizedHistory = [...(history ?? [])]
     .filter((session) => session?.completedAt)
@@ -46,6 +47,8 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
     lastWorkoutQualityScore,
   })
 
+  const mesocycle = computeMesocycleState({ profile, history, coachMemory, now: nowDate })
+
   return {
     userId: profile.userId ?? profile.user_id ?? null,
     generatedAt: nowDate.toISOString(),
@@ -62,7 +65,8 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
     personalization: {
       trainingDataConfidence,
     },
-    warnings: buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups }),
+    mesocycle,
+    warnings: buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups, mesocycle }),
   }
 }
 
@@ -212,12 +216,18 @@ function classifyMuscleFatigue(group) {
   return 'low'
 }
 
-function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups }) {
+function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups, mesocycle }) {
   const warnings = []
   if (recoveryStatus === 'low') warnings.push('восстановление низкое — следующую нагрузку стоит облегчить')
   if (weeklyLoadStatus === 'above_plan') warnings.push('фактическая частота выше анкеты — нужен контроль объёма')
   if (painFlagsLast14Days > 0) warnings.push('были отметки боли — упражнения с дискомфортом не прогрессировать')
   if (highFatigueGroups > 0) warnings.push('есть группы с высокой усталостью')
+  if (mesocycle?.isDeload && mesocycle?.triggerReason) {
+    warnings.push(`Разгрузочная неделя мезоцикла: ${mesocycle.triggerReason}`)
+  }
+  if (mesocycle?.deloadScheduled) {
+    warnings.push('Следующая неделя — разгрузка по мезоциклу.')
+  }
   return warnings
 }
 

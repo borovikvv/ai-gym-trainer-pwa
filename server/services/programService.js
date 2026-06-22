@@ -316,15 +316,19 @@ export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
     loadRecentHistory(client, userId),
     loadRecentCoachDecisionLogs(client, userId),
   ])
-  const coachState = computeCoachState({ profile, workoutDays, history, now })
-  return computeCoachMemory({
+  // First pass: compute coachMemory without mesocycle MRV triggers (no coachMemory yet)
+  const coachStatePass1 = computeCoachState({ profile, workoutDays, history, now })
+  const coachMemory = computeCoachMemory({
     profile,
     exerciseLibrary: enrichLibraryForMemory(exerciseLibrary, workoutDays),
     history,
-    coachState,
+    coachState: coachStatePass1,
     coachDecisionLogs,
     now,
   })
+  // Second pass: recompute coachState with coachMemory for accurate mesocycle MRV triggers
+  coachMemory._coachState = computeCoachState({ profile, workoutDays, history, coachMemory, now })
+  return coachMemory
 }
 
 export async function loadRecentCoachDecisionLogs(client, userId) {

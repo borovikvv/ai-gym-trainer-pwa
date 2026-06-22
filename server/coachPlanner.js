@@ -3,6 +3,7 @@ import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { formatWeight, roundWeight } from './lib/format.js'
 import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 
 const russianWeekdayOrder = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 export const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер, спокойный и строгий по технике. Приоритеты: безопасность, постепенная прогрессия, восстановление, баланс недели, понятные короткие подсказки. Не гони пользователя в отказ без причины, не создавай две одинаковые ближайшие тренировки, не ставь запрещённые упражнения и не ломай цель анкеты.'
@@ -23,6 +24,8 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
   const recoveryNote = daysUntilNext !== null && daysUntilNext <= 0
     ? 'следующая тренировка сегодня — держим объём умеренным и без отказа'
     : 'после текущей тренировки даём рабочую, но контролируемую нагрузку'
+
+  const mesocycleDeload = isDeloadWeek(coachState?.mesocycle)
 
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const usedExerciseIds = new Set((workoutDays ?? []).flatMap((day) => (day.exercises ?? []).map((exercise) => canonicalExerciseId(exercise))))
@@ -70,7 +73,19 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       }
     }
     const volumeRec = landmarks ? getVolumeRecommendation(volumeMuscleKey, muscleGroupSetsLast7Days, phase) : null
-    const volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
+    let volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
+
+    // Mesocycle deload: reduce sets and weight
+    if (mesocycleDeload) {
+      const deload = applyDeloadReduction({ setsCount, targetWeight, repMin: exercise.repMin, repMax: exercise.repMax, weightStep: exercise.weightStep })
+      setsCount = deload.setsCount
+      // Note: we don't change targetWeight in coachPlanner to avoid conflicting
+      // with the history-based weight — the deload weight reduction is a suggestion
+      // in coachFocus instead
+      if (!volumeNote.includes('Разгрузка')) {
+        volumeNote = deload.deloadNote + ' ' + volumeNote
+      }
+    }
 
     const baseChange = {
       programExerciseId: exercise.programExerciseId,
