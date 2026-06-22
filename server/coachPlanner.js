@@ -1,5 +1,5 @@
 import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, labelForLower } from './lib/muscleGroups.js'
 import { formatWeight, roundWeight } from './lib/format.js'
 import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
@@ -116,7 +116,7 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       repMax: replacement.repMax,
       restSeconds: replacement.restSeconds,
       todayGoal: formatTodayGoal(replacement.targetWeight, replacement.setsCount, replacement.repMin),
-      coachFocus: `${replacement.name}: замена вместо ${exercise.name}, потому что ${muscleLabel(exerciseMuscleKey(exercise))} ещё не восстановились. Держим умеренный объём и качество движения.`,
+      coachFocus: `${replacement.name}: замена вместо ${exercise.name}, потому что ${labelForLower(exerciseMuscleKey(exercise))} ещё не восстановились. Держим умеренный объём и качество движения.`,
     }
   })
 
@@ -235,16 +235,6 @@ function exerciseMuscleKey(exercise) {
   return normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
 }
 
-function muscleLabel(key) {
-  return {
-    chest: 'грудь',
-    back: 'спина',
-    legs: 'ноги',
-    shoulders: 'плечи',
-    arms: 'руки',
-    core: 'кор',
-  }[key] ?? 'эта группа'
-}
 
 function latestExerciseHistory(history, exerciseId) {
   return [...(history ?? [])]

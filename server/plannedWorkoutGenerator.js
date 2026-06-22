@@ -2,6 +2,7 @@ import { buildCoachDecision } from './coachDecision.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { roundWeight } from './lib/format.js'
 
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
@@ -516,8 +517,4 @@ function clamp(value, min, max) {
   const number = Number(value)
   if (!Number.isFinite(number)) return min
   return Math.max(min, Math.min(max, Math.round(number)))
-}
-
-function roundWeight(value) {
-  return Number(Number(value).toFixed(1))
 }
