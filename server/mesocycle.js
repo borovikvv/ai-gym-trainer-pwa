@@ -24,7 +24,6 @@
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { CANONICAL_MUSCLE_KEYS, labelFor } from './lib/muscleGroups.js'
 import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -77,11 +76,9 @@ export function computeMesocycleState({ profile = {}, history = [], coachMemory 
   // --- 4. Early deload triggers ---
   const earlyDeload = checkEarlyDeloadTriggers({
     coachMemory,
-    history,
     weeks,
     cycleStartWeekIndex,
     phase,
-    now: nowDate,
   })
 
   // --- 5. Deload delay (not enough stress accumulated) ---
@@ -251,7 +248,7 @@ function findCyclePosition(weeks, cycleLength, workoutsPerWeek) {
  * Check for early deload triggers.
  * Returns { force: boolean, reason: string|null }
  */
-function checkEarlyDeloadTriggers({ coachMemory, history, weeks, cycleStartWeekIndex, phase, now }) {
+function checkEarlyDeloadTriggers({ coachMemory, weeks, cycleStartWeekIndex, phase }) {
   // Only check during loading weeks, not if already in deload
   const reasons = []
 

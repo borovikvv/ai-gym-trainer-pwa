@@ -1,7 +1,7 @@
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { formatWeight, roundWeight } from './lib/format.js'
 
-export function buildWorkoutTodayPlan({ profile = {}, workoutDays = [], exerciseLibrary = [], coachState = {}, now = new Date() }) {
+export function buildWorkoutTodayPlan({ profile: _profile = {}, workoutDays = [], exerciseLibrary = [], coachState = {}, now = new Date() }) {
   const normalizedDays = normalizeWorkoutDays(workoutDays)
   const nextScheduled = chooseNextScheduledDay(normalizedDays, coachState)
   const shouldUseRecoveryAccessory = shouldBuildRecoveryAccessory(coachState)

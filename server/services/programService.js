@@ -1,7 +1,7 @@
 import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
 import { dayTemplate } from '../programTemplates.js'
-import { groupBy, normalizeLibraryExercise, normalizeProfile, normalizeProgramExercise, normalizeProgression, normalizeSet } from '../utils.js'
+import { groupBy, normalizeLibraryExercise, normalizeProfile, normalizeProgramExercise, normalizeSet } from '../utils.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 
 export async function loadProgramData(client) {
@@ -69,7 +69,7 @@ export async function loadProgramData(client) {
       label: day.label,
       description: day.description,
       userId: day.user_id,
-      exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id, sort_order, ...exercise }) => exercise),
+      exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id: _pdid, sort_order: _so, ...exercise }) => exercise),
     })),
     exerciseLibrary: libraryRows.rows.map(normalizeLibraryExercise),
   }
@@ -235,7 +235,7 @@ export async function loadUserWorkoutDays(client, userId) {
     label: day.label,
     description: day.description,
     sortOrder: Number(day.sort_order),
-    exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id, sort_order, ...exercise }) => ({
+    exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id: _pdid, sort_order, ...exercise }) => ({
       ...exercise,
       exerciseId: exercise.id,
       sortOrder: sort_order,

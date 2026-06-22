@@ -1,4 +1,4 @@
-import { normalizeMuscleGroup, labelFor, MUSCLE_LABELS } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, labelFor } from './lib/muscleGroups.js'
 import { isDeloadWeek } from './mesocycle.js'
 
 const DEFAULT_PRIORITY = ['back', 'chest', 'arms', 'shoulders', 'core', 'legs']

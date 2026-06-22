@@ -20,7 +20,7 @@ describe('post-workout coach debrief', () => {
 
     expect(debrief.summary).toContain('1 упражнение')
     expect(debrief.overload[0]).toContain('Жим лёжа')
-    expect(debrief.nextChanges[0]).toMatch(/37[,\.]5/)
+    expect(debrief.nextChanges[0]).toMatch(/37[,.]5/)
     expect(debrief.why).toContain('мало восстановления')
   })
 
