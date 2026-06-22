@@ -212,11 +212,11 @@ function findCyclePosition(weeks, cycleLength, workoutsPerWeek) {
   let plannedThisCycle = 0
 
   for (let i = 0; i < weeks.length; i++) {
-    // Check for gap before this week
+    // Check for gap between this (older) week and the previous (more recent) week
     if (i > 0) {
-      const prevEnd = weeks[i - 1].end
-      const currStart = weeks[i].start
-      const gapDays = (prevEnd.getTime() - currStart.getTime()) / 86_400_000
+      const prevStart = weeks[i - 1].start
+      const currEnd = weeks[i].end
+      const gapDays = (prevStart.getTime() - currEnd.getTime()) / 86_400_000
       if (gapDays > 10) {
         // Extended break — new cycle
         cycleStartWeekIndex = i
@@ -231,7 +231,7 @@ function findCyclePosition(weeks, cycleLength, workoutsPerWeek) {
     workoutsThisCycle += weeks[i].workouts.length
     plannedThisCycle += workoutsPerWeek
 
-    if (weekInCycle >= cycleLength) {
+    if (weekInCycle > cycleLength) {
       // Cycle complete — this starts a new one
       cycleStartWeekIndex = i
       weekInCycle = 1
