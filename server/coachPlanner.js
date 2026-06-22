@@ -75,13 +75,27 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
     const volumeRec = landmarks ? getVolumeRecommendation(volumeMuscleKey, muscleGroupSetsLast7Days, phase) : null
     let volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
 
-    // Mesocycle deload: reduce sets and weight
+    // Mesocycle deload: reduce sets, weight, and rep range. Unlike the
+    // previous implementation which only updated setsCount and put the rest
+    // of the reduction into a text note (resulting in mismatch: the coach
+    // said "разгрузка, вес -2.5 кг" but baseChange.targetWeight still had
+    // the full working weight), now we apply all fields consistently.
+    let deloadRepMin = exercise.repMin
+    let deloadRepMax = exercise.repMax
+    let deloadIntensityTarget
     if (mesocycleDeload) {
-      const deload = applyDeloadReduction({ setsCount, targetWeight, repMin: exercise.repMin, repMax: exercise.repMax, weightStep: exercise.weightStep })
+      const deload = applyDeloadReduction({
+        setsCount,
+        targetWeight,
+        repMin: exercise.repMin,
+        repMax: exercise.repMax,
+        weightStep: exercise.weightStep,
+      })
       setsCount = deload.setsCount
-      // Note: we don't change targetWeight in coachPlanner to avoid conflicting
-      // with the history-based weight — the deload weight reduction is a suggestion
-      // in coachFocus instead
+      targetWeight = deload.targetWeight
+      deloadRepMin = deload.repMin
+      deloadRepMax = deload.repMax
+      deloadIntensityTarget = deload.intensityTarget
       if (!volumeNote.includes('Разгрузка')) {
         volumeNote = deload.deloadNote + ' ' + volumeNote
       }
@@ -91,10 +105,11 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       programExerciseId: exercise.programExerciseId,
       targetWeight: roundWeight(targetWeight),
       setsCount,
-      repMin: exercise.repMin,
-      repMax: exercise.repMax,
+      repMin: deloadRepMin,
+      repMax: deloadRepMax,
+      intensityTarget: deloadIntensityTarget,
       restSeconds: exercise.restSeconds,
-      todayGoal: formatTodayGoal(targetWeight, setsCount, exercise.repMin),
+      todayGoal: formatTodayGoal(targetWeight, setsCount, deloadRepMin),
       coachFocus: hadPain
         ? `${exercise.name}: была боль в истории — вес не повышаем, техника и амплитуда важнее.`
         : hardRecent
