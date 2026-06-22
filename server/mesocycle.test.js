@@ -288,7 +288,7 @@ describe('computeMesocycleState — early deload triggers', () => {
     })
 
     expect(result.isDeload).toBe(true)
-    expect(result.triggerReason).toContain('Ранний делод')
+    expect(result.triggerReason).toContain('Раннее начало разгрузки')
     expect(result.triggerReason).toContain('MRV')
   })
 
@@ -383,7 +383,7 @@ describe('computeMesocycleState — early deload triggers', () => {
 
     // Early deload forces deload despite low completion
     expect(result.isDeload).toBe(true)
-    expect(result.triggerReason).toContain('Ранний делод')
+    expect(result.triggerReason).toContain('Раннее начало разгрузки')
     expect(result.triggerReason).toContain('MRV')
   })
 })

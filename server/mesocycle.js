@@ -270,7 +270,7 @@ function checkEarlyDeloadTriggers({ coachMemory, history, weeks, cycleStartWeekI
     })
     if (criticalGroups.length >= 2) {
       const labels = criticalGroups.slice(0, 3).map(labelFor).join(', ')
-      reasons.push(`Ранний делод: ${labels} на уровне MRV или выше. Нужна разгрузка для восстановления.`)
+      reasons.push(`Раннее начало разгрузки: ${labels} на уровне MRV или выше. Нужна разгрузка для восстановления.`)
     }
   }
 
@@ -280,7 +280,7 @@ function checkEarlyDeloadTriggers({ coachMemory, history, weeks, cycleStartWeekI
     (w.exercises ?? []).some((e) => Boolean(e.pain))
   )
   if (painSessions.length >= 2) {
-    reasons.push(`Ранний делод: ${painSessions.length} тренировок с болью в текущем цикле.`)
+    reasons.push(`Раннее начало разгрузки: ${painSessions.length} тренировок с болью в текущем цикле.`)
   }
 
   if (reasons.length > 0) {

@@ -132,7 +132,7 @@ export function getVolumeRecommendation(muscleKey, weeklySets, phase = 'adult') 
       const excess = weeklySets - mrv
       return {
         action: 'deload',
-        reason: `${label}: объём ${weeklySets} подходов/нед превышает MRV (${mrv}) на ${excess}. Сильный риск перетренированности. Настоятельно рекомендую разгрузочную неделю: сократите объём до MAВ (${mav}) или ниже.`,
+        reason: `${label}: объём ${weeklySets} подходов/нед превышает MRV (${mrv}) на ${excess}. Сильный риск перетренированности. Настоятельно рекомендую разгрузочную неделю: сократите объём до MAV (${mav}) или ниже.`,
         priority: 5,
       }
     }
