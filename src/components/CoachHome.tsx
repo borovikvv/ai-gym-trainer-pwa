@@ -39,6 +39,8 @@ type CoachHomeProps = {
 
 function mesocycleBadge(mesocycle: MesocycleState | null | undefined): { text: string; variant: 'deload' | 'scheduled' | 'loading' | 'intensification' } | null {
   if (!mesocycle) return null
+  // Don't render a badge for users with no workout history yet — 'idle' phase.
+  if (mesocycle.phase === 'idle') return null
   if (mesocycle.isDeload) {
     return { text: 'Разгрузка', variant: 'deload' }
   }

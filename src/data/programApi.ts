@@ -163,8 +163,10 @@ export type CoachWorkoutTodayPlan = {
   workoutDay: WorkoutDay
 }
 
+export type MesocyclePhase = 'idle' | 'loading' | 'accumulation' | 'intensification' | 'deload'
+
 export type MesocycleState = {
-  phase: string
+  phase: MesocyclePhase
   phaseDescription: string
   weekInCycle: number
   cycleLength: number

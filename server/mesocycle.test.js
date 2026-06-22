@@ -55,8 +55,8 @@ describe('computeMesocycleState', () => {
     expect(result.cycleLength).toBe(5)  // 4 loading + 1 deload
     expect(result.loadingWeeks).toBe(4)
     expect(result.deloadWeeks).toBe(1)
-    // weekInCycle 0 falls through loadingPhaseName to 'accumulation'
-    expect(result.phase).toBe('accumulation')
+    // weekInCycle 0 → loadingPhaseName(0, 4) → 'idle' (no history yet)
+    expect(result.phase).toBe('idle')
     expect(result.isDeload).toBe(false)
     expect(result.deloadScheduled).toBe(false)
     expect(result.workoutsThisCycle).toBe(0)
@@ -607,8 +607,8 @@ describe('computeMesocycleState — edge cases', () => {
       now: '2026-06-15T12:00:00Z',
     })
 
-    // Empty history → weekInCycle=0 → loadingPhaseName(0,4) → 'accumulation'
-    expect(result.phaseDescription).toBe('Накопление — рабочий объём растёт')
+    // Empty history → weekInCycle=0 → loadingPhaseName(0,4) → 'idle'
+    expect(result.phaseDescription).toBe('Ожидание первой тренировки')
   })
 
   it('returns phaseDescription matching the phase with actual data', () => {
@@ -619,7 +619,7 @@ describe('computeMesocycleState — edge cases', () => {
     })
 
     // 1 week → weekInCycle=1 → "loading"
-    expect(result.phaseDescription).toBe('Загрузка — первый неделю мезоцикла, умеренный объём')
+    expect(result.phaseDescription).toBe('Загрузка — первую неделю мезоцикла, умеренный объём')
   })
 
   it('exercises outside 90-day window are ignored', () => {

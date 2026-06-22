@@ -37,7 +37,8 @@ const MESOCYCLE_CONFIG = {
 }
 
 const PHASE_NAMES = {
-  loading:        'Загрузка — первый неделю мезоцикла, умеренный объём',
+  idle:           'Ожидание первой тренировки',
+  loading:        'Загрузка — первую неделю мезоцикла, умеренный объём',
   accumulation:   'Накопление — рабочий объём растёт',
   intensification: 'Интенсификация — пик нагрузки мезоцикла',
   deload:         'Разгрузочная неделя — снижение объёма и интенсивности',
@@ -290,6 +291,7 @@ function checkEarlyDeloadTriggers({ coachMemory, history, weeks, cycleStartWeekI
 }
 
 function loadingPhaseName(weekInCycle, totalLoadingWeeks) {
+  if (weekInCycle === 0) return 'idle'
   if (weekInCycle === 1) return 'loading'
   if (weekInCycle >= totalLoadingWeeks) return 'intensification'
   return 'accumulation'
