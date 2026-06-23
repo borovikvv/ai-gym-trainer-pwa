@@ -202,8 +202,8 @@ export function CoachHome({
 
       <MetricPair
         metrics={[
-          { label: 'Серия', value: String(activeUser.streak) },
-          { label: 'Неделя', value: coachMemory ? `${coachMemory.weeklyBalance.completedWorkoutsLast7Days}/${coachMemory.weeklyBalance.plannedWorkoutsPerWeek}` : '—' },
+          { label: 'Подряд', value: String(activeUser.streak) },
+          { label: 'Тренировок', value: coachMemory ? `${coachMemory.weeklyBalance.completedWorkoutsLast7Days}/${coachMemory.weeklyBalance.plannedWorkoutsPerWeek}` : '—' },
         ]}
       />
 
