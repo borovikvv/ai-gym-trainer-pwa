@@ -4,6 +4,7 @@ import { formatWeight, roundWeight } from './lib/format.js'
 import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
+import { findReplacementForFatigue } from './exerciseMatcher.js'
 
 const russianWeekdayOrder = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 export const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер, спокойный и строгий по технике. Приоритеты: безопасность, постепенная прогрессия, восстановление, баланс недели, понятные короткие подсказки. Не гони пользователя в отказ без причины, не создавай две одинаковые ближайшие тренировки, не ставь запрещённые упражнения и не ломай цель анкеты.'
@@ -212,28 +213,11 @@ export function buildCoachPrompt({ profile, workoutDays: _workoutDays, completed
 }
 
 function chooseLibraryReplacementForFatigue({ exercise, library, usedExerciseIds, coachState }) {
-  const currentMuscle = exerciseMuscleKey(exercise)
-  const currentGroup = coachState?.muscleGroups?.[currentMuscle]
-  if (!currentGroup || currentGroup.fatigue !== 'high') return null
-  if (!['low', 'partial'].includes(String(coachState?.recoveryStatus ?? ''))) return null
-
-  const candidates = library
-    .filter((candidate) => !usedExerciseIds.has(candidate.id))
-    .filter((candidate) => candidate.muscleKey !== currentMuscle)
-    .filter((candidate) => coachState?.muscleGroups?.[candidate.muscleKey]?.fatigue !== 'high')
-    .sort((a, b) => replacementScore(b, coachState) - replacementScore(a, coachState))
-  return candidates[0] ?? null
-}
-
-function replacementScore(exercise, coachState) {
-  let score = 0
-  const fatigue = coachState?.muscleGroups?.[exercise.muscleKey]?.fatigue ?? 'low'
-  if (fatigue === 'low') score += 20
-  if (fatigue === 'medium') score += 5
-  if (coachState?.exercises?.[exercise.id]?.status === 'no_data') score += 4
-  if (['arms', 'shoulders', 'core'].includes(exercise.muscleKey)) score += 3
-  if (exercise.setsCount <= 2) score += 2
-  return score
+  // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
+  // movement_pattern, equipment, and exercise_type for smarter selection.
+  // Falls back gracefully when metadata is missing (all scores stay the same
+  // as before — based on muscle group + fatigue only).
+  return findReplacementForFatigue(exercise, library, usedExerciseIds, coachState)
 }
 
 function normalizeExerciseLibrary(exerciseLibrary) {
@@ -248,6 +232,12 @@ function normalizeExerciseLibrary(exerciseLibrary) {
     targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
     weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
     restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
+    // Phase 3 issue #13: metadata for smarter matching
+    targetMuscles: exercise.targetMuscles ?? exercise.target_muscles ?? [],
+    movementPattern: exercise.movementPattern ?? exercise.movement_pattern ?? null,
+    equipment: exercise.equipment ?? null,
+    exerciseType: exercise.exerciseType ?? exercise.exercise_type ?? null,
+    difficultyLevel: exercise.difficultyLevel ?? exercise.difficulty_level ?? null,
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
