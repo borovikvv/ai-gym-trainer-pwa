@@ -143,4 +143,34 @@ describe('workout debrief', () => {
 
     expect(score).toBe(0)
   })
+
+  it('uses "уменьшить помощь" wording for gravitron exercises in progressed list', () => {
+    const debrief = buildWorkoutDebrief({
+      id: 'session-gravitron',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      completedAt: '2026-06-07T15:00:00.000Z',
+      totalVolume: 700,
+      exercises: [
+        {
+          exerciseId: 'assisted-pull-up',
+          exerciseName: 'Подтягивания в гравитроне',
+          pain: false,
+          sets: [
+            { weight: 35, reps: 10, rpe: 7, completed: true },
+            { weight: 35, reps: 10, rpe: 8, completed: true },
+          ],
+          volume: 700,
+          nextRecommendedWeight: 32.5, // decreased (less assistance)
+          progressionType: 'increase',
+          progressionReason: 'можно уменьшить помощь',
+        },
+      ],
+    } satisfies WorkoutHistoryEntry)
+
+    expect(debrief.progressed).toHaveLength(1)
+    expect(debrief.progressed[0]).toContain('уменьшить помощь')
+    expect(debrief.progressed[0]).not.toContain('повысить')
+  })
 })

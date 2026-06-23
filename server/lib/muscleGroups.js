@@ -61,6 +61,18 @@ export function normalizeMuscleGroup(text) {
   return 'other'
 }
 
+/**
+ * Detect "assisted" exercises where the weight counter-intuitively
+ * DECREASES as the user gets stronger (gravitron, assisted dips, etc.).
+ * On these machines the "weight" is the assistance — less assistance =
+ * more body weight lifted = harder. So progression means subtracting
+ * weightStep, not adding it.
+ */
+export function isAssistedExerciseName(name) {
+  const normalized = String(name ?? '').toLowerCase()
+  return normalized.includes('гравитрон') || normalized.includes('assisted')
+}
+
 export const MUSCLE_LABELS = {
   chest: 'Грудь',
   back: 'Спина',

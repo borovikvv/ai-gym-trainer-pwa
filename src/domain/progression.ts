@@ -1,3 +1,5 @@
+import { isAssistedExercise } from '../lib/muscleGroups'
+
 export type WorkoutSetInput = {
   weight: number
   reps: number
@@ -81,9 +83,4 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
     type: 'hold',
     reason: `${input.exerciseName}: вес пока оставляем, цель — добрать повторы до верхней границы диапазона.`,
   }
-}
-
-function isAssistedExercise(exerciseName: string) {
-  const normalized = exerciseName.toLowerCase()
-  return normalized.includes('гравитрон') || normalized.includes('assisted')
 }

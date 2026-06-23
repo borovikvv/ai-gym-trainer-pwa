@@ -35,6 +35,23 @@ const MUSCLE_ALIASES = [
 
 export type MuscleKey = 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'other'
 
+/**
+ * Detect "assisted" exercises where the weight counter-intuitively
+ * DECREASES as the user gets stronger.
+ *
+ * Examples: Gravitron pull-ups (counterweight), assisted dips.
+ * On these machines the "weight" is the assistance — less assistance =
+ * more body weight lifted = harder. So progression means subtracting
+ * weightStep, not adding it.
+ *
+ * Used by progression logic (src/domain/progression.ts) and by UI text
+ * generators to avoid saying "повышать вес" for assisted exercises.
+ */
+export function isAssistedExercise(name: string | null | undefined): boolean {
+  const normalized = String(name ?? '').toLowerCase()
+  return normalized.includes('гравитрон') || normalized.includes('assisted')
+}
+
 export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey {
   const normalized = String(text ?? '').toLowerCase()
   for (const alias of MUSCLE_ALIASES) {

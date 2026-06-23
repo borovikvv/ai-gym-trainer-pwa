@@ -5,6 +5,7 @@ import {
   labelForLower,
   MUSCLE_LABELS,
   CANONICAL_MUSCLE_KEYS,
+  isAssistedExerciseName,
 } from './muscleGroups.js'
 
 // ---------------------------------------------------------------------------
@@ -187,5 +188,42 @@ describe('CANONICAL_MUSCLE_KEYS', () => {
     expect(CANONICAL_MUSCLE_KEYS.sort()).toEqual(
       ['arms', 'back', 'chest', 'core', 'legs', 'shoulders'],
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// isAssistedExerciseName (Phase 3 issue #8)
+// ---------------------------------------------------------------------------
+
+describe('isAssistedExerciseName', () => {
+  it('returns true for gravitron exercises (Russian)', () => {
+    expect(isAssistedExerciseName('Подтягивания в гравитроне')).toBe(true)
+    expect(isAssistedExerciseName('Гравитрон')).toBe(true)
+    expect(isAssistedExerciseName('Отжимания в гравитроне')).toBe(true)
+  })
+
+  it('returns true for assisted exercises (English)', () => {
+    expect(isAssistedExerciseName('assisted-pull-up')).toBe(true)
+    expect(isAssistedExerciseName('Assisted Dip')).toBe(true)
+    expect(isAssistedExerciseName('assisted pull-up')).toBe(true)
+  })
+
+  it('returns false for regular exercises', () => {
+    expect(isAssistedExerciseName('Жим лёжа')).toBe(false)
+    expect(isAssistedExerciseName('Тяга верхнего блока')).toBe(false)
+    expect(isAssistedExerciseName('Присед со штангой')).toBe(false)
+    expect(isAssistedExerciseName('bench press')).toBe(false)
+  })
+
+  it('handles null/undefined/empty gracefully', () => {
+    expect(isAssistedExerciseName(null)).toBe(false)
+    expect(isAssistedExerciseName(undefined)).toBe(false)
+    expect(isAssistedExerciseName('')).toBe(false)
+  })
+
+  it('is case-insensitive', () => {
+    expect(isAssistedExerciseName('ГРАВИТРОН')).toBe(true)
+    expect(isAssistedExerciseName('ASSISTED PULL-UP')).toBe(true)
+    expect(isAssistedExerciseName('Assisted Pull-Up')).toBe(true)
   })
 })

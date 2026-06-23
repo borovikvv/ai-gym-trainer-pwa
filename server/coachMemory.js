@@ -1,5 +1,5 @@
 import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup, MUSCLE_LABELS } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from './lib/muscleGroups.js'
 
 const TRAINER_PROFILE = 'Профиль тренера: персональный силовой тренер: безопасность, техника, постепенная прогрессия, восстановление и недельный баланс важнее случайного набора упражнений.'
 
@@ -81,7 +81,7 @@ function buildExerciseProfiles({ library, history, profile }) {
       hardSets,
       maxEffortSets,
       pain,
-      recommendation: recommendationForExerciseStatus(status),
+      recommendation: recommendationForExerciseStatus(status, exercise.name),
     }
   }
   return profiles
@@ -201,8 +201,11 @@ function classifyFatigue(group) {
   return 'low'
 }
 
-function recommendationForExerciseStatus(status) {
-  if (status === 'progress_possible') return 'можно осторожно повышать нагрузку'
+function recommendationForExerciseStatus(status, exerciseName = '') {
+  if (status === 'progress_possible') {
+    const assisted = isAssistedExerciseName(exerciseName)
+    return assisted ? 'можно уменьшать помощь' : 'можно осторожно повышать нагрузку'
+  }
   if (status === 'consolidate') return 'закрепить вес без отказа'
   if (status === 'pain') return 'не прогрессировать и подобрать замену'
   if (status === 'no_data') return 'собрать первые данные'
