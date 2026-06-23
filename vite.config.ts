@@ -13,6 +13,35 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        // Issue #39: cache static assets (exercise images, fonts) for offline use.
+        // API requests are handled separately via IndexedDB offline queue
+        // (src/lib/offlineQueue.ts) because the API is on a different origin.
+        runtimeCaching: [
+          {
+            // Exercise guide images — large, rarely change, needed offline.
+            urlPattern: /^https?:\/\/.*\/exercise-guides\/.*\.(png|svg|jpg)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'exercise-guides',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
+          {
+            // Lucide icons and other static assets from same origin.
+            urlPattern: /^https?:\/\/.*\/assets\/.*\.(js|css|woff2?)$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'app-assets',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+            },
+          },
+        ],
       },
       manifest: {
         name: 'AI Gym Trainer',

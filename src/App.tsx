@@ -417,6 +417,36 @@ function App() {
     }
   }, [activeUserId, history.length, plannedWorkouts.length])
 
+  // Issue #39: replay offline-queued requests when connectivity returns.
+  // Also checks on app startup (in case the user was offline when they
+  // saved a workout and reopened the app with internet).
+  useEffect(() => {
+    let cancelled = false
+    async function tryReplay() {
+      const { replayQueuedRequests, getQueuedCount } = await import('./lib/offlineQueue')
+      const count = await getQueuedCount()
+      if (count === 0) return
+      const sent = await replayQueuedRequests()
+      if (!cancelled && sent > 0) {
+        notify(`Отправлено в базу: ${sent} отложенн${sent === 1 ? 'ая' : 'ых'} трениров${sent === 1 ? 'ка' : 'ок'}`)
+        // Reload history from server to reflect the synced data.
+        try {
+          const { loadWorkoutHistoryFromApi } = await import('./data/workoutApi')
+          const remoteHistory = await loadWorkoutHistoryFromApi()
+          setHistory(remoteHistory)
+        } catch { /* non-fatal */ }
+      }
+    }
+    // Try on startup.
+    tryReplay()
+    // Listen for 'online' event.
+    window.addEventListener('online', tryReplay)
+    return () => {
+      cancelled = true
+      window.removeEventListener('online', tryReplay)
+    }
+  }, [])
+
           const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
     activeUserId,
     activeWorkoutDay,
