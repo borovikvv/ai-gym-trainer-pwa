@@ -230,5 +230,6 @@ export function useProgramData({
     plannedWorkouts,
     setPlannedWorkouts,
     restoredDraftKey,
+    setRestoredDraftKey,
   }
 }
