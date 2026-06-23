@@ -6,6 +6,66 @@ import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
 
+/**
+ * Compute streak (consecutive weeks with at least 1 workout) from history.
+ * Counts backward from the most recent workout. A "week" is a calendar
+ * week (Mon–Sun). If the user trained in each of the last N weeks
+ * (including the current week), streak = N.
+ *
+ * Returns a Russian string like '4 недели', '1 неделя', '0 недель'.
+ */
+function computeStreakFromHistory(history: WorkoutHistoryEntry[]): string {
+  if (!history || history.length === 0) return '0 недель'
+
+  // Get unique ISO week starts (Monday) from workout dates.
+  const weekStarts = new Set<string>()
+  for (const entry of history) {
+    if (!entry.completedAt) continue
+    const date = new Date(entry.completedAt)
+    // Find Monday of this week.
+    const day = date.getDay()
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1)
+    const monday = new Date(date)
+    monday.setDate(diff)
+    monday.setHours(0, 0, 0, 0)
+    weekStarts.add(monday.toISOString().slice(0, 10))
+  }
+
+  // Walk backward from current week. Count consecutive weeks with workouts.
+  const now = new Date()
+  const nowDay = now.getDay()
+  const nowDiff = now.getDate() - nowDay + (nowDay === 0 ? -6 : 1)
+  const currentMonday = new Date(now)
+  currentMonday.setDate(nowDiff)
+  currentMonday.setHours(0, 0, 0, 0)
+
+  let streak = 0
+  const cursor = new Date(currentMonday)
+  while (true) {
+    const key = cursor.toISOString().slice(0, 10)
+    if (weekStarts.has(key)) {
+      streak++
+      cursor.setDate(cursor.getDate() - 7)
+    } else {
+      // Allow a gap: if current week has no workout yet, check previous.
+      // Only skip the CURRENT week (user hasn't trained yet this week).
+      if (streak === 0 && key === currentMonday.toISOString().slice(0, 10)) {
+        cursor.setDate(cursor.getDate() - 7)
+        continue
+      }
+      break
+    }
+  }
+
+  // Russian pluralization for "неделя".
+  const mod10 = streak % 10
+  const mod100 = streak % 100
+  const word = (mod10 === 1 && mod100 !== 11) ? 'неделя'
+    : (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) ? 'недели'
+    : 'недель'
+  return `${streak} ${word}`
+}
+
 type CoachHomeProps = {
   users: UserProfile[]
   activeUser: UserProfile
@@ -202,7 +262,7 @@ export function CoachHome({
 
       <MetricPair
         metrics={[
-          { label: 'Подряд', value: String(activeUser.streak) },
+          { label: 'Подряд', value: computeStreakFromHistory(userHistory) },
           { label: 'Тренировок', value: coachMemory ? `${coachMemory.weeklyBalance.completedWorkoutsLast7Days}/${coachMemory.weeklyBalance.plannedWorkoutsPerWeek}` : '—' },
         ]}
       />
