@@ -409,7 +409,12 @@ export function librarySql() {
       coalesce(default_rep_max, 12) as rep_max,
       coalesce(default_target_weight, 0) as target_weight,
       coalesce(default_weight_step, 2.5) as weight_step,
-      coalesce(default_rest_seconds, 90) as rest_seconds
+      coalesce(default_rest_seconds, 90) as rest_seconds,
+      target_muscles,
+      movement_pattern,
+      equipment,
+      exercise_type,
+      difficulty_level
     from public.exercise_library
     order by muscle_group, name
   `

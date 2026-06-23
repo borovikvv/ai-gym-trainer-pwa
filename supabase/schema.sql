@@ -43,6 +43,12 @@ create table if not exists public.exercise_library (
   common_mistakes text[] not null default '{}',
   alternatives jsonb not null default '[]'::jsonb,
   media jsonb not null default '{}'::jsonb,
+  -- Phase 3 issue #12: metadata for coach decision-making
+  target_muscles text[] not null default '{}',
+  movement_pattern text check (movement_pattern is null or movement_pattern in ('push', 'pull', 'squat', 'hinge', 'rotation', 'carry', 'isolation')),
+  equipment text check (equipment is null or equipment in ('barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell', 'band')),
+  exercise_type text check (exercise_type is null or exercise_type in ('compound', 'isolation')),
+  difficulty_level text check (difficulty_level is null or difficulty_level in ('beginner', 'intermediate', 'advanced')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
