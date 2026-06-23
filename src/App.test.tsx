@@ -5,6 +5,7 @@ import App from './App'
 
 beforeEach(() => {
   window.localStorage.clear()
+  window.sessionStorage.clear()
   // App starts on onboarding screen for first-time users. Existing tests
   // assume the home screen — mark onboarding as completed.
   window.localStorage.setItem('ai-gym-trainer:v0.1:onboarding-completed', '1')
