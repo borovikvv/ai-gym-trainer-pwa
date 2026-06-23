@@ -171,7 +171,7 @@ describe('MesocycleIndicator', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Нед 1/4')).toBeInTheDocument()
+    expect(screen.getByText('Нед 1/5')).toBeInTheDocument()
   })
 
   it('renders intensification variant on the last loading week', () => {
@@ -186,7 +186,7 @@ describe('MesocycleIndicator', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Нед 4/4')).toBeInTheDocument()
+    expect(screen.getByText('Нед 4/5')).toBeInTheDocument()
     expect(screen.getByText('Интенсификация — пик нагрузки мезоцикла')).toBeInTheDocument()
   })
 
@@ -204,7 +204,7 @@ describe('MesocycleIndicator', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Нед 4/4')).toBeInTheDocument()
+    expect(screen.getByText('Нед 4/5')).toBeInTheDocument()
   })
 
   it('hides indicator when mesocycle is null', () => {

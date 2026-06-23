@@ -44,10 +44,20 @@ function mesocycleBadge(mesocycle: MesocycleState | null | undefined): { text: s
   if (mesocycle.isDeload) {
     return { text: 'Разгрузка', variant: 'deload' }
   }
+  // Display weekInCycle/cycleLength (total cycle weeks including deload).
+  // Previously used loadingWeeks as denominator, which caused confusing
+  // displays like "Нед 4/3" when deload was delayed (weekInCycle exceeded
+  // loadingWeeks). Using cycleLength ensures numerator ≤ denominator always.
+  // Example for teen (3 loading + 1 deload = 4 total):
+  //   Week 1: "Нед 1/4" (loading)
+  //   Week 2: "Нед 2/4" (accumulation)
+  //   Week 3: "Нед 3/4" (intensification, deload next)
+  //   Week 4: "Разгрузка" (deload, handled above)
+  const weekLabel = `Нед ${mesocycle.weekInCycle}/${mesocycle.cycleLength}`
   if (mesocycle.deloadScheduled) {
-    return { text: `Нед ${mesocycle.weekInCycle}/${mesocycle.loadingWeeks}`, variant: 'scheduled' }
+    return { text: weekLabel, variant: 'scheduled' }
   }
-  return { text: `Нед ${mesocycle.weekInCycle}/${mesocycle.loadingWeeks}`, variant: mesocycle.phase === 'intensification' ? 'intensification' : 'loading' }
+  return { text: weekLabel, variant: mesocycle.phase === 'intensification' ? 'intensification' : 'loading' }
 }
 
 function MesocycleIndicator({ mesocycle }: { mesocycle: MesocycleState | null | undefined }) {
