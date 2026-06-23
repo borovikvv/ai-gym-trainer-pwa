@@ -1,7 +1,7 @@
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
-import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { roundWeight } from './lib/format.js'
+import { findComplementaryExercises } from './exerciseMatcher.js'
 
 export function recommendNextSet(input) {
   const exercise = input.exercise ?? {}
@@ -189,26 +189,18 @@ function safeNumber(value, fallback) {
   return Number.isFinite(number) ? number : fallback
 }
 
-function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, workoutExercises = [], exerciseLibrary = [], preferDifferentMuscle = false, limit = 3 }) {
-  const usedIds = new Set((workoutExercises ?? []).map((exercise) => canonicalExerciseId(exercise)))
-  const usedNames = new Set((workoutExercises ?? []).map((exercise) => normalizeText(exercise.name ?? exercise.exerciseName)))
-  const currentMuscle = normalizeMuscleGroup(`${currentExercise.muscleGroup ?? ''} ${currentExercise.name ?? ''}`)
-  const nextMuscle = normalizeMuscleGroup(`${nextExercise?.muscleGroup ?? ''} ${nextExercise?.name ?? ''}`)
-  return (exerciseLibrary ?? [])
-    .filter((candidate) => candidate?.id && candidate?.name)
-    .filter((candidate) => !usedIds.has(canonicalExerciseId(candidate)))
-    .filter((candidate) => !usedNames.has(normalizeText(candidate.name)))
-    .sort((a, b) => scoreSuggestedExercise(b, { currentMuscle, nextMuscle, preferDifferentMuscle }) - scoreSuggestedExercise(a, { currentMuscle, nextMuscle, preferDifferentMuscle }))
-    .slice(0, limit)
-}
-
-function scoreSuggestedExercise(exercise, { currentMuscle, nextMuscle, preferDifferentMuscle }) {
-  const muscle = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`)
-  let score = 0
-  if (preferDifferentMuscle && muscle !== currentMuscle && muscle !== nextMuscle) score += 30
-  if (muscle === 'core') score += 8
-  if (Number(exercise.targetWeight ?? 0) === 0) score += 3
-  return score
+function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, workoutExercises = [], exerciseLibrary = [], preferDifferentMuscle: _preferDifferentMuscle = false, limit = 3 }) {
+  // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
+  // movement_pattern, equipment, and exercise_type for smarter suggestions.
+  // The preferDifferentMuscle flag is handled inside the matcher (different
+  // muscle group gets +30 score).
+  return findComplementaryExercises({
+    currentExercise,
+    nextExercise,
+    workoutExercises,
+    library: exerciseLibrary,
+    limit,
+  })
 }
 
 function isAccessoryExercise(exercise) {
@@ -242,6 +234,3 @@ function matchesAnyTrainingArea(exerciseText, areas) {
   return (areas ?? []).some((area) => normalizeMuscleGroup(area) === muscle)
 }
 
-function normalizeText(value) {
-  return String(value ?? '').trim().toLowerCase()
-}

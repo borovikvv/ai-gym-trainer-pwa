@@ -169,8 +169,8 @@ describe('Coach Engine v1 next-set recommendations', () => {
     })
     expect(result.suggestedExercises).toEqual([
       expect.objectContaining({ id: 'plank' }),
-      expect.objectContaining({ id: 'bodyweight-squat' }),
       expect.objectContaining({ id: 'lat-pulldown' }),
+      expect.objectContaining({ id: 'bodyweight-squat' }),
     ])
   })
 
