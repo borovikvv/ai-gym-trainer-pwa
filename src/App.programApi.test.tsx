@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 beforeEach(() => {
   window.localStorage.clear()
+  window.localStorage.setItem('ai-gym-trainer:v0.1:onboarding-completed', '1')
   vi.resetModules()
 })
 

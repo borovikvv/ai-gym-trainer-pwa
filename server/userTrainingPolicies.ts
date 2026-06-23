@@ -1,4 +1,29 @@
-const POLICIES = {
+import type { AgeRecoveryPhase } from '../shared/types.js'
+
+type MaxIntensity = 'controlled' | 'controlled_aggressive'
+type ProgressionAggressiveness = 'conservative' | 'controlled_aggressive'
+
+interface UserPolicy {
+  userId: string
+  maxIntensity: MaxIntensity
+  allowFailureSets: boolean
+  progressionAggressiveness: ProgressionAggressiveness
+  maxWeightJumpSteps: number
+  safetyNotes: string[]
+}
+
+interface AgeRecoveryProfile {
+  phase: AgeRecoveryPhase
+  baseRecoveryDays: number
+  readinessPriorAdjustment: number
+  sparseHistoryRecoveryBufferDays: number
+}
+
+export interface UserTrainingPolicy extends UserPolicy {
+  ageRecoveryProfile: AgeRecoveryProfile
+}
+
+const POLICIES: Record<string, UserPolicy> = {
   vyacheslav: {
     userId: 'vyacheslav',
     maxIntensity: 'controlled_aggressive',
@@ -23,7 +48,7 @@ const POLICIES = {
   },
 }
 
-const DEFAULT_POLICY = {
+const DEFAULT_POLICY: UserPolicy = {
   userId: 'unknown',
   maxIntensity: 'controlled',
   allowFailureSets: false,
@@ -32,7 +57,13 @@ const DEFAULT_POLICY = {
   safetyNotes: ['частный режим: неизвестному пользователю даём консервативную нагрузку'],
 }
 
-export function getUserTrainingPolicy(userOrProfile) {
+interface ProfileLike {
+  userId?: string
+  user_id?: string
+  age?: number
+}
+
+export function getUserTrainingPolicy(userOrProfile: ProfileLike | string | null | undefined): UserTrainingPolicy {
   const profile = typeof userOrProfile === 'object' && userOrProfile !== null ? userOrProfile : null
   const key = String(profile?.userId ?? profile?.user_id ?? userOrProfile ?? '').trim().toLowerCase()
   const age = Number(profile?.age ?? NaN)
@@ -43,7 +74,7 @@ export function getUserTrainingPolicy(userOrProfile) {
   }
 }
 
-function buildAgeRecoveryProfile(age) {
+function buildAgeRecoveryProfile(age: number): AgeRecoveryProfile {
   if (Number.isFinite(age) && age > 0 && age < 18) {
     return {
       phase: 'teen',

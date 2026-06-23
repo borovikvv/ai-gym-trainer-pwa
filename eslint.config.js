@@ -49,6 +49,36 @@ export default defineConfig([
     },
   },
   {
+    // Server-side TypeScript files (gradual migration in progress).
+    // Uses lax tsconfig — type-checked ESLint rules are disabled here
+    // until strict mode is enabled.
+    files: ['server/**/*.ts', 'shared/**/*.ts'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+    ],
+    languageOptions: {
+      globals: { ...globals.node },
+      parserOptions: {
+        project: ['./tsconfig.server.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+      // Lax mode during migration — match tsconfig.server.json settings
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+    },
+  },
+  {
     // Server-side plain JS files: lighter config, no type-checked rules.
     files: ['server/**/*.js'],
     extends: [
