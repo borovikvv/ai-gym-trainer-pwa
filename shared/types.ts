@@ -95,6 +95,27 @@ export interface CoachState {
   daysSinceLastWorkout: number | null
   mesocycle: MesocycleState | null
   warnings: string[]
+  // Adaptive volume landmark state (Phase 3 issue #6)
+  volumeLandmarkOverrides?: Record<string, { mev: number; mav: number; mrv: number }>
+  volumeAdjustmentLog?: VolumeAdjustmentDecision[]
+  volumeSnapshots?: Record<string, MuscleVolumeSnapshot>
+}
+
+export interface VolumeAdjustmentDecision {
+  muscleKey: string
+  action: 'increase_mrv' | 'decrease_mrv' | 'decrease_mev' | 'hold'
+  delta: number
+  reason: string
+  newMrv: number
+  newMev: number
+}
+
+export interface MuscleVolumeSnapshot {
+  weeklySets: number
+  weeksAtOrAboveMrv: number
+  weeksBelowMev: number
+  e1rmTrend: 'up' | 'down' | 'flat' | 'insufficient_data'
+  lastAdjustmentIso: string | null
 }
 
 export type MuscleGroupStatus = 'no_data' | 'hold' | 'consolidate' | 'progress_possible' | 'pain'

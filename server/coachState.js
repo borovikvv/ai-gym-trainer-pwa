@@ -2,8 +2,12 @@ import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { computeMesocycleState } from './mesocycle.js'
+import { getVolumeLandmarks } from './volumeLandmarks.js'
+import { computeAllAdjustments } from './adaptiveVolumeLandmarks.js'
+import { buildAllMuscleVolumeSnapshots } from './buildVolumeSnapshot.js'
+import { extractLastAdjustments, mergeLandmarkOverrides } from './volumeLandmarkOverrides.js'
 
-export function computeCoachState({ profile = {}, workoutDays = [], history = [], now = new Date(), lastWorkoutQualityScore = null, coachMemory = null }) {
+export function computeCoachState({ profile = {}, workoutDays = [], history = [], now = new Date(), lastWorkoutQualityScore = null, coachMemory = null, volumeLandmarkOverrides = null, e1rmHistories = null }) {
   const nowDate = new Date(now)
   const normalizedHistory = [...(history ?? [])]
     .filter((session) => session?.completedAt)
@@ -49,6 +53,28 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
 
   const mesocycle = computeMesocycleState({ profile, history, coachMemory, now: nowDate })
 
+  // --- Adaptive volume landmark adjustments (Phase 3 issue #6) ---
+  // Build snapshots from history + e1RM trends, compute adjustments, and
+  // merge with existing overrides to produce the effective landmark table.
+  // The caller (loadCoachMemoryForUser) is responsible for persisting any
+  // non-hold decisions via saveVolumeLandmarkAdjustments().
+  const phase = userTrainingPolicy?.ageRecoveryProfile?.phase ?? 'adult'
+  const lastAdjustments = extractLastAdjustments(volumeLandmarkOverrides ?? {})
+  const snapshots = buildAllMuscleVolumeSnapshots(
+    normalizedHistory,
+    e1rmHistories ?? [],
+    phase,
+    nowDate,
+    lastAdjustments,
+  )
+  const adjustmentDecisions = computeAllAdjustments(snapshots, phase, nowDate)
+  const volumeAdjustmentLog = adjustmentDecisions.filter((a) => a.action !== 'hold')
+  const effectiveVolumeLandmarks = mergeLandmarkOverrides(
+    phase,
+    volumeLandmarkOverrides ?? {},
+    getVolumeLandmarks,
+  )
+
   return {
     userId: profile.userId ?? profile.user_id ?? null,
     generatedAt: nowDate.toISOString(),
@@ -67,6 +93,10 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
     },
     mesocycle,
     warnings: buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups, mesocycle }),
+    // Adaptive volume landmark state (Phase 3 issue #6)
+    volumeLandmarkOverrides: effectiveVolumeLandmarks,
+    volumeAdjustmentLog,
+    volumeSnapshots: snapshots,
   }
 }
 
