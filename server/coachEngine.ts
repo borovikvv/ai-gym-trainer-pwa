@@ -3,7 +3,7 @@ import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { roundWeight } from './lib/format.js'
 import { findComplementaryExercises } from './exerciseMatcher.js'
 
-export function recommendNextSet(input) {
+export function recommendNextSet(input: any) {
   const exercise = input.exercise ?? {}
   const userTrainingPolicy = input.userTrainingPolicy ?? getUserTrainingPolicy(input.userId)
   const completedSets = (input.completedSets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
@@ -184,12 +184,12 @@ export function recommendNextSet(input) {
   }, input.remainingSets)
 }
 
-function safeNumber(value, fallback) {
+function safeNumber(value: any, fallback: any) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
 }
 
-function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, workoutExercises = [], exerciseLibrary = [], preferDifferentMuscle: _preferDifferentMuscle = false, limit = 3 }) {
+function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, workoutExercises = [], exerciseLibrary = [], preferDifferentMuscle: _preferDifferentMuscle = false, limit = 3 }: any) {
   // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
   // movement_pattern, equipment, and exercise_type for smarter suggestions.
   // The preferDifferentMuscle flag is handled inside the matcher (different
@@ -203,11 +203,11 @@ function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, w
   })
 }
 
-function isAccessoryExercise(exercise) {
+function isAccessoryExercise(exercise: any) {
   return ['arms', 'shoulders', 'core'].includes(normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`))
 }
 
-function withRemainingSetUpdates(decision, remainingSets) {
+function withRemainingSetUpdates(decision: any, remainingSets: any) {
   const count = Math.max(0, Math.floor(safeNumber(remainingSets, 0)))
   if (count <= 0 || decision.recommendedReps <= 0) return decision
   return {
@@ -221,7 +221,7 @@ function withRemainingSetUpdates(decision, remainingSets) {
   }
 }
 
-function liveReadinessConstraint({ exercise, readinessCheckIn = null }) {
+function liveReadinessConstraint({ exercise, readinessCheckIn = null }: any) {
   if (!readinessCheckIn) return null
   const exerciseText = `${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`
   if (matchesAnyTrainingArea(exerciseText, readinessCheckIn.painAreas)) return 'pain'
@@ -229,7 +229,7 @@ function liveReadinessConstraint({ exercise, readinessCheckIn = null }) {
   return null
 }
 
-function matchesAnyTrainingArea(exerciseText, areas) {
+function matchesAnyTrainingArea(exerciseText: any, areas: any) {
   const muscle = normalizeMuscleGroup(exerciseText)
   return (areas ?? []).some((area) => normalizeMuscleGroup(area) === muscle)
 }

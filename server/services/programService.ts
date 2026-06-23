@@ -1,3 +1,4 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
 import { dayTemplate } from '../programTemplates.js'
@@ -6,7 +7,7 @@ import { assertAllowedRowOwner } from '../privateUsers.js'
 import { loadVolumeLandmarkOverrides, saveVolumeLandmarkAdjustments } from '../volumeLandmarkOverrides.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 
-export async function loadProgramData(client) {
+export async function loadProgramData(client: any) {
   const [users, profileRows, dayRows, exerciseRows, libraryRows] = await Promise.all([
     client.query(`
       select id, name, initials, goal, streak
@@ -77,7 +78,7 @@ export async function loadProgramData(client) {
   }
 }
 
-export async function updateUserProfile(client, { userId, age, heightCm, weightKg, goal, level, workoutsPerWeek, targetWorkoutMinutes, injuries, equipment, trainingDays, preferredExercises, bannedExercises, preferences, notes }) {
+export async function updateUserProfile(client: any, { userId, age, heightCm, weightKg, goal, level, workoutsPerWeek, targetWorkoutMinutes, injuries, equipment, trainingDays, preferredExercises, bannedExercises, preferences, notes }) {
   const result = await client.query(
     `insert into public.user_profiles
      (user_id, age, height_cm, weight_kg, goal, level, workouts_per_week,
@@ -110,7 +111,7 @@ export async function updateUserProfile(client, { userId, age, heightCm, weightK
   return result.rows[0]
 }
 
-export async function updateProgramExercise(client, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus }) {
+export async function updateProgramExercise(client: any, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus }) {
   const owner = await client.query(
     `select p.user_id
      from public.program_exercises pe
@@ -138,7 +139,7 @@ export async function updateProgramExercise(client, { id, setsCount, repMin, rep
   return result.rows[0] ?? null
 }
 
-export async function ensureProgramMatchesWorkoutFrequency(client, userId, workoutsPerWeek) {
+export async function ensureProgramMatchesWorkoutFrequency(client: any, userId, workoutsPerWeek) {
   const targetDays = Math.max(1, Math.min(Number(workoutsPerWeek) || 3, 4))
   const programResult = await client.query(
     `select id from public.programs where user_id = $1 and status = 'active' order by updated_at desc limit 1`,
@@ -178,7 +179,7 @@ export async function ensureProgramMatchesWorkoutFrequency(client, userId, worko
   }
 }
 
-export async function loadUserProfile(client, userId) {
+export async function loadUserProfile(client: any, userId) {
   const result = await client.query(
     `select user_id, age, sex, height_cm, weight_kg, goal, level, workouts_per_week,
             target_workout_minutes, injuries, limitations, banned_exercises, preferred_exercises,
@@ -189,7 +190,7 @@ export async function loadUserProfile(client, userId) {
   return result.rows[0] ? normalizeProfile(result.rows[0]) : { userId, workoutsPerWeek: 3, trainingDays: [] }
 }
 
-export async function loadUserWorkoutDays(client, userId) {
+export async function loadUserWorkoutDays(client: any, userId) {
   const days = await client.query(
     `select d.id, d.day_key, d.name, d.label, d.description, d.sort_order
      from public.program_days d
@@ -245,12 +246,12 @@ export async function loadUserWorkoutDays(client, userId) {
   }))
 }
 
-export async function loadExerciseLibrary(client) {
+export async function loadExerciseLibrary(client: any) {
   const result = await client.query(librarySql())
   return result.rows.map(normalizeLibraryExercise)
 }
 
-export async function loadRecentHistory(client, userId) {
+export async function loadRecentHistory(client: any, userId) {
   const sessions = await client.query(
     `select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume
      from public.workout_sessions
@@ -301,7 +302,7 @@ export async function loadRecentHistory(client, userId) {
   })
 }
 
-export async function loadCoachStateForUser(client, userId, now = new Date()) {
+export async function loadCoachStateForUser(client: any, userId, now = new Date()) {
   // Two-pass path: compute coachMemory first (which itself needs a first-pass
   // coachState), then recompute coachState with coachMemory available so the
   // mesocycle engine can use weeklyBalance.muscleSetCounts for early MRV
@@ -311,7 +312,7 @@ export async function loadCoachStateForUser(client, userId, now = new Date()) {
   return coachState
 }
 
-export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
+export async function loadCoachMemoryForUser(client: any, userId, now = new Date()) {
   const [profile, workoutDays, exerciseLibrary, history, coachDecisionLogs, volumeLandmarkOverrides] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
@@ -354,7 +355,7 @@ export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
   return { coachMemory, coachState }
 }
 
-export async function loadRecentCoachDecisionLogs(client, userId) {
+export async function loadRecentCoachDecisionLogs(client: any, userId) {
   const result = await client.query(
     `select session_id, body, source, created_at
      from public.recommendations
@@ -375,7 +376,7 @@ export async function loadRecentCoachDecisionLogs(client, userId) {
   }).filter((row) => row.decisionSummary)
 }
 
-function enrichLibraryForMemory(exerciseLibrary, workoutDays) {
+function enrichLibraryForMemory(exerciseLibrary: any, workoutDays: any) {
   const byId = new Map()
   for (const day of workoutDays ?? []) {
     for (const exercise of day.exercises ?? []) {
@@ -385,7 +386,7 @@ function enrichLibraryForMemory(exerciseLibrary, workoutDays) {
   return (exerciseLibrary ?? []).map((exercise) => ({ ...exercise, ...(byId.get(exercise.id) ?? {}) }))
 }
 
-function parseDecisionLogBody(body) {
+function parseDecisionLogBody(body: any) {
   if (!body) return null
   if (typeof body === 'object') return body
   try {

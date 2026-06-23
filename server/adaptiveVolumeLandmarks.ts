@@ -60,7 +60,7 @@ const TWO_WEEKS_MS = 14 * 86_400_000
  * @param {Date} now
  * @returns {AdjustmentDecision}
  */
-export function computeMuscleAdjustment(muscleKey, snapshot, phase = 'adult', now = new Date()) {
+export function computeMuscleAdjustment(muscleKey: any, snapshot, phase = 'adult', now = new Date()) {
   const landmarks = getVolumeLandmarks(muscleKey, phase)
   const result = {
     muscleKey,
@@ -136,7 +136,7 @@ export function computeMuscleAdjustment(muscleKey, snapshot, phase = 'adult', no
  * @param {Date} now
  * @returns {AdjustmentDecision[]}
  */
-export function computeAllAdjustments(snapshots, phase = 'adult', now = new Date()) {
+export function computeAllAdjustments(snapshots: any, phase = 'adult', now = new Date()) {
   return CANONICAL_MUSCLE_KEYS.map((key) =>
     computeMuscleAdjustment(key, snapshots[key] ?? {}, phase, now),
   )
@@ -150,7 +150,7 @@ export function computeAllAdjustments(snapshots, phase = 'adult', now = new Date
  * @param {string} phase
  * @returns {Record<string, { mev: number, mav: number, mrv: number }>}
  */
-export function applyAdjustments(adjustments, phase = 'adult') {
+export function applyAdjustments(adjustments: any, phase = 'adult') {
   const result = {}
   for (const adj of adjustments) {
     const base = getVolumeLandmarks(adj.muscleKey, phase)

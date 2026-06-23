@@ -1,3 +1,4 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 /**
  * Adaptive Mesocycle State Machine
  *
@@ -125,7 +126,7 @@ export function computeMesocycleState({ profile = {}, history = [], coachMemory 
  * Whether the next workout should be treated as a deload workout.
  * Convenience wrapper — equivalent to `state.isDeload`.
  */
-export function isDeloadWeek(mesocycleState) {
+export function isDeloadWeek(mesocycleState: any) {
   return mesocycleState?.isDeload === true
 }
 
@@ -136,7 +137,7 @@ export function isDeloadWeek(mesocycleState) {
  * @param {{ setsCount: number, targetWeight: number, repMin: number, repMax: number, weightStep: number }} exercise
  * @returns {{ setsCount: number, targetWeight: number, repMin: number, repMax: number, intensityTarget: string, deloadNote: string }}
  */
-export function applyDeloadReduction(exercise) {
+export function applyDeloadReduction(exercise: any) {
   const originalSets = clampNumber(exercise.setsCount, 1, 6, 3)
   // Reduce to ~60% of normal sets, minimum 2
   const deloadSets = Math.max(2, Math.round(originalSets * 0.6))
@@ -166,7 +167,7 @@ export function applyDeloadReduction(exercise) {
  * Returns array of { weekStart (Date), weekEnd (Date), workouts: [...] },
  * most recent first.
  */
-function buildWeekBuckets(history, now) {
+function buildWeekBuckets(history: any, now: any) {
   const nowDate = new Date(now)
   const completedSessions = (history ?? [])
     .filter((s) => s?.completedAt)
@@ -203,7 +204,7 @@ function buildWeekBuckets(history, now) {
  *   - A gap of 10+ days between week buckets (extended break)
  *   - Reaching the configured cycle length
  */
-function findCyclePosition(weeks, cycleLength, workoutsPerWeek) {
+function findCyclePosition(weeks: any, cycleLength: any, workoutsPerWeek: any) {
   let weekInCycle = 0
   let cycleStartWeekIndex = 0
   let workoutsThisCycle = 0
@@ -248,7 +249,7 @@ function findCyclePosition(weeks, cycleLength, workoutsPerWeek) {
  * Check for early deload triggers.
  * Returns { force: boolean, reason: string|null }
  */
-function checkEarlyDeloadTriggers({ coachMemory, weeks, cycleStartWeekIndex, phase }) {
+function checkEarlyDeloadTriggers({ coachMemory, weeks, cycleStartWeekIndex, phase }: any) {
   // Only check during loading weeks, not if already in deload
   const reasons = []
 
@@ -287,7 +288,7 @@ function checkEarlyDeloadTriggers({ coachMemory, weeks, cycleStartWeekIndex, pha
   return { force: false, reason: null }
 }
 
-function loadingPhaseName(weekInCycle, totalLoadingWeeks) {
+function loadingPhaseName(weekInCycle: any, totalLoadingWeeks: any) {
   if (weekInCycle === 0) return 'idle'
   if (weekInCycle === 1) return 'loading'
   if (weekInCycle >= totalLoadingWeeks) return 'intensification'
@@ -298,7 +299,7 @@ function loadingPhaseName(weekInCycle, totalLoadingWeeks) {
 // Date / ISO week utilities
 // ---------------------------------------------------------------------------
 
-function isoWeekKey(date) {
+function isoWeekKey(date: any) {
   const d = new Date(date)
   const jan4 = new Date(d.getFullYear(), 0, 4)
   const oneDay = 86_400_000
@@ -306,7 +307,7 @@ function isoWeekKey(date) {
   return `${d.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`
 }
 
-function startOfWeek(date) {
+function startOfWeek(date: any) {
   const d = new Date(date)
   const day = d.getDay()
   const diff = d.getDate() - day + (day === 0 ? -6 : 1) // Monday
@@ -315,7 +316,7 @@ function startOfWeek(date) {
   return start
 }
 
-function endOfWeek(date) {
+function endOfWeek(date: any) {
   const start = startOfWeek(date)
   const end = new Date(start)
   end.setDate(start.getDate() + 6)
@@ -323,7 +324,7 @@ function endOfWeek(date) {
   return end
 }
 
-function clampNumber(value, min, max, fallback) {
+function clampNumber(value: any, min: any, max: any, fallback: any) {
   const number = Number(value)
   if (!Number.isFinite(number)) return fallback
   return Math.max(min, Math.min(max, number))

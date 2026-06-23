@@ -5,7 +5,7 @@ export function buildCoachDecisionLogEntry({
   source,
   inputs = {},
   decision = {},
-}) {
+}: any) {
   const coachState = inputs.coachState ?? {}
   return {
     userId,
@@ -26,7 +26,7 @@ export function buildCoachDecisionLogEntry({
   }
 }
 
-export async function storeCoachDecisionLog(client, entry) {
+export async function storeCoachDecisionLog(client: any, entry: any) {
   await client.query(
     `insert into public.recommendations (user_id, session_id, recommendation_type, title, body, source)
      values ($1,$2,$3,$4,$5,$6)`,
@@ -41,13 +41,13 @@ export async function storeCoachDecisionLog(client, entry) {
   )
 }
 
-function titleForDecision(decisionType) {
+function titleForDecision(decisionType: string) {
   if (decisionType === 'live_strategy') return 'Решение тренера во время тренировки'
   if (decisionType === 'post_workout_plan') return 'Решение тренера после тренировки'
   return 'Решение тренера'
 }
 
-function sanitizePayload(value) {
+function sanitizePayload(value: any) {
   return JSON.parse(JSON.stringify(value, (key, nestedValue) => {
     if (/api[_-]?key|token|authorization|secret/i.test(key)) return '[redacted]'
     return nestedValue

@@ -1,3 +1,4 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup, isAssistedExerciseName } from './lib/muscleGroups.js'
@@ -100,7 +101,7 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
   }
 }
 
-function buildExerciseCatalog(workoutDays) {
+function buildExerciseCatalog(workoutDays: any) {
   const catalog = new Map()
   for (const day of workoutDays ?? []) {
     for (const exercise of day.exercises ?? []) {
@@ -117,7 +118,7 @@ function buildExerciseCatalog(workoutDays) {
   return catalog
 }
 
-function buildMuscleGroupState({ history, exerciseCatalog, now }) {
+function buildMuscleGroupState({ history, exerciseCatalog, now }: any) {
   const groups = new Map()
   for (const session of history ?? []) {
     const completedAt = new Date(session.completedAt)
@@ -156,7 +157,7 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }) {
   return result
 }
 
-function buildExerciseState({ history, exerciseCatalog }) {
+function buildExerciseState({ history, exerciseCatalog }: any) {
   const result = {}
   for (const [exerciseId, catalogItem] of exerciseCatalog.entries()) {
     const sessions = []
@@ -202,7 +203,7 @@ function buildExerciseState({ history, exerciseCatalog }) {
   return result
 }
 
-function computeRecoveryStatus({ daysSinceLastWorkout, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0 }) {
+function computeRecoveryStatus({ daysSinceLastWorkout, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0 }: any) {
   if (daysSinceLastWorkout === null) return 'unknown'
   if (painFlagsLast14Days > 0 || daysSinceLastWorkout < 1 || recentMaxEffortSets >= 2) return 'low'
   if (daysSinceLastWorkout < 2 || highFatigueGroups > 0 || recentMaxEffortSets >= 1) return 'partial'
@@ -212,7 +213,7 @@ function computeRecoveryStatus({ daysSinceLastWorkout, highFatigueGroups, recent
   return 'ready'
 }
 
-function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0, lastWorkoutQualityScore = null }) {
+function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0, lastWorkoutQualityScore = null }: any) {
   let score = 75
   if (daysSinceLastWorkout === null) score -= 5
   else if (daysSinceLastWorkout < 1) score -= 35
@@ -235,18 +236,18 @@ function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFati
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
-function computeTrainingDataConfidence(history) {
+function computeTrainingDataConfidence(history: any) {
   return clampNumber((history ?? []).length / 8, 0, 1, 0)
 }
 
-function classifyMuscleFatigue(group) {
+function classifyMuscleFatigue(group: any) {
   const recentlyTrained = group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1
   if (group.recentMaxEffortSets > 0 || (recentlyTrained && group.recentHardSets >= 2)) return 'high'
   if (recentlyTrained || group.recentHardSets > 0) return 'medium'
   return 'low'
 }
 
-function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups, mesocycle }) {
+function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups, mesocycle }: any) {
   const warnings = []
   if (recoveryStatus === 'low') warnings.push('восстановление низкое — следующую нагрузку стоит облегчить')
   if (weeklyLoadStatus === 'above_plan') warnings.push('фактическая частота выше анкеты — нужен контроль объёма')
@@ -261,7 +262,7 @@ function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, 
   return warnings
 }
 
-function completedSetsOf(exercise) {
+function completedSetsOf(exercise: any) {
   return (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
 }
 
@@ -278,20 +279,20 @@ function targetTextForStatus(status, exerciseName = '') {
   return 'держать качество и добрать план'
 }
 
-function daysBetween(from, to) {
+function daysBetween(from: any, to: any) {
   return Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
 }
 
-function wholeDaysBetween(from, to) {
+function wholeDaysBetween(from: any, to: any) {
   return Math.floor(daysBetween(from, to))
 }
 
-function clampNumber(value, min, max, fallback) {
+function clampNumber(value: any, min: any, max: any, fallback: any) {
   const number = Number(value)
   if (!Number.isFinite(number)) return fallback
   return Math.max(min, Math.min(max, number))
 }
 
-function roundNumber(value) {
+function roundNumber(value: any) {
   return Number(Number(value).toFixed(1))
 }

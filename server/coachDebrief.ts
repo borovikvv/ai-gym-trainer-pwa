@@ -1,6 +1,6 @@
 import { formatWeight, pluralRu } from './lib/format.js'
 
-export function computeWorkoutQualityScore(entry = {}) {
+export function computeWorkoutQualityScore(entry: any = {}) {
   const exercises = entry.exercises ?? []
   if (exercises.length === 0) return 0
 
@@ -47,7 +47,7 @@ export function computeWorkoutQualityScore(entry = {}) {
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
-export function buildWorkoutDebrief(entry = {}) {
+export function buildWorkoutDebrief(entry: any = {}) {
   const exercises = entry.exercises ?? []
   const completedExercises = exercises.filter((exercise) => (exercise.sets ?? []).some((set) => set?.completed !== false && Number(set?.reps) > 0))
   const overload = exercises
@@ -75,7 +75,7 @@ export function buildWorkoutDebrief(entry = {}) {
   }
 }
 
-export async function saveWorkoutDebriefRecommendation(client, entry, debrief = buildWorkoutDebrief(entry)) {
+export async function saveWorkoutDebriefRecommendation(client: any, entry, debrief = buildWorkoutDebrief(entry)) {
   await client.query(
     `insert into public.recommendations (user_id, session_id, recommendation_type, title, body, source)
      values ($1,$2,'post_workout_debrief','Итог тренера',$3,$4)`,
@@ -83,7 +83,7 @@ export async function saveWorkoutDebriefRecommendation(client, entry, debrief = 
   )
 }
 
-export function formatDebrief(debrief) {
+export function formatDebrief(debrief: any) {
   return [
     debrief.summary,
     '',
@@ -103,7 +103,7 @@ export function formatDebrief(debrief) {
   ].join('\n')
 }
 
-function buildWhy(entry) {
+function buildWhy(entry: any) {
   const checkIn = entry.readinessCheckIn
   const reasons = []
   if (checkIn && (Number(checkIn.sleepQuality) <= 2 || Number(checkIn.energy) <= 2 || Number(checkIn.stress) >= 4 || Number(checkIn.availableMinutes) < 45)) {

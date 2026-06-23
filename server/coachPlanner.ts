@@ -1,3 +1,4 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup, labelForLower } from './lib/muscleGroups.js'
 import { formatWeight, roundWeight } from './lib/format.js'
@@ -153,7 +154,7 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
   }
 }
 
-export function clampCoachPlanToNextWorkout(plan, nextWorkoutDay, exerciseLibrary = []) {
+export function clampCoachPlanToNextWorkout(plan: any, nextWorkoutDay, exerciseLibrary = []) {
   const warnings = [...(Array.isArray(plan?.warnings) ? plan.warnings : [])]
   const allowedById = new Map((nextWorkoutDay?.exercises ?? []).map((exercise) => [exercise.programExerciseId, exercise]))
   const library = normalizeExerciseLibrary(exerciseLibrary)
@@ -199,7 +200,7 @@ export function clampCoachPlanToNextWorkout(plan, nextWorkoutDay, exerciseLibrar
   }
 }
 
-export function chooseNextWorkoutDay({ workoutDays, completedWorkout }) {
+export function chooseNextWorkoutDay({ workoutDays, completedWorkout }: any) {
   const activeDays = [...(workoutDays ?? [])].sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0))
   if (activeDays.length === 0) return null
   const completedId = String(completedWorkout?.workoutDayId ?? '')
@@ -208,11 +209,11 @@ export function chooseNextWorkoutDay({ workoutDays, completedWorkout }) {
   return activeDays[(completedIndex + 1) % activeDays.length]
 }
 
-export function buildCoachPrompt({ profile, workoutDays: _workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary = [] }) {
+export function buildCoachPrompt({ profile, workoutDays: _workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary = [] }: any) {
   return `${COACH_PERSONA}\n\nПроанализируй завершённую тренировку и скорректируй ТОЛЬКО следующую календарную тренировку.\n\nАнкета: ${JSON.stringify(profile)}\n\nCoach State пользователя: ${JSON.stringify(coachState ?? null)}\n\nЗавершённая тренировка: ${JSON.stringify(completedWorkout)}\n\nПоследняя история: ${JSON.stringify((history ?? []).slice(0, 6))}\n\nСледующая тренировка, которую можно менять: ${JSON.stringify(nextWorkoutDay)}\n\nДоступная библиотека упражнений для замен: ${JSON.stringify((exerciseLibrary ?? []).map((exercise) => ({ id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup, setsCount: exercise.setsCount, repMin: exercise.repMin, repMax: exercise.repMax, targetWeight: exercise.targetWeight, weightStep: exercise.weightStep, restSeconds: exercise.restSeconds })))}\n\nВерни строго JSON без markdown в формате: {"summary":"...","changes":[{"programExerciseId":"...","exerciseId":"optional-library-exercise-id","targetWeight":50,"setsCount":3,"repMin":8,"repMax":10,"restSeconds":120,"todayGoal":"...","coachFocus":"..."}],"warnings":["..."]}. Учитывай восстановление, усталость мышечных групп, фактическую частоту тренировок, подходы на пределе, боль и цель пользователя. Если мышцы следующей тренировки не восстановились, можешь заменить упражнение на упражнение из библиотеки для другой, более свежей группы мышц, указав exerciseId. Не повышай вес при боли или низком восстановлении. Не меняй programExerciseId вне следующей тренировки.`
 }
 
-function chooseLibraryReplacementForFatigue({ exercise, library, usedExerciseIds, coachState }) {
+function chooseLibraryReplacementForFatigue({ exercise, library, usedExerciseIds, coachState }: any) {
   // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
   // movement_pattern, equipment, and exercise_type for smarter selection.
   // Falls back gracefully when metadata is missing (all scores stay the same
@@ -220,7 +221,7 @@ function chooseLibraryReplacementForFatigue({ exercise, library, usedExerciseIds
   return findReplacementForFatigue(exercise, library, usedExerciseIds, coachState)
 }
 
-function normalizeExerciseLibrary(exerciseLibrary) {
+function normalizeExerciseLibrary(exerciseLibrary: any) {
   return (exerciseLibrary ?? []).map((exercise) => ({
     id: canonicalExerciseId(exercise),
     name: exercise.name,
@@ -241,19 +242,19 @@ function normalizeExerciseLibrary(exerciseLibrary) {
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
-function exerciseMuscleKey(exercise) {
+function exerciseMuscleKey(exercise: any) {
   return normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
 }
 
 
-function latestExerciseHistory(history, exerciseId) {
+function latestExerciseHistory(history: any, exerciseId: any) {
   return [...(history ?? [])]
     .sort((a, b) => String(b.completedAt).localeCompare(String(a.completedAt)))
     .flatMap((workout) => workout.exercises ?? [])
     .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId))
 }
 
-function daysUntilNextTrainingDay(trainingDays, nextWorkoutDay, workoutDays, now) {
+function daysUntilNextTrainingDay(trainingDays: any, nextWorkoutDay: any, workoutDays: any, now: any) {
   const activeDays = [...(workoutDays ?? [])].sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0))
   const dayIndex = activeDays.findIndex((day) => day.id === nextWorkoutDay?.id)
   const weekday = (trainingDays ?? [])[dayIndex]
@@ -264,11 +265,11 @@ function daysUntilNextTrainingDay(trainingDays, nextWorkoutDay, workoutDays, now
   return (targetIndex - currentIndex + 7) % 7
 }
 
-function formatTodayGoal(weight, setsCount, reps) {
+function formatTodayGoal(weight: any, setsCount: any, reps: any) {
   return Array.from({ length: setsCount }, () => `${formatWeight(weight)}×${reps}`).join('/')
 }
 
-function clampNumber(value, min, max, fallback) {
+function clampNumber(value: any, min: any, max: any, fallback: any) {
   if (!Number.isFinite(value)) return fallback
   return Math.max(min, Math.min(max, value))
 }

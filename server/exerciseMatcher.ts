@@ -36,7 +36,7 @@ import { normalizeMuscleGroup } from './lib/muscleGroups.js'
  * @param {object} coachState — for fatigue info per muscle group
  * @returns {object|null} best candidate, or null if none found
  */
-export function findReplacementForFatigue(currentExercise, library, usedExerciseIds, coachState) {
+export function findReplacementForFatigue(currentExercise: any, library, usedExerciseIds, coachState) {
   const currentMuscle = normalizeMuscleGroup(`${currentExercise.muscleGroup ?? ''} ${currentExercise.name ?? ''}`)
   const currentGroup = coachState?.muscleGroups?.[currentMuscle]
   if (!currentGroup || currentGroup.fatigue !== 'high') return null
@@ -75,7 +75,7 @@ export function findReplacementForFatigue(currentExercise, library, usedExercise
  * @param {object} params — { currentExercise, nextExercise, workoutExercises, library, limit }
  * @returns {array} top N suggestions
  */
-export function findComplementaryExercises({ currentExercise, nextExercise = null, workoutExercises = [], library, limit = 3 }) {
+export function findComplementaryExercises({ currentExercise, nextExercise = null, workoutExercises = [], library, limit = 3 }: any) {
   const usedIds = new Set(workoutExercises.map((e) => e.id))
   const usedNames = new Set(workoutExercises.map((e) => e.name?.toLowerCase()).filter(Boolean))
 
@@ -196,6 +196,6 @@ function scoreComplementary(candidate, { currentMuscle, nextMuscle, trainedTarge
   return score
 }
 
-function currentExerciseType(exercise) {
+function currentExerciseType(exercise: any) {
   return exercise.exerciseType ?? null
 }

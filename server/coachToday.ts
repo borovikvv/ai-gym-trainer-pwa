@@ -60,14 +60,14 @@ export function buildWorkoutTodayPlan({ profile: _profile = {}, workoutDays = []
   }
 }
 
-function shouldBuildRecoveryAccessory(coachState) {
+function shouldBuildRecoveryAccessory(coachState: any) {
   const recoveryStatus = String(coachState?.recoveryStatus ?? '')
   const weeklyLoadStatus = String(coachState?.weeklyLoadStatus ?? '')
   const readinessScore = Number(coachState?.readinessScore ?? 70)
   return recoveryStatus === 'low' || weeklyLoadStatus === 'above_plan' || readinessScore < 55
 }
 
-function chooseNextScheduledDay(workoutDays, coachState) {
+function chooseNextScheduledDay(workoutDays: any, coachState: any) {
   if (workoutDays.length === 0) return null
   const lastDayId = String(coachState?.lastWorkoutDayId ?? '')
   const lastIndex = workoutDays.findIndex((day) => day.id === lastDayId || day.dayKey === lastDayId)
@@ -75,7 +75,7 @@ function chooseNextScheduledDay(workoutDays, coachState) {
   return workoutDays[(lastIndex + 1) % workoutDays.length]
 }
 
-function mergeLibraryWithProgram(exerciseLibrary, workoutDays) {
+function mergeLibraryWithProgram(exerciseLibrary: any, workoutDays: any) {
   const programByExerciseId = new Map()
   for (const day of workoutDays ?? []) {
     for (const exercise of day.exercises ?? []) {
@@ -99,7 +99,7 @@ function mergeLibraryWithProgram(exerciseLibrary, workoutDays) {
   })
 }
 
-function chooseAccessoryExercises({ exerciseLibrary, coachState, limit }) {
+function chooseAccessoryExercises({ exerciseLibrary, coachState, limit }: any) {
   const used = new Set()
   return normalizeExerciseLibrary(exerciseLibrary)
     .filter((exercise) => exercise.targetWeight >= 0)
@@ -115,7 +115,7 @@ function chooseAccessoryExercises({ exerciseLibrary, coachState, limit }) {
     .map(lightenExercise)
 }
 
-function accessoryScore(exercise, coachState) {
+function accessoryScore(exercise: any, coachState: any) {
   let score = 0
   const fatigue = coachState?.muscleGroups?.[exercise.muscleKey]?.fatigue ?? 'low'
   if (fatigue === 'low') score += 20
@@ -128,7 +128,7 @@ function accessoryScore(exercise, coachState) {
   return score
 }
 
-function lightenExercise(exercise) {
+function lightenExercise(exercise: any) {
   const setsCount = Math.max(1, Math.min(Number(exercise.setsCount ?? 2), 2))
   const repMin = Number(exercise.repMin ?? 10)
   const repMax = Number(exercise.repMax ?? Math.max(repMin, 12))
@@ -152,7 +152,7 @@ function lightenExercise(exercise) {
   }
 }
 
-function normalizeWorkoutDays(workoutDays) {
+function normalizeWorkoutDays(workoutDays: any) {
   return [...(workoutDays ?? [])]
     .sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0))
     .map((day) => ({
@@ -167,7 +167,7 @@ function normalizeWorkoutDays(workoutDays) {
     }))
 }
 
-function normalizeExerciseLibrary(exerciseLibrary) {
+function normalizeExerciseLibrary(exerciseLibrary: any) {
   return (exerciseLibrary ?? []).map((exercise) => ({
     id: exercise.id ?? exercise.exerciseId,
     exerciseId: exercise.exerciseId ?? exercise.id,
@@ -186,11 +186,11 @@ function normalizeExerciseLibrary(exerciseLibrary) {
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
-function isHighlyFatigued(muscleKey, coachState) {
+function isHighlyFatigued(muscleKey: any, coachState: any) {
   return coachState?.muscleGroups?.[muscleKey]?.fatigue === 'high'
 }
 
-function resolveTargetWeight(exercise) {
+function resolveTargetWeight(exercise: any) {
   const explicit = Number(exercise.targetWeight ?? 0)
   if (explicit > 0) return explicit
   const text = `${exercise.name ?? ''} ${exercise.muscleGroup ?? ''}`.toLowerCase()
@@ -203,6 +203,6 @@ function resolveTargetWeight(exercise) {
   return 0
 }
 
-function formatDate(now) {
+function formatDate(now: any) {
   return new Date(now).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
 }

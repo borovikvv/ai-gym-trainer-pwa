@@ -36,7 +36,7 @@ const PHASE_MULTIPLIERS = {
  * @param {string} phase - ageRecoveryProfile phase: 'teen' | 'adult' | 'mature_adult'
  * @returns {{ mev: number, mav: number, mrv: number } | null}
  */
-export function getVolumeLandmarks(muscleKey, phase = 'adult') {
+export function getVolumeLandmarks(muscleKey: any, phase = 'adult') {
   const base = BASE_LANDMARKS[muscleKey]
   if (!base) return null
 
@@ -69,7 +69,7 @@ export function getAllVolumeLandmarks(phase = 'adult') {
  * @param {{ mev: number, mav: number, mrv: number }} landmarks
  * @returns {string}
  */
-export function classifyVolumeStatus(weeklySets, landmarks) {
+export function classifyVolumeStatus(weeklySets: any, landmarks) {
   if (!landmarks) return 'below_mev'
 
   const { mev, mav, mrv } = landmarks
@@ -89,7 +89,7 @@ export function classifyVolumeStatus(weeklySets, landmarks) {
  * @param {string} phase
  * @returns {{ action: string, reason: string, priority: number } | null}
  */
-export function getVolumeRecommendation(muscleKey, weeklySets, phase = 'adult') {
+export function getVolumeRecommendation(muscleKey: any, weeklySets, phase = 'adult') {
   const landmarks = getVolumeLandmarks(muscleKey, phase)
   if (!landmarks) return null
 

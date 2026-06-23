@@ -37,7 +37,7 @@ const MS_PER_WEEK = 7 * MS_PER_DAY
  * @param {string|null} lastAdjustmentIso — from overrides table
  * @returns {object} MuscleVolumeSnapshot
  */
-export function buildMuscleVolumeSnapshot(muscleKey, history, e1rmHistories, phase = 'adult', now = new Date(), lastAdjustmentIso = null) {
+export function buildMuscleVolumeSnapshot(muscleKey: any, history, e1rmHistories, phase = 'adult', now = new Date(), lastAdjustmentIso = null) {
   const landmarks = getVolumeLandmarks(muscleKey, phase)
 
   // --- weeklySets: count completed sets in last 7 days ---
@@ -111,7 +111,7 @@ export function buildMuscleVolumeSnapshot(muscleKey, history, e1rmHistories, pha
  *                                                        ISO date or null
  * @returns {Record<string, MuscleVolumeSnapshot>}
  */
-export function buildAllMuscleVolumeSnapshots(history, allE1rmHistories, phase = 'adult', now = new Date(), lastAdjustments = {}) {
+export function buildAllMuscleVolumeSnapshots(history: any, allE1rmHistories, phase = 'adult', now = new Date(), lastAdjustments = {}) {
   const result = {}
   for (const key of CANONICAL_MUSCLE_KEYS) {
     const e1rmsForMuscle = (allE1rmHistories ?? []).filter((h) =>
@@ -141,7 +141,7 @@ export function buildAllMuscleVolumeSnapshots(history, allE1rmHistories, phase =
  *
  * Cap at 12 weeks backward from nowMs.
  */
-function bucketHistoryByIsoWeek(history, muscleKey, nowMs) {
+function bucketHistoryByIsoWeek(history: any, muscleKey: any, nowMs: any) {
   // Group sessions into week buckets keyed by week-start timestamp.
   const bucketsByStart = new Map()
   for (const session of history ?? []) {
