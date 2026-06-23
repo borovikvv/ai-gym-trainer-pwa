@@ -1,6 +1,7 @@
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { roundWeight } from './lib/format.js'
 
 export function recommendNextSet(input) {
   const exercise = input.exercise ?? {}
@@ -186,10 +187,6 @@ export function recommendNextSet(input) {
 function safeNumber(value, fallback) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
-}
-
-function roundWeight(value) {
-  return Number(Number(value).toFixed(1))
 }
 
 function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, workoutExercises = [], exerciseLibrary = [], preferDifferentMuscle = false, limit = 3 }) {

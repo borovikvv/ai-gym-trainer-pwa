@@ -15,11 +15,12 @@ import { ExerciseLibraryScreen } from './components/ExerciseLibraryScreen'
 import { AppShell } from './components/ui'
 import './App.css'
 import type { ExercisePlan, WorkoutDay } from './data/mockProgram'
-import { fallbackProgramData, loadCoachMemoryFromApi, type CoachMemory } from './data/programApi'
+import { fallbackProgramData, loadCoachMemoryAndState, type CoachMemory, type CoachState } from './data/programApi'
 import { loadHistory, useProgramData } from './hooks/useProgramData'
 import { loadActiveWorkoutDraft, useDraftAutosave } from './hooks/useDraftAutosave'
 import { useCoachRecommendations } from './hooks/useCoachRecommendations'
-import { createInitialLogs, formatWeight, useWorkoutNavigation, useWorkoutSession, useWorkoutSetActions } from './hooks/useWorkoutSession'
+import { createInitialLogs, useWorkoutNavigation, useWorkoutSession, useWorkoutSetActions } from './hooks/useWorkoutSession'
+import { formatWeight } from './lib/format'
 import { useWorkoutSave } from './hooks/useWorkoutSave'
 import { addDays, formatDateOnly, todayDateInputValue, usePlannedWorkouts } from './hooks/usePlannedWorkouts'
 import { useProgramEditing } from './hooks/useProgramEditing'
@@ -74,6 +75,7 @@ function App() {
   })
   const [toast, setToast] = useState('')
   const [coachMemory, setCoachMemory] = useState<CoachMemory | null>(null)
+  const [coachState, setCoachState] = useState<CoachState | null>(null)
   const notify = (message: string) => {
     setToast(message)
     window.setTimeout(() => setToast(''), 1700)
@@ -272,14 +274,14 @@ function App() {
   })
   const {
     selectWorkoutDay,
-	    startWorkout,
-	    beginPreparedWorkout,
-	    addExerciseToCurrentWorkout,
-	    replaceCurrentExerciseInCurrentWorkout,
-	    removeCurrentExerciseFromWorkout,
-	    replaceNextExerciseInCurrentWorkout,
-	    acceptCoachDecision,
-	    goToNextExercise,
+            startWorkout,
+            beginPreparedWorkout,
+            addExerciseToCurrentWorkout,
+            replaceCurrentExerciseInCurrentWorkout,
+            removeCurrentExerciseFromWorkout,
+            replaceNextExerciseInCurrentWorkout,
+            acceptCoachDecision,
+            goToNextExercise,
   } = useWorkoutNavigation({
     activeWorkoutDay,
     activeWorkoutDayBase,
@@ -378,19 +380,25 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
-    loadCoachMemoryFromApi(activeUserId)
-      .then((memory) => {
-        if (!cancelled) setCoachMemory(memory)
+    loadCoachMemoryAndState(activeUserId)
+      .then((result) => {
+        if (!cancelled) {
+          setCoachMemory(result.coachMemory)
+          setCoachState(result.coachState)
+        }
       })
       .catch(() => {
-        if (!cancelled) setCoachMemory(null)
+        if (!cancelled) {
+          setCoachMemory(null)
+          setCoachState(null)
+        }
       })
     return () => {
       cancelled = true
     }
   }, [activeUserId, history.length, plannedWorkouts.length])
 
-	  const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
+          const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
     activeUserId,
     activeWorkoutDay,
     activeExerciseIndex,
@@ -438,6 +446,7 @@ function App() {
             userHistory={userHistory}
             nextTargets={nextTargets}
             coachMemory={coachMemory}
+            coachState={coachState}
             onSelectUser={selectUser}
             onOpenProfile={() => navigate('profile')}
             onOpenLibrary={() => navigate('library')}
@@ -495,11 +504,11 @@ function App() {
             removeSet={removeSet}
             updateSetWeight={updateSetWeight}
             updateSetReps={updateSetReps}
-	            updateSet={updateSet}
-	            markSetDone={markSetDone}
-	            addSet={addSet}
-	            removeCurrentExercise={removeCurrentExerciseFromWorkout}
-	            addSuggestedExercise={() => {
+                    updateSet={updateSet}
+                    markSetDone={markSetDone}
+                    addSet={addSet}
+                    removeCurrentExercise={removeCurrentExerciseFromWorkout}
+                    addSuggestedExercise={() => {
               if (exerciseAddSuggestion) addExerciseToCurrentWorkout(exerciseAddSuggestion.exercise)
             }}
             applyCoachExerciseSuggestion={(recommendation) => {
@@ -516,12 +525,12 @@ function App() {
         )}
 
         {screen === 'review' && (
-	          <WorkoutReviewScreen
-	            progressionSummary={progressionSummary}
-	            totalVolume={totalVolume}
-	            debrief={reviewDebrief}
-	            isSaving={isSavingWorkout}
-	            onBackToWorkout={() => navigate('session')}
+                  <WorkoutReviewScreen
+                    progressionSummary={progressionSummary}
+                    totalVolume={totalVolume}
+                    debrief={reviewDebrief}
+                    isSaving={isSavingWorkout}
+                    onBackToWorkout={() => navigate('session')}
             onSaveAndExit={saveWorkoutAndExit}
           />
         )}
@@ -604,15 +613,15 @@ function App() {
       )}
 
       {sheetOpen && (
-	        <ReplacementSheet
-	          exercise={activeExercise}
-	          exerciseLibrary={programData.exerciseLibrary}
-	          onClose={() => setSheetOpen(false)}
-	          onChooseReplacement={(replacement) => {
-	            replaceCurrentExerciseInCurrentWorkout(replacement)
-	            setSheetOpen(false)
-	          }}
-	        />
+                <ReplacementSheet
+                  exercise={activeExercise}
+                  exerciseLibrary={programData.exerciseLibrary}
+                  onClose={() => setSheetOpen(false)}
+                  onChooseReplacement={(replacement) => {
+                    replaceCurrentExerciseInCurrentWorkout(replacement)
+                    setSheetOpen(false)
+                  }}
+                />
       )}
     </>
   )

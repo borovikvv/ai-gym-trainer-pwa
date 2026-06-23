@@ -1,7 +1,7 @@
 import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
 import { dayTemplate } from '../programTemplates.js'
-import { groupBy, normalizeLibraryExercise, normalizeProfile, normalizeProgramExercise, normalizeProgression, normalizeSet } from '../utils.js'
+import { groupBy, normalizeLibraryExercise, normalizeProfile, normalizeProgramExercise, normalizeSet } from '../utils.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 
 export async function loadProgramData(client) {
@@ -69,7 +69,7 @@ export async function loadProgramData(client) {
       label: day.label,
       description: day.description,
       userId: day.user_id,
-      exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id, sort_order, ...exercise }) => exercise),
+      exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id: _pdid, sort_order: _so, ...exercise }) => exercise),
     })),
     exerciseLibrary: libraryRows.rows.map(normalizeLibraryExercise),
   }
@@ -235,7 +235,7 @@ export async function loadUserWorkoutDays(client, userId) {
     label: day.label,
     description: day.description,
     sortOrder: Number(day.sort_order),
-    exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id, sort_order, ...exercise }) => ({
+    exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id: _pdid, sort_order, ...exercise }) => ({
       ...exercise,
       exerciseId: exercise.id,
       sortOrder: sort_order,
@@ -300,12 +300,13 @@ export async function loadRecentHistory(client, userId) {
 }
 
 export async function loadCoachStateForUser(client, userId, now = new Date()) {
-  const [profile, workoutDays, history] = await Promise.all([
-    loadUserProfile(client, userId),
-    loadUserWorkoutDays(client, userId),
-    loadRecentHistory(client, userId),
-  ])
-  return computeCoachState({ profile, workoutDays, history, now })
+  // Two-pass path: compute coachMemory first (which itself needs a first-pass
+  // coachState), then recompute coachState with coachMemory available so the
+  // mesocycle engine can use weeklyBalance.muscleSetCounts for early MRV
+  // triggers. Without this, /coach/state and /coach/memory would return
+  // inconsistent mesocycle state.
+  const { coachState } = await loadCoachMemoryForUser(client, userId, now)
+  return coachState
 }
 
 export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
@@ -316,15 +317,19 @@ export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
     loadRecentHistory(client, userId),
     loadRecentCoachDecisionLogs(client, userId),
   ])
-  const coachState = computeCoachState({ profile, workoutDays, history, now })
-  return computeCoachMemory({
+  // First pass: coachState without coachMemory (mesocycle MRV triggers unavailable).
+  const coachStatePass1 = computeCoachState({ profile, workoutDays, history, now })
+  const coachMemory = computeCoachMemory({
     profile,
     exerciseLibrary: enrichLibraryForMemory(exerciseLibrary, workoutDays),
     history,
-    coachState,
+    coachState: coachStatePass1,
     coachDecisionLogs,
     now,
   })
+  // Second pass: coachState WITH coachMemory — mesocycle MRV triggers now work.
+  const coachState = computeCoachState({ profile, workoutDays, history, coachMemory, now })
+  return { coachMemory, coachState }
 }
 
 export async function loadRecentCoachDecisionLogs(client, userId) {

@@ -49,11 +49,11 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /^Полегче$/i }))
     expect(screen.getAllByText(/снизим нагрузку/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/57.5 кг/i)).toBeInTheDocument()
+    expect(screen.getByText(/57,5 кг/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('57.5')
+    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('57,5')
   })
 
   it('lets the user specify sore muscles and pain areas before training', async () => {
@@ -181,7 +181,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByText('Прошлый раз: 50×9 / 50×9 / 50×9')).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('52.5')
+    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('52,5')
 
     const firstWeight = screen.getByLabelText('Вес, подход 1')
     await user.clear(firstWeight)
@@ -192,7 +192,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
 
     await user.click(screen.getByRole('button', { name: /повторить предыдущий подход/i }))
-    expect(screen.getByLabelText('Вес, подход 2')).toHaveValue('52.5')
+    expect(screen.getByLabelText('Вес, подход 2')).toHaveValue('52,5')
     expect(screen.getByLabelText('Повторы, подход 2')).toHaveValue('8')
   })
 
@@ -220,7 +220,7 @@ describe('Coach Timeline workout flow', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
 
-    expect(screen.getByText(/Подход 1 · 52.5×8/i)).toBeInTheDocument()
+    expect(screen.getByText(/Подход 1 · 52,5×8/i)).toBeInTheDocument()
     expect(screen.getByLabelText('Вес, подход 2')).toBeInTheDocument()
   })
 
@@ -270,7 +270,7 @@ describe('Coach Timeline workout flow', () => {
 
     expect(screen.getByText(/Отдых:/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /сбросить таймер/i })).toBeInTheDocument()
-    expect(screen.getByText(/Подход 1 · 52.5×8/i)).toBeInTheDocument()
+    expect(screen.getByText(/Подход 1 · 52,5×8/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /редактировать подход 1/i }))
     expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('52.5')
@@ -340,7 +340,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
     expect(screen.getByText(/День A · \d{2}\.\d{2}, \d{2}:\d{2} · 1800 кг/i)).toBeInTheDocument()
-    expect(screen.getByText(/Жим лёжа · 62.5 кг дальше/i)).toBeInTheDocument()
+    expect(screen.getByText(/Жим лёжа · 62,5 кг дальше/i)).toBeInTheDocument()
     const savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
     expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 3, energy: 3, availableMinutes: 60 }))
 
@@ -349,19 +349,24 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('62.5 кг')).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('62.5')
+    expect(screen.getByText('62,5 кг')).toBeInTheDocument()
+    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('62,5')
   })
 
   it('shows the progress tab as a trainer dashboard instead of a mock bench-only chart', async () => {
     const user = userEvent.setup()
+    // Use a fixed ISO date 5 days ago — inside the dashboard's 14-day window,
+    // independent of when the test is run. Avoids the original time-relative
+    // workaround which masked a real wording mismatch (production code says
+    // "закрепить" but the old assertion expected "закрепляем").
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
     window.localStorage.setItem('ai-gym-trainer:v0.1:history', JSON.stringify([
       {
         id: 'vyacheslav-day-a-progress',
         userId: 'vyacheslav',
         workoutDayId: 'day-a',
         workoutDayName: 'День A',
-        completedAt: '2026-06-04T19:30:00.000Z',
+        completedAt: fiveDaysAgo,
         totalVolume: 1500,
         exercises: [
           {
@@ -429,7 +434,7 @@ describe('Coach Timeline workout flow', () => {
     }
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
     await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
-    expect(screen.getByText(/Жим лёжа · 62.5 кг дальше/i)).toBeInTheDocument()
+    expect(screen.getByText(/Жим лёжа · 62,5 кг дальше/i)).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Пользователь'), 'oleg')
     expect(screen.queryByRole('heading', { name: 'История' })).not.toBeInTheDocument()
@@ -517,7 +522,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: 'Сложность: На пределе, подход 1' }))
     await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
 
-    expect(screen.getByText(/Следующий подход: 57.5 кг × 8/i)).toBeInTheDocument()
+    expect(screen.getByText(/Следующий подход: 57,5 кг × 8/i)).toBeInTheDocument()
     expect(screen.getByText(/прошлый подход был на пределе/i)).toBeInTheDocument()
   })
 
@@ -544,11 +549,11 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /сохранить упражнение/i }))
 
     expect(screen.getByText('Изменения программы сохранены')).toBeInTheDocument()
-    expect(screen.getByText(/4×6–8 · 62.5 кг/i)).toBeInTheDocument()
+    expect(screen.getByText(/4×6–8 · 62,5 кг/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Зал' }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('62.5 кг')).toBeInTheDocument()
-    expect(screen.getByText(/4×6–8 · рекомендовано 62.5 кг/i)).toBeInTheDocument()
+    expect(screen.getByText('62,5 кг')).toBeInTheDocument()
+    expect(screen.getByText(/4×6–8 · рекомендовано 62,5 кг/i)).toBeInTheDocument()
   })
 })

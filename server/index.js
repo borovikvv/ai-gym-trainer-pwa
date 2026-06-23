@@ -49,12 +49,6 @@ app.use((error, _req, res, _next) => {
   res.status(safeStatusCode).json({ error: error instanceof Error ? error.message : String(error) })
 })
 
-app.listen(port, host, async () => {
+app.listen(port, host, () => {
   console.log(`AI Gym Trainer API listening on http://${host}:${port}`)
-  try {
-    await pool.query(`alter table public.workout_sessions add column if not exists quality_score integer check (quality_score >= 0 and quality_score <= 100)`)
-    console.log('Migration OK: quality_score column added to workout_sessions')
-  } catch (migrationError) {
-    console.error('Migration skipped:', migrationError instanceof Error ? migrationError.message : migrationError)
-  }
 })

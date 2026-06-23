@@ -1,6 +1,7 @@
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { users as fallbackUsers, workoutDays as fallbackWorkoutDays, type ExercisePlan, type UserProfile, type WorkoutDay } from './mockProgram'
+import { formatWeight } from '../lib/format'
 
 const apiBaseUrl = import.meta.env.MODE === 'test' ? undefined : (import.meta.env.VITE_API_BASE_URL as string | undefined)
 
@@ -98,16 +99,16 @@ export type CoachNextSetRequest = {
   completedSets: Array<{ weight: number; reps: number; rpe: number; completed: boolean }>
   remainingSets: number
   pain?: boolean
-	context?: {
-		session?: {
-			activeExerciseIndex?: number
-			availableMinutes?: number
-			readinessCheckIn?: ReadinessCheckIn
-			nextExercise?: ExercisePlan | null
-			workoutExercises?: ExercisePlan[]
-			exerciseLibrary?: ExercisePlan[]
-		}
-	}
+        context?: {
+                session?: {
+                        activeExerciseIndex?: number
+                        availableMinutes?: number
+                        readinessCheckIn?: ReadinessCheckIn
+                        nextExercise?: ExercisePlan | null
+                        workoutExercises?: ExercisePlan[]
+                        exerciseLibrary?: ExercisePlan[]
+                }
+        }
 }
 
 export type CoachNextSetRecommendation = {
@@ -160,6 +161,33 @@ export type CoachWorkoutTodayPlan = {
   summary: string
   reason: string
   workoutDay: WorkoutDay
+}
+
+export type MesocyclePhase = 'idle' | 'loading' | 'accumulation' | 'intensification' | 'deload'
+
+export type MesocycleState = {
+  phase: MesocyclePhase
+  phaseDescription: string
+  weekInCycle: number
+  cycleLength: number
+  loadingWeeks: number
+  deloadWeeks: number
+  isDeload: boolean
+  deloadScheduled: boolean
+  triggerReason: string | null
+  completionRatio: number
+  workoutsThisCycle: number
+  plannedWorkoutsThisCycle: number
+}
+
+export type CoachState = {
+  userId: string | null
+  recoveryStatus: string
+  readinessScore: number
+  weeklyLoadStatus: string
+  daysSinceLastWorkout: number | null
+  mesocycle: MesocycleState | null
+  warnings: string[]
 }
 
 export type CoachMemory = {
@@ -289,6 +317,11 @@ export async function requestCoachWorkoutTodayFromApi(
   }
 }
 
+export type CoachMemoryResult = {
+  coachMemory: CoachMemory | null
+  coachState: CoachState | null
+}
+
 export async function loadCoachMemoryFromApi(
   userId: string,
   fetcher: typeof fetch = fetch,
@@ -297,8 +330,23 @@ export async function loadCoachMemoryFromApi(
   if (!baseUrl) return null
   const response = await fetcher(`${baseUrl}/api/coach/memory/${encodeURIComponent(userId)}`)
   if (!response.ok) throw new Error(`API coach memory load failed: ${response.status}`)
-  const data = await response.json() as { coachMemory?: CoachMemory }
+  const data = await response.json() as { coachMemory?: CoachMemory; coachState?: CoachState }
   return data.coachMemory ?? null
+}
+
+export async function loadCoachMemoryAndState(
+  userId: string,
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<CoachMemoryResult> {
+  if (!baseUrl) return { coachMemory: null, coachState: null }
+  const response = await fetcher(`${baseUrl}/api/coach/memory/${encodeURIComponent(userId)}`)
+  if (!response.ok) throw new Error(`API coach memory load failed: ${response.status}`)
+  const data = await response.json() as { coachMemory?: CoachMemory; coachState?: CoachState }
+  return {
+    coachMemory: data.coachMemory ?? null,
+    coachState: data.coachState ?? null,
+  }
 }
 
 export async function loadPlannedWorkoutsFromApi(
@@ -460,10 +508,6 @@ function buildPrescription(exercise: ApiExercisePlan | ExercisePlan) {
   }
   const weightText = exercise.targetWeight > 0 ? `${formatWeight(exercise.targetWeight)} кг` : 'вес тела'
   return `${exercise.setsCount}×${exercise.repMin}–${exercise.repMax} · рекомендовано ${weightText} · отдых ${exercise.restSeconds} сек`
-}
-
-function formatWeight(weight: number) {
-  return Number.isInteger(weight) ? String(weight) : String(weight)
 }
 
 function createFallbackQuestionnaire(user: UserProfile): UserQuestionnaire {

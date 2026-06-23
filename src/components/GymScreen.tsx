@@ -208,24 +208,13 @@ export function GymScreen({
       </div>
 
       {/* Sticky action bar — always visible during workout */}
-      <div style={{
-        position: 'sticky',
-        bottom: 0,
-        background: 'var(--bg, #0a0a0a)',
-        borderTop: '1px solid var(--border, rgba(255,255,255,0.08))',
-        padding: '12px 16px',
-        display: 'flex',
-        gap: '8px',
-        zIndex: 50,
-        marginTop: 'auto',
-      }}>
+      <div className="gym-action-bar">
         {nextExercise && (
           <button
             className="primary"
             type="button"
             onClick={goToNextExercise}
             aria-label="Перейти к следующему упражнению"
-            style={{ flex: nextExercise ? 1 : undefined }}
           >
             Следующее →
           </button>
@@ -235,7 +224,6 @@ export function GymScreen({
           type="button"
           onClick={() => navigate('review')}
           aria-label="Завершить всю тренировку"
-          style={{ flex: nextExercise ? 1 : 1 }}
         >
           Завершить тренировку
         </button>

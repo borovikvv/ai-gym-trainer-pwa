@@ -8,12 +8,9 @@ import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '..
 import type { PlannedWorkout } from '../data/programApi'
 import type { ActiveWorkoutDraft } from './useProgramData'
 import type { NextSetHint } from '../components/gymTypes'
+import { formatWeight } from '../lib/format'
 
 export type SetDraft = WorkoutSetInput & { weightInput?: string; repsInput?: string }
-
-export function formatWeight(weight: number) {
-  return Number.isInteger(weight) ? String(weight) : String(weight)
-}
 
 export const createSets = (exercise: ExercisePlan, targetWeight = exercise.targetWeight): SetDraft[] =>
   Array.from({ length: exercise.setsCount }, (_, index) => ({
@@ -322,11 +319,11 @@ type UseWorkoutNavigationOptions = {
   setExerciseGuideOpen: Dispatch<SetStateAction<boolean>>
   setExtraExercisesByDay: Dispatch<SetStateAction<Record<string, ExercisePlan[]>>>
   setExercisePickerOpen: Dispatch<SetStateAction<boolean>>
-	setLogs: Dispatch<SetStateAction<Record<string, ExerciseLog>>>
-	createExerciseLog: (exercise: ExercisePlan) => ExerciseLog
+        setLogs: Dispatch<SetStateAction<Record<string, ExerciseLog>>>
+        createExerciseLog: (exercise: ExercisePlan) => ExerciseLog
   persistWorkoutDraft: (nextLogs: Record<string, ExerciseLog>, nextExerciseIndex?: number) => void
-	navigate: (screen: NavigationScreen) => void
-	notify: (message: string) => void
+        navigate: (screen: NavigationScreen) => void
+        notify: (message: string) => void
 }
 
 export function useWorkoutNavigation({
@@ -390,7 +387,7 @@ export function useWorkoutNavigation({
     navigate('session')
   }
 
-	  function addExerciseToCurrentWorkout(exercise: ExercisePlan) {
+          function addExerciseToCurrentWorkout(exercise: ExercisePlan) {
     const extraExercise: ExercisePlan = {
       ...exercise,
       id: `${exercise.id}-extra-${Date.now()}`,
@@ -413,57 +410,57 @@ export function useWorkoutNavigation({
     })
     setExercisePickerOpen(false)
     notify(`Добавлено упражнение: ${exercise.name}`)
-	  }
+          }
 
-	  function replaceCurrentExerciseInCurrentWorkout(exercise: ExercisePlan) {
-	    const replacementExercise: ExercisePlan = {
-	      ...exercise,
-	      id: `${exercise.id}-replacement-${Date.now()}`,
-	      programExerciseId: undefined,
-	      previous: 'заменено сегодня',
-	      todayGoal: exercise.todayGoal || `${exercise.repMin}–${exercise.repMax}`,
-	    }
-	    const currentExercise = activeWorkoutDay.exercises[activeExerciseIndex]
-	    setActiveSessionWorkoutDay((current) => {
-	      const sessionDay = current && current.id === activeWorkoutDay.id ? current : activeWorkoutDay
-	      return {
-	        ...sessionDay,
-	        exercises: sessionDay.exercises.map((item, index) => index === activeExerciseIndex ? replacementExercise : item),
-	      }
-	    })
-	    setLogs((current) => {
-	      const { [currentExercise?.id ?? '']: _removed, ...rest } = current
-	      const nextLogs = { ...rest, [replacementExercise.id]: createExerciseLog(replacementExercise) }
-	      persistWorkoutDraft(nextLogs)
-	      return nextLogs
-	    })
-	    setExercisePickerOpen(false)
-	    notify(`Упражнение заменено: ${exercise.name}`)
-	  }
+          function replaceCurrentExerciseInCurrentWorkout(exercise: ExercisePlan) {
+            const replacementExercise: ExercisePlan = {
+              ...exercise,
+              id: `${exercise.id}-replacement-${Date.now()}`,
+              programExerciseId: undefined,
+              previous: 'заменено сегодня',
+              todayGoal: exercise.todayGoal || `${exercise.repMin}–${exercise.repMax}`,
+            }
+            const currentExercise = activeWorkoutDay.exercises[activeExerciseIndex]
+            setActiveSessionWorkoutDay((current) => {
+              const sessionDay = current && current.id === activeWorkoutDay.id ? current : activeWorkoutDay
+              return {
+                ...sessionDay,
+                exercises: sessionDay.exercises.map((item, index) => index === activeExerciseIndex ? replacementExercise : item),
+              }
+            })
+            setLogs((current) => {
+              const { [currentExercise?.id ?? '']: _removed, ...rest } = current
+              const nextLogs = { ...rest, [replacementExercise.id]: createExerciseLog(replacementExercise) }
+              persistWorkoutDraft(nextLogs)
+              return nextLogs
+            })
+            setExercisePickerOpen(false)
+            notify(`Упражнение заменено: ${exercise.name}`)
+          }
 
-	  function removeCurrentExerciseFromWorkout() {
-	    if (activeWorkoutDay.exercises.length <= 1) {
-	      notify('Нельзя удалить единственное упражнение')
-	      return
-	    }
-	    const removedExercise = activeWorkoutDay.exercises[activeExerciseIndex]
-	    const nextExercises = activeWorkoutDay.exercises.filter((_, index) => index !== activeExerciseIndex)
-	    setActiveSessionWorkoutDay({
-	      ...activeWorkoutDay,
-	      exercises: nextExercises,
-	    })
-	    setLogs((current) => {
-	      const { [removedExercise.id]: _removed, ...rest } = current
-	      persistWorkoutDraft(rest, Math.min(activeExerciseIndex, nextExercises.length - 1))
-	      return rest
-	    })
-	    setActiveExerciseIndex((index) => Math.min(index, nextExercises.length - 1))
-	    setCoachNextSetHint(null)
-	    setRestRemainingSeconds(0)
-	    notify(`Удалено упражнение: ${removedExercise.name}`)
-	  }
+          function removeCurrentExerciseFromWorkout() {
+            if (activeWorkoutDay.exercises.length <= 1) {
+              notify('Нельзя удалить единственное упражнение')
+              return
+            }
+            const removedExercise = activeWorkoutDay.exercises[activeExerciseIndex]
+            const nextExercises = activeWorkoutDay.exercises.filter((_, index) => index !== activeExerciseIndex)
+            setActiveSessionWorkoutDay({
+              ...activeWorkoutDay,
+              exercises: nextExercises,
+            })
+            setLogs((current) => {
+              const { [removedExercise.id]: _removed, ...rest } = current
+              persistWorkoutDraft(rest, Math.min(activeExerciseIndex, nextExercises.length - 1))
+              return rest
+            })
+            setActiveExerciseIndex((index) => Math.min(index, nextExercises.length - 1))
+            setCoachNextSetHint(null)
+            setRestRemainingSeconds(0)
+            notify(`Удалено упражнение: ${removedExercise.name}`)
+          }
 
-	  function replaceNextExerciseInCurrentWorkout(exercise: ExercisePlan) {
+          function replaceNextExerciseInCurrentWorkout(exercise: ExercisePlan) {
     const replacementExercise: ExercisePlan = {
       ...exercise,
       id: `${exercise.id}-replacement-${Date.now()}`,
@@ -546,15 +543,15 @@ export function useWorkoutNavigation({
     navigate('review')
   }
 
-	  return {
-	    selectWorkoutDay,
-	    startWorkout,
-	    beginPreparedWorkout,
-	    addExerciseToCurrentWorkout,
-	    replaceCurrentExerciseInCurrentWorkout,
-	    removeCurrentExerciseFromWorkout,
-	    replaceNextExerciseInCurrentWorkout,
-	    acceptCoachDecision,
-	    goToNextExercise,
-	  }
+          return {
+            selectWorkoutDay,
+            startWorkout,
+            beginPreparedWorkout,
+            addExerciseToCurrentWorkout,
+            replaceCurrentExerciseInCurrentWorkout,
+            removeCurrentExerciseFromWorkout,
+            replaceNextExerciseInCurrentWorkout,
+            acceptCoachDecision,
+            goToNextExercise,
+          }
 }

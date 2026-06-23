@@ -794,4 +794,51 @@ describe('planned workout generator', () => {
     expect(plan.exercises.every((exercise) => ['plank', 'decline-bench-crunch', 'cable-woodchop'].includes(exercise.exerciseId))).toBe(true)
     expect(new Set(plan.exercises.map((exercise) => exercise.exerciseId)).size).toBe(plan.exercises.length)
   })
+
+  it('applies mesocycle deload reduction to all planned exercises when isDeload is true', () => {
+    const coachState = {
+      recoveryStatus: 'normal',
+      readinessScore: 75,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {},
+      exercises: {},
+      mesocycle: {
+        phase: 'deload',
+        phaseDescription: 'Разгрузочная неделя — снижение объёма и интенсивности',
+        weekInCycle: 5,
+        cycleLength: 5,
+        loadingWeeks: 4,
+        deloadWeeks: 1,
+        isDeload: true,
+        deloadScheduled: false,
+        triggerReason: 'Запланированная разгрузка по календарю мезоцикла.',
+        completionRatio: 1,
+        workoutsThisCycle: 12,
+        plannedWorkoutsThisCycle: 12,
+      },
+    }
+
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-20',
+      coachState,
+      coachDecision: {
+        priorityMuscleGroups: ['chest'],
+        avoidMuscleGroups: [],
+        exercisePolicies: {},
+      },
+      exerciseLibrary,
+      history: [],
+    })
+
+    // Every exercise should have 'easy' intensity and reduced sets/weight
+    expect(plan.exercises.length).toBeGreaterThan(0)
+    for (const exercise of plan.exercises) {
+      expect(exercise.intensityTarget).toBe('easy')
+      // setsCount should be reduced (max 2 for deload per applyDeloadReduction)
+      expect(exercise.setsCount).toBeLessThanOrEqual(2)
+      // coachFocus should mention deload
+      expect(exercise.coachFocus).toMatch(/разгруз/i)
+    }
+  })
 })

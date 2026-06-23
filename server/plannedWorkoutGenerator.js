@@ -2,6 +2,8 @@ import { buildCoachDecision } from './coachDecision.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { roundWeight } from './lib/format.js'
+import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
@@ -242,27 +244,52 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
     : clamp(exercise.setsCount, 2, preferences.sessionStyle === 'heavy_short' ? 3 : 4)
-  const setsCount = baseSetsCount
-  const repMin = lowReadiness ? Math.max(exercise.repMin, Math.min(exercise.repMax, 10)) : exercise.repMin
-  const repMax = lowReadiness ? Math.max(repMin, exercise.repMax) : exercise.repMax
+  let setsCount = baseSetsCount
+  let repMin = lowReadiness ? Math.max(exercise.repMin, Math.min(exercise.repMax, 10)) : exercise.repMin
+  let repMax = lowReadiness ? Math.max(repMin, exercise.repMax) : exercise.repMax
   const hasRecentWorkingWeight = Boolean(recent) && Number.isFinite(recentWeight)
   const policy = coachDecision?.exercisePolicies?.[exercise.id]
   const shouldConsolidate = policy === 'consolidate'
-  const targetWeight = roundWeight(lowReadiness && baseWeight > 0 && !hasRecentWorkingWeight ? Math.max(0, baseWeight - exercise.weightStep) : baseWeight)
+  let targetWeight = roundWeight(lowReadiness && baseWeight > 0 && !hasRecentWorkingWeight ? Math.max(0, baseWeight - exercise.weightStep) : baseWeight)
   const restSeconds = lowReadiness ? Math.min(120, Math.max(60, exercise.restSeconds)) : exercise.restSeconds
   const noFailurePolicy = userTrainingPolicy?.allowFailureSets === false
-  const intensityTarget = lowReadiness || shouldConsolidate || noFailurePolicy || preferences.intensityTolerance === 'avoid_max'
+  let intensityTarget = lowReadiness || shouldConsolidate || noFailurePolicy || preferences.intensityTolerance === 'avoid_max'
     ? 'easy'
     : preferences.intensityTolerance === 'rare_max'
       ? 'controlled'
       : preferences.intensityTolerance === 'aggressive'
         ? 'max_effort_allowed'
         : intensityForGoal(profile?.goal)
-  const focusText = noFailurePolicy
+  let focusText = noFailurePolicy
     ? 'контролируемая работа без отказа, техника важнее веса'
     : lowReadiness
       ? 'лёгкий контролируемый объём, без отказа'
       : 'рабочая нагрузка под цель, 1–2 повтора в запасе'
+
+  // Mesocycle deload: if the user's mesocycle is in a deload week, override
+  // the prescription with reduced sets/weight/reps and 'easy' intensity.
+  // This was previously a dead import (commit 4a802e6 added the import but
+  // no usage) — planned workouts in the calendar did NOT reflect deload,
+  // only live coach updates did. Now both paths apply deload consistently.
+  const mesocycleState = coachState?.mesocycle
+  let deloadNote = null
+  if (isDeloadWeek(mesocycleState)) {
+    const deload = applyDeloadReduction({
+      setsCount,
+      targetWeight,
+      repMin,
+      repMax,
+      weightStep: exercise.weightStep,
+    })
+    setsCount = deload.setsCount
+    targetWeight = deload.targetWeight
+    repMin = deload.repMin
+    repMax = deload.repMax
+    intensityTarget = deload.intensityTarget // 'easy'
+    deloadNote = deload.deloadNote
+    focusText = 'разгрузочная неделя мезоцикла — снижаем объём и интенсивность'
+  }
+
   return {
     exerciseId: exercise.id,
     exerciseName: exercise.name,
@@ -274,7 +301,7 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
     weightStep: exercise.weightStep,
     restSeconds,
     intensityTarget,
-    coachFocus: `${exercise.name}: ${shouldConsolidate ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}.`,
+    coachFocus: `${exercise.name}: ${shouldConsolidate && !deloadNote ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}${deloadNote ? `. ${deloadNote}` : ''}.`,
     reason: reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext, policy }),
   }
 }
@@ -516,8 +543,4 @@ function clamp(value, min, max) {
   const number = Number(value)
   if (!Number.isFinite(number)) return min
   return Math.max(min, Math.min(max, Math.round(number)))
-}
-
-function roundWeight(value) {
-  return Number(Number(value).toFixed(1))
 }

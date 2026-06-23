@@ -3,6 +3,7 @@ import { computeCoachMemory } from '../coachMemory.js'
 import { buildGeneratedPlannedWorkout } from '../plannedWorkoutGenerator.js'
 import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramExercise } from '../utils.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
+import { formatWeight } from '../lib/format.js'
 
 export async function ensureDefaultPlannedWorkouts(client, userId) {
   const existing = await client.query(
@@ -115,10 +116,6 @@ export function formatPlannedExerciseGoal(exercise) {
 function isTimedExercise(exercise) {
   const text = `${exercise.exercise_id ?? exercise.id ?? ''} ${exercise.name ?? ''} ${exercise.muscle_group ?? exercise.muscleGroup ?? ''}`.toLowerCase()
   return text.includes('планк') || text.includes('plank') || text.includes('dead bug') || text.includes('дед баг')
-}
-
-function formatWeight(weight) {
-  return Number.isInteger(weight) ? String(weight) : String(weight)
 }
 
 export async function replacePlannedTrainingRange(client, { userId, dates, rangeStart, rangeEnd }) {

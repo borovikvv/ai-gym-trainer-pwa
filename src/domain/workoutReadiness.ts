@@ -1,5 +1,5 @@
 import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
-import { formatWeight } from '../hooks/useWorkoutSession'
+import { formatWeight } from '../lib/format'
 import type { ReadinessCheckIn } from './readinessCheckIn'
 
 export type ReadinessMode = 'normal' | 'light' | 'very_light' | 'heavy'

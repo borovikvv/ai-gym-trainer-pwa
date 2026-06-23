@@ -14,16 +14,16 @@ coachRoutes.post('/coach/next-set', async (req, res, next) => {
     const body = req.body ?? {}
     const context = body.context ?? {}
     const coachState = context.coachState || (body.userId ? await loadCoachStateForUser(pool, body.userId) : null)
-	    const recommendation = recommendNextSet({
-	      userId: body.userId,
-	      exercise: body.exercise,
-	      completedSets: body.completedSets,
-	      remainingSets: body.remainingSets,
-	      pain: Boolean(body.pain),
-	      context: { ...context, coachState },
-	    })
-	    logActivity('coach.next_set', buildCoachNextSetEvent({ body, recommendation, coachState }))
-	    res.json({ ok: true, recommendation, coachState })
+            const recommendation = recommendNextSet({
+              userId: body.userId,
+              exercise: body.exercise,
+              completedSets: body.completedSets,
+              remainingSets: body.remainingSets,
+              pain: Boolean(body.pain),
+              context: { ...context, coachState },
+            })
+            logActivity('coach.next_set', buildCoachNextSetEvent({ body, recommendation, coachState }))
+            res.json({ ok: true, recommendation, coachState })
   } catch (error) {
     next(error)
   }
@@ -40,8 +40,8 @@ coachRoutes.get('/coach/state/:userId', async (req, res, next) => {
 
 coachRoutes.get('/coach/memory/:userId', async (req, res, next) => {
   try {
-    const coachMemory = await loadCoachMemoryForUser(pool, req.params.userId)
-    res.json({ ok: true, coachMemory })
+    const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, req.params.userId)
+    res.json({ ok: true, coachMemory, coachState })
   } catch (error) {
     next(error)
   }
@@ -84,10 +84,10 @@ coachRoutes.post('/coach/workout-today', async (req, res, next) => {
       loadUserWorkoutDays(pool, userId),
       loadExerciseLibrary(pool),
       loadCoachStateForUser(pool, userId),
-	    ])
-	    const plan = buildWorkoutTodayPlan({ profile, workoutDays, exerciseLibrary, coachState, now: new Date() })
-	    logActivity('coach.workout_today', buildWorkoutTodayEvent({ userId, plan, coachState }))
-	    res.json({ ok: true, plan })
+            ])
+            const plan = buildWorkoutTodayPlan({ profile, workoutDays, exerciseLibrary, coachState, now: new Date() })
+            logActivity('coach.workout_today', buildWorkoutTodayEvent({ userId, plan, coachState }))
+            res.json({ ok: true, plan })
   } catch (error) {
     next(error)
   }

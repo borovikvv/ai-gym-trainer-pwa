@@ -9,6 +9,51 @@ function formatKg(value: number) {
   return `${Math.round(value).toLocaleString('ru-RU')} кг`
 }
 
+// ---------------------------------------------------------------------------
+// Inline SVG Sparkline
+// ---------------------------------------------------------------------------
+
+function SparklineSVG({ points, trendDirection, width = 120, height = 32 }: {
+  points: Array<{ x: number; y: number }>
+  trendDirection: string
+  width?: number
+  height?: number
+}) {
+  if (points.length < 2) return null
+
+  const yMin = Math.min(...points.map((p) => p.y))
+  const yMax = Math.max(...points.map((p) => p.y))
+  const yRange = yMax - yMin || 1
+  const xStep = width / Math.max(points.length - 1, 1)
+
+  const pathD = points
+    .map((p, i) => {
+      const x = i * xStep
+      const y = height - ((p.y - yMin) / yRange) * (height - 4) - 2
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+
+  const strokeColor = trendDirection === 'up' ? 'var(--accent)' : trendDirection === 'down' ? 'var(--danger)' : 'var(--text-tertiary)'
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true">
+      <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Dot on the last point */}
+      {(() => {
+        const last = points[points.length - 1]
+        const lx = (points.length - 1) * xStep
+        const ly = height - ((last.y - yMin) / yRange) * (height - 4) - 2
+        return <circle cx={lx.toFixed(1)} cy={ly.toFixed(1)} r="3" fill={strokeColor} />
+      })()}
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function progressHeadline(progressDashboard: ProgressDashboard) {
   const { workouts14d, exercisesGrowing, painMarks } = progressDashboard.overview
   if (workouts14d === 0) return 'Стартуем с первой тренировки'
@@ -125,6 +170,43 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
           </div>
         )}
       </SectionList>
+
+      {/* e1RM Sparklines — Strength Trends */}
+      {progressDashboard.e1RMHistories.length > 0 && (
+        <SectionList title="Сила (e1RM)">
+          <div className="e1rm-sparkline-grid">
+            {progressDashboard.e1RMHistories.map((ex) => (
+              <article className="e1rm-sparkline-card" key={ex.exerciseId}>
+                <div className="e1rm-sparkline-card__header">
+                  <b>{ex.exerciseName}</b>
+                  <span className="e1rm-sparkline-card__best">{formatKg(ex.currentBest)}</span>
+                </div>
+                <div className="e1rm-sparkline-card__chart">
+                  <SparklineSVG
+                    points={ex.sparkline}
+                    trendDirection={ex.trendDirection}
+                    width={140}
+                    height={36}
+                  />
+                  {ex.sparkline.length < 2 && (
+                    <span className="muted">нужно минимум 2 тренировки</span>
+                  )}
+                </div>
+                <div className="e1rm-sparkline-card__footer">
+                  <small className="e1rm-sparkline-card__muscle">{ex.muscleGroup}</small>
+                  <small className={
+                    ex.trendDirection === 'up' ? 'e1rm-trend--up'
+                    : ex.trendDirection === 'down' ? 'e1rm-trend--down'
+                    : 'muted'
+                  }>
+                    {ex.trendText}
+                  </small>
+                </div>
+              </article>
+            ))}
+          </div>
+        </SectionList>
+      )}
 
       <SectionList title="Последние тренировки">
         {recentWorkouts.length === 0 ? (

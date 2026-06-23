@@ -1,6 +1,7 @@
 import type { WorkoutDay } from '../data/mockProgram'
 import type { CompletedExerciseHistory, WorkoutHistoryEntry } from './workoutHistory'
 import { getCanonicalExerciseId } from './exerciseIdentity'
+import { buildAllExerciseE1RMHistories, sparklineData, trendDescription, type ExerciseE1RMHistory } from './estimatedOneRepMax'
 
 export type ExerciseProgressStatus = 'растёт' | 'можно повысить' | 'закрепляем' | 'застой' | 'перегрузка' | 'была боль' | 'нет данных'
 
@@ -39,6 +40,16 @@ export type ProgressDashboard = {
     title: string
     body: string
     source: string
+  }>
+  e1RMHistories: Array<{
+    exerciseId: string
+    exerciseName: string
+    muscleGroup: string
+    currentBest: number
+    trendDirection: string
+    trendText: string
+    sparkline: Array<{ x: number; y: number }>
+    dataPointCount: number
   }>
 }
 
@@ -103,6 +114,19 @@ export function buildProgressDashboard(input: {
       source: 'правила прогрессии',
     }))
 
+  const e1RMHistories = buildAllExerciseE1RMHistories(input.history)
+    .slice(0, 8)
+    .map((h: ExerciseE1RMHistory) => ({
+      exerciseId: h.exerciseId,
+      exerciseName: h.exerciseName,
+      muscleGroup: h.muscleGroup,
+      currentBest: h.currentBest,
+      trendDirection: h.trend.direction,
+      trendText: trendDescription(h.trend),
+      sparkline: sparklineData(h, 12),
+      dataPointCount: h.dataPoints.length,
+    }))
+
   return {
     overview,
     summary: summaryText({ overview, exerciseStatuses }),
@@ -110,6 +134,7 @@ export function buildProgressDashboard(input: {
     exerciseStatuses,
     recentWorkouts,
     coachDecisions,
+    e1RMHistories,
   }
 }
 

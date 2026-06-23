@@ -1,4 +1,5 @@
-import { normalizeMuscleGroup, labelFor, MUSCLE_LABELS } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, labelFor } from './lib/muscleGroups.js'
+import { isDeloadWeek } from './mesocycle.js'
 
 const DEFAULT_PRIORITY = ['back', 'chest', 'arms', 'shoulders', 'core', 'legs']
 
@@ -13,6 +14,7 @@ export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory 
   const exercisePolicies = {}
   const readinessScore = Number(coachState?.readinessScore ?? 70)
   const lowReadiness = readinessScore < 55 || coachState?.recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan'
+  const mesocycleIsDeload = isDeloadWeek(coachState?.mesocycle)
   const returningAfterBreak = isReturningAfterBreak(profile)
 
   for (const [muscleKey, group] of Object.entries(coachMemory?.muscleGroupProfiles ?? {})) {
@@ -61,7 +63,7 @@ export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory 
     if (!priorityMuscleGroups.includes(key)) priorityMuscleGroups.push(key)
   }
 
-  const loadPolicy = lowReadiness || preferences.intensityTolerance === 'avoid_max'
+  const loadPolicy = lowReadiness || mesocycleIsDeload || preferences.intensityTolerance === 'avoid_max'
     ? 'moderate_no_failure'
     : preferences.intensityTolerance === 'aggressive'
       ? 'progressive_if_recovered'
@@ -71,11 +73,18 @@ export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory 
     ? 'upper_body_accessory'
     : lowReadiness
       ? 'recovery_accessory'
-      : 'balanced_strength_hypertrophy'
+      : mesocycleIsDeload
+        ? 'balanced_strength_hypertrophy'
+        : 'balanced_strength_hypertrophy'
 
   if (priorityMuscleGroups.length > 0) {
     const labels = priorityMuscleGroups.slice(0, 3).map(labelFor).join(', ')
     reasons.push(`Приоритет следующей тренировки: ${labels}.`)
+  }
+
+  if (mesocycleIsDeload) {
+    const mesocycleReason = coachState?.mesocycle?.triggerReason ?? 'Разгрузочная неделя мезоцикла — объём и интенсивность снижены.'
+    reasons.push(mesocycleReason)
   }
 
   const uniqueReasons = [...new Set(reasons)].slice(0, 6)

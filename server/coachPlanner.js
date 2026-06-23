@@ -1,8 +1,9 @@
 import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, labelForLower } from './lib/muscleGroups.js'
 import { formatWeight, roundWeight } from './lib/format.js'
 import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 
 const russianWeekdayOrder = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 export const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер, спокойный и строгий по технике. Приоритеты: безопасность, постепенная прогрессия, восстановление, баланс недели, понятные короткие подсказки. Не гони пользователя в отказ без причины, не создавай две одинаковые ближайшие тренировки, не ставь запрещённые упражнения и не ломай цель анкеты.'
@@ -24,11 +25,13 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
     ? 'следующая тренировка сегодня — держим объём умеренным и без отказа'
     : 'после текущей тренировки даём рабочую, но контролируемую нагрузку'
 
+  const mesocycleDeload = isDeloadWeek(coachState?.mesocycle)
+
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const usedExerciseIds = new Set((workoutDays ?? []).flatMap((day) => (day.exercises ?? []).map((exercise) => canonicalExerciseId(exercise))))
   const changes = nextWorkoutDay.exercises.map((exercise) => {
     const recent = latestExerciseHistory(history, exercise.exerciseId)
-    const targetWeight = recent?.nextRecommendedWeight ?? exercise.targetWeight
+    let targetWeight = recent?.nextRecommendedWeight ?? exercise.targetWeight
     const hadPain = Boolean(recent?.pain)
     const hardRecent = (recent?.sets ?? []).some((set) => set.completed && set.rpe >= 9)
     let setsCount = daysUntilNext !== null && daysUntilNext <= 0 ? Math.max(2, Math.min(exercise.setsCount, 2)) : exercise.setsCount
@@ -70,16 +73,43 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       }
     }
     const volumeRec = landmarks ? getVolumeRecommendation(volumeMuscleKey, muscleGroupSetsLast7Days, phase) : null
-    const volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
+    let volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
+
+    // Mesocycle deload: reduce sets, weight, and rep range. Unlike the
+    // previous implementation which only updated setsCount and put the rest
+    // of the reduction into a text note (resulting in mismatch: the coach
+    // said "разгрузка, вес -2.5 кг" but baseChange.targetWeight still had
+    // the full working weight), now we apply all fields consistently.
+    let deloadRepMin = exercise.repMin
+    let deloadRepMax = exercise.repMax
+    let deloadIntensityTarget
+    if (mesocycleDeload) {
+      const deload = applyDeloadReduction({
+        setsCount,
+        targetWeight,
+        repMin: exercise.repMin,
+        repMax: exercise.repMax,
+        weightStep: exercise.weightStep,
+      })
+      setsCount = deload.setsCount
+      targetWeight = deload.targetWeight
+      deloadRepMin = deload.repMin
+      deloadRepMax = deload.repMax
+      deloadIntensityTarget = deload.intensityTarget
+      if (!volumeNote.includes('Разгрузка')) {
+        volumeNote = deload.deloadNote + ' ' + volumeNote
+      }
+    }
 
     const baseChange = {
       programExerciseId: exercise.programExerciseId,
       targetWeight: roundWeight(targetWeight),
       setsCount,
-      repMin: exercise.repMin,
-      repMax: exercise.repMax,
+      repMin: deloadRepMin,
+      repMax: deloadRepMax,
+      intensityTarget: deloadIntensityTarget,
       restSeconds: exercise.restSeconds,
-      todayGoal: formatTodayGoal(targetWeight, setsCount, exercise.repMin),
+      todayGoal: formatTodayGoal(targetWeight, setsCount, deloadRepMin),
       coachFocus: hadPain
         ? `${exercise.name}: была боль в истории — вес не повышаем, техника и амплитуда важнее.`
         : hardRecent
@@ -101,7 +131,7 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       repMax: replacement.repMax,
       restSeconds: replacement.restSeconds,
       todayGoal: formatTodayGoal(replacement.targetWeight, replacement.setsCount, replacement.repMin),
-      coachFocus: `${replacement.name}: замена вместо ${exercise.name}, потому что ${muscleLabel(exerciseMuscleKey(exercise))} ещё не восстановились. Держим умеренный объём и качество движения.`,
+      coachFocus: `${replacement.name}: замена вместо ${exercise.name}, потому что ${labelForLower(exerciseMuscleKey(exercise))} ещё не восстановились. Держим умеренный объём и качество движения.`,
     }
   })
 
@@ -172,7 +202,7 @@ export function chooseNextWorkoutDay({ workoutDays, completedWorkout }) {
   return activeDays[(completedIndex + 1) % activeDays.length]
 }
 
-export function buildCoachPrompt({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary = [] }) {
+export function buildCoachPrompt({ profile, workoutDays: _workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary = [] }) {
   return `${COACH_PERSONA}\n\nПроанализируй завершённую тренировку и скорректируй ТОЛЬКО следующую календарную тренировку.\n\nАнкета: ${JSON.stringify(profile)}\n\nCoach State пользователя: ${JSON.stringify(coachState ?? null)}\n\nЗавершённая тренировка: ${JSON.stringify(completedWorkout)}\n\nПоследняя история: ${JSON.stringify((history ?? []).slice(0, 6))}\n\nСледующая тренировка, которую можно менять: ${JSON.stringify(nextWorkoutDay)}\n\nДоступная библиотека упражнений для замен: ${JSON.stringify((exerciseLibrary ?? []).map((exercise) => ({ id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup, setsCount: exercise.setsCount, repMin: exercise.repMin, repMax: exercise.repMax, targetWeight: exercise.targetWeight, weightStep: exercise.weightStep, restSeconds: exercise.restSeconds })))}\n\nВерни строго JSON без markdown в формате: {"summary":"...","changes":[{"programExerciseId":"...","exerciseId":"optional-library-exercise-id","targetWeight":50,"setsCount":3,"repMin":8,"repMax":10,"restSeconds":120,"todayGoal":"...","coachFocus":"..."}],"warnings":["..."]}. Учитывай восстановление, усталость мышечных групп, фактическую частоту тренировок, подходы на пределе, боль и цель пользователя. Если мышцы следующей тренировки не восстановились, можешь заменить упражнение на упражнение из библиотеки для другой, более свежей группы мышц, указав exerciseId. Не повышай вес при боли или низком восстановлении. Не меняй programExerciseId вне следующей тренировки.`
 }
 
@@ -220,16 +250,6 @@ function exerciseMuscleKey(exercise) {
   return normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
 }
 
-function muscleLabel(key) {
-  return {
-    chest: 'грудь',
-    back: 'спина',
-    legs: 'ноги',
-    shoulders: 'плечи',
-    arms: 'руки',
-    core: 'кор',
-  }[key] ?? 'эта группа'
-}
 
 function latestExerciseHistory(history, exerciseId) {
   return [...(history ?? [])]
