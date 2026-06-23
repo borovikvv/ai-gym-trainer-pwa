@@ -842,3 +842,134 @@ describe('planned workout generator', () => {
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #35: intra-cycle periodization (loading/accumulation/intensification)
+// ---------------------------------------------------------------------------
+
+describe('buildGeneratedPlannedWorkout — intra-cycle periodization', () => {
+  const profile = {
+    userId: 'vyacheslav',
+    goal: 'сила и мышечная масса',
+    level: 'intermediate',
+    workoutsPerWeek: 2,
+    targetWorkoutMinutes: 60,
+  }
+
+  const exerciseLibrary = [
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 60, weightStep: 2.5, restSeconds: 150, instruction: 'жим' },
+  ]
+
+  function makeMesocycle(phase) {
+    return {
+      phase,
+      phaseDescription: phase,
+      weekInCycle: 1,
+      cycleLength: 5,
+      loadingWeeks: 4,
+      deloadWeeks: 1,
+      isDeload: phase === 'deload',
+      deloadScheduled: false,
+      triggerReason: null,
+      completionRatio: 1,
+      workoutsThisCycle: 3,
+      plannedWorkoutsThisCycle: 3,
+    }
+  }
+
+  function makeCoachState(phase) {
+    return {
+      recoveryStatus: 'normal',
+      readinessScore: 75,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {},
+      exercises: {},
+      mesocycle: makeMesocycle(phase),
+    }
+  }
+
+  it('loading phase: base weight, base reps, no periodization delta', () => {
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-20',
+      coachState: makeCoachState('loading'),
+      coachDecision: { priorityMuscleGroups: ['chest'], avoidMuscleGroups: [], exercisePolicies: {} },
+      exerciseLibrary,
+      history: [],
+    })
+
+    const ex = plan.exercises[0]
+    expect(ex.targetWeight).toBe(60) // base weight, no delta
+    expect(ex.repMin).toBe(8)        // base repMin
+    expect(ex.repMax).toBe(10)       // base repMax
+    expect(ex.coachFocus).toContain('Загрузка')
+  })
+
+  it('accumulation phase: +1 rep on minimum, same weight', () => {
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-20',
+      coachState: makeCoachState('accumulation'),
+      coachDecision: { priorityMuscleGroups: ['chest'], avoidMuscleGroups: [], exercisePolicies: {} },
+      exerciseLibrary,
+      history: [],
+    })
+
+    const ex = plan.exercises[0]
+    expect(ex.targetWeight).toBe(60)  // same weight
+    expect(ex.repMin).toBe(9)         // 8 + 1
+    expect(ex.repMax).toBe(10)        // unchanged
+    expect(ex.coachFocus).toContain('Накопление')
+  })
+
+  it('intensification phase: +2.5 kg weight, -1 rep on maximum', () => {
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-20',
+      coachState: makeCoachState('intensification'),
+      coachDecision: { priorityMuscleGroups: ['chest'], avoidMuscleGroups: [], exercisePolicies: {} },
+      exerciseLibrary,
+      history: [],
+    })
+
+    const ex = plan.exercises[0]
+    expect(ex.targetWeight).toBe(62.5) // 60 + 2.5
+    expect(ex.repMin).toBe(8)          // unchanged
+    expect(ex.repMax).toBe(9)          // 10 - 1
+    expect(ex.coachFocus).toContain('Интенсификация')
+  })
+
+  it('deload overrides periodization (deload has higher priority)', () => {
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-20',
+      coachState: makeCoachState('deload'),
+      coachDecision: { priorityMuscleGroups: ['chest'], avoidMuscleGroups: [], exercisePolicies: {} },
+      exerciseLibrary,
+      history: [],
+    })
+
+    const ex = plan.exercises[0]
+    // Deload: sets reduced to ~60%, weight -1 step
+    expect(ex.setsCount).toBeLessThanOrEqual(2)
+    expect(ex.targetWeight).toBeLessThan(60)
+    expect(ex.intensityTarget).toBe('easy')
+    expect(ex.coachFocus).toContain('разгруз')
+  })
+
+  it('idle phase: no periodization adjustments', () => {
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-20',
+      coachState: makeCoachState('idle'),
+      coachDecision: { priorityMuscleGroups: ['chest'], avoidMuscleGroups: [], exercisePolicies: {} },
+      exerciseLibrary,
+      history: [],
+    })
+
+    const ex = plan.exercises[0]
+    expect(ex.targetWeight).toBe(60) // base
+    expect(ex.repMin).toBe(8)
+    expect(ex.repMax).toBe(10)
+  })
+})

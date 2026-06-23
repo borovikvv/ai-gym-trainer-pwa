@@ -5,6 +5,7 @@ import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { roundWeight } from './lib/format.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
+import { applyPeriodization } from './periodization.js'
 
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
@@ -266,6 +267,30 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
     : lowReadiness
       ? 'лёгкий контролируемый объём, без отказа'
       : 'рабочая нагрузка под цель, 1–2 повтора в запасе'
+
+  // Issue #35: apply intra-cycle periodization (loading/accumulation/intensification).
+  // Adjusts weight/reps based on the current mesocycle phase. Small deltas
+  // (±1 rep, ±1 weightStep) — gives each week a distinct character.
+  // Applied BEFORE deload check (deload overrides everything).
+  const mesocyclePhase = coachState?.mesocycle?.phase
+  if (mesocyclePhase && mesocyclePhase !== 'idle' && mesocyclePhase !== 'deload') {
+    const periodized = applyPeriodization({
+      targetWeight,
+      repMin,
+      repMax,
+      setsCount,
+      intensityTarget,
+      weightStep: exercise.weightStep,
+    }, mesocyclePhase)
+    targetWeight = roundWeight(periodized.targetWeight)
+    repMin = periodized.repMin
+    repMax = periodized.repMax
+    setsCount = periodized.setsCount
+    intensityTarget = periodized.intensityTarget
+    if (periodized.periodizationNote) {
+      focusText = periodized.periodizationNote
+    }
+  }
 
   // Mesocycle deload: if the user's mesocycle is in a deload week, override
   // the prescription with reduced sets/weight/reps and 'easy' intensity.
