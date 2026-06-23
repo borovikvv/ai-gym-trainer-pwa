@@ -5,7 +5,7 @@ import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramE
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 import { formatWeight } from '../lib/format.js'
 
-export async function ensureDefaultPlannedWorkouts(client, userId) {
+export async function ensureDefaultPlannedWorkouts(client: any, userId) {
   const existing = await client.query(
     `select count(*)::int as count
      from public.planned_workouts
@@ -27,7 +27,7 @@ export async function ensureDefaultPlannedWorkouts(client, userId) {
   }
 }
 
-export async function loadPlannedWorkouts(client, userId, options = {}) {
+export async function loadPlannedWorkouts(client: any, userId: any, options: any = {}) {
   const includePast = Boolean(options.includePast)
   const workouts = await client.query(
     `select id, user_id, scheduled_date, status, source, workout_day_id, workout_day_name,
@@ -101,7 +101,7 @@ export async function loadPlannedWorkouts(client, userId, options = {}) {
   })
 }
 
-export function formatPlannedExerciseGoal(exercise) {
+export function formatPlannedExerciseGoal(exercise: any) {
   const setsCount = Number(exercise.sets_count ?? 1)
   const repMin = Number(exercise.rep_min ?? 0)
   const repMax = Number(exercise.rep_max ?? repMin)
@@ -113,12 +113,12 @@ export function formatPlannedExerciseGoal(exercise) {
   return Array.from({ length: setsCount }, () => target).join(' / ')
 }
 
-function isTimedExercise(exercise) {
+function isTimedExercise(exercise: any) {
   const text = `${exercise.exercise_id ?? exercise.id ?? ''} ${exercise.name ?? ''} ${exercise.muscle_group ?? exercise.muscleGroup ?? ''}`.toLowerCase()
   return text.includes('планк') || text.includes('plank') || text.includes('dead bug') || text.includes('дед баг')
 }
 
-export async function replacePlannedTrainingRange(client, { userId, dates, rangeStart, rangeEnd }) {
+export async function replacePlannedTrainingRange(client: any, { userId, dates, rangeStart, rangeEnd }) {
   await client.query(
     `delete from public.planned_workouts
      where user_id = $1
@@ -133,7 +133,7 @@ export async function replacePlannedTrainingRange(client, { userId, dates, range
   }
 }
 
-export async function createGeneratedPlannedWorkoutForDate(client, { userId, scheduledDate, source = 'coach', previousGeneratedWorkouts = [] }) {
+export async function createGeneratedPlannedWorkoutForDate(client: any, { userId, scheduledDate, source = 'coach', previousGeneratedWorkouts = [] }) {
   const [profile, workoutDays, exerciseLibrary, history] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
@@ -149,7 +149,7 @@ export async function createGeneratedPlannedWorkoutForDate(client, { userId, sch
   return (await loadPlannedWorkouts(client, userId, { includePast: true })).find((workout) => workout.id === id)
 }
 
-export async function regeneratePlannedWorkout(client, { plannedWorkoutId, userId, scheduledDate }) {
+export async function regeneratePlannedWorkout(client: any, { plannedWorkoutId, userId, scheduledDate }) {
   const [profile, workoutDays, exerciseLibrary, history] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
@@ -229,14 +229,14 @@ async function loadPreviousGeneratedWorkoutContext(client, { userId, scheduledDa
     }))
 }
 
-function daysBetweenDateOnly(fromDate, toDate) {
+function daysBetweenDateOnly(fromDate: any, toDate: any) {
   const from = new Date(`${String(fromDate).slice(0, 10)}T00:00:00.000Z`)
   const to = new Date(`${String(toDate).slice(0, 10)}T00:00:00.000Z`)
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return Number.POSITIVE_INFINITY
   return Math.round((to.getTime() - from.getTime()) / 86_400_000)
 }
 
-function enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays) {
+function enrichExerciseLibraryWithWorkoutDays(exerciseLibrary: any, workoutDays: any) {
   const programById = new Map()
   for (const day of workoutDays ?? []) {
     for (const exercise of day.exercises ?? []) {

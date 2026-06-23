@@ -3,7 +3,7 @@ import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 
-export async function loadWorkoutHistory(client) {
+export async function loadWorkoutHistory(client: any) {
   const sessions = await client.query(`
     select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, quality_score, readiness_check_in
     from public.workout_sessions
@@ -40,7 +40,7 @@ export async function loadWorkoutHistory(client) {
   }))
 }
 
-export async function saveWorkoutHistoryEntry(client, entry) {
+export async function saveWorkoutHistoryEntry(client: any, entry) {
   const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry)
   await client.query(
     `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, source)
@@ -103,7 +103,7 @@ export async function saveWorkoutHistoryEntry(client, entry) {
   return { coachPlan, debrief }
 }
 
-export function sanitizeWorkoutHistoryEntry(entry) {
+export function sanitizeWorkoutHistoryEntry(entry: any) {
   let droppedSets = 0
   const beforeExerciseCount = (entry?.exercises ?? []).length
   const exercises = (entry?.exercises ?? [])
@@ -146,7 +146,7 @@ export function sanitizeWorkoutHistoryEntry(entry) {
   }
 }
 
-function isValidCompletedSet(set) {
+function isValidCompletedSet(set: any) {
   if (set?.completed === false) return false
   const weight = Number(set?.weight)
   const reps = Number(set?.reps)
@@ -157,7 +157,7 @@ function isValidCompletedSet(set) {
   return true
 }
 
-function roundGuardrailNumber(value) {
+function roundGuardrailNumber(value: any) {
   return Number(Number(value).toFixed(1))
 }
 
@@ -174,7 +174,7 @@ async function markPlannedWorkoutCompleted(client, entry) {
   )
 }
 
-export async function saveWorkoutDraft(client, draft) {
+export async function saveWorkoutDraft(client: any, draft) {
   const id = String(draft.id ?? `${draft.userId ?? 'unknown'}:${draft.workoutDayId ?? 'unknown'}`)
   const userId = String(draft.userId ?? '')
   const workoutDayId = String(draft.workoutDayId ?? '')
@@ -182,7 +182,7 @@ export async function saveWorkoutDraft(client, draft) {
   const savedAt = draft.savedAt ? new Date(String(draft.savedAt)) : new Date()
   const savedAtIso = Number.isNaN(savedAt.getTime()) ? new Date().toISOString() : savedAt.toISOString()
   if (!userId || !workoutDayId || !draft.logs) {
-    const error = new Error('userId, workoutDayId and logs are required')
+    const error: any = new Error('userId, workoutDayId and logs are required')
     error.statusCode = 400
     throw error
   }
@@ -200,7 +200,7 @@ export async function saveWorkoutDraft(client, draft) {
   return id
 }
 
-export async function loadActiveWorkoutDraft(client, userId) {
+export async function loadActiveWorkoutDraft(client: any, userId) {
   if (!userId) return null
   const result = await client.query(
     `select id, user_id, workout_day_id, active_exercise_index, payload, saved_at
@@ -222,7 +222,7 @@ export async function loadActiveWorkoutDraft(client, userId) {
   }
 }
 
-export async function deleteWorkoutDraft(client, id) {
+export async function deleteWorkoutDraft(client: any, id) {
   const current = await client.query('select user_id from public.workout_drafts where id = $1', [id])
   if (current.rowCount === 0) return
   assertAllowedRowOwner(current.rows[0])

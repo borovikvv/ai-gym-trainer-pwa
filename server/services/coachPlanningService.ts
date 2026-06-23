@@ -3,7 +3,7 @@ import { computeCoachState } from '../coachState.js'
 import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecisionLog.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 
-export async function planAndApplyNextWorkout(client, completedEntry) {
+export async function planAndApplyNextWorkout(client: any, completedEntry) {
   const [profile, workoutDays, history, exerciseLibrary] = await Promise.all([
     loadUserProfile(client, completedEntry.userId),
     loadUserWorkoutDays(client, completedEntry.userId),
@@ -41,7 +41,7 @@ export async function planAndApplyNextWorkout(client, completedEntry) {
   } else {
     const rulesReplacements = new Map(rulesPlan.changes.filter((change) => change.exerciseId).map((change) => [change.programExerciseId, change]))
     safePlan.changes = safePlan.changes.map((change) => {
-      const safeReplacement = rulesReplacements.get(change.programExerciseId)
+      const safeReplacement: any = rulesReplacements.get(change.programExerciseId)
       if (!safeReplacement || change.exerciseId) return change
       return { ...change, ...safeReplacement, coachFocus: `${safeReplacement.coachFocus} ${change.coachFocus ?? ''}`.slice(0, 500) }
     })
@@ -111,7 +111,7 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
       }),
     })
     if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body = await response.json()
+    const body: any = await response.json()
     const content = body?.choices?.[0]?.message?.content
     if (!content) return null
     return { ...JSON.parse(content), source: 'llm', nextWorkoutDayId: nextWorkoutDay.id }
@@ -121,7 +121,7 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
   }
 }
 
-function formatCoachPlanRecommendation(plan, nextWorkoutDay) {
+function formatCoachPlanRecommendation(plan: any, nextWorkoutDay: any) {
   const changes = (plan.changes ?? [])
     .map((change) => `• ${change.exerciseName ?? exerciseNameByProgramExerciseId(nextWorkoutDay, change.programExerciseId)}: ${change.setsCount}×${change.repMin}–${change.repMax}, ${change.targetWeight} кг. ${change.coachFocus}`)
     .join('\n')
@@ -129,6 +129,6 @@ function formatCoachPlanRecommendation(plan, nextWorkoutDay) {
   return `${plan.summary}\n\n${changes}${warnings}`
 }
 
-function exerciseNameByProgramExerciseId(day, programExerciseId) {
+function exerciseNameByProgramExerciseId(day: any, programExerciseId: any) {
   return day.exercises.find((exercise) => exercise.programExerciseId === programExerciseId)?.name ?? programExerciseId
 }
