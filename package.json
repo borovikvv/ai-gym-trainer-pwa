@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "api": "tsx --env-file=.env.local server/index.js",
+    "api": "tsx --env-file=.env.local server/index.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
