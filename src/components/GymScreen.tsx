@@ -95,7 +95,11 @@ export function GymScreen({
           trailing={<span className="badge">{activeExerciseIndex + 1} из {activeWorkoutDay.exercises.length}</span>}
           variant="compact"
         />
-        <button className="back" type="button" onClick={() => navigate('home')}>Тренер</button>
+        <button className="back" type="button" onClick={() => {
+          if (window.confirm('Выйти из тренировки? Несохранённый прогресс будет потерян.')) {
+            navigate('home')
+          }
+        }}>← Выйти</button>
       </div>
 
       <HeroStatus

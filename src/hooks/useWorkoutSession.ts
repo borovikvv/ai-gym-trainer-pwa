@@ -25,7 +25,12 @@ export const createSets = (exercise: ExercisePlan, targetWeight = exercise.targe
 export const createInitialLogs = (workoutDay: WorkoutDay | undefined, targets: Record<string, number> = {}) => {
   const first = workoutDay?.exercises[0]
   if (!first) return {}
-  return { [first.id]: { exerciseId: first.id, pain: false, sets: createSets(first, targets[first.id] ?? first.targetWeight) } }
+  // Issue #33: prefer exercise.targetWeight (from the planned workout, which
+  // accounts for mesocycle/deload/readiness) over nextTargets (from history,
+  // which is just "what was recommended last time" — may be stale or too high).
+  // Fall back to nextTargets only if targetWeight is 0 (e.g. bodyweight exercises).
+  const weight = first.targetWeight || targets[first.id] || 0
+  return { [first.id]: { exerciseId: first.id, pain: false, sets: createSets(first, weight) } }
 }
 
 type UseWorkoutSessionOptions = {
@@ -110,7 +115,8 @@ export function useWorkoutSetActions({
   const createExerciseLog = (exercise: ExercisePlan): ExerciseLog => ({
     exerciseId: exercise.id,
     pain: false,
-    sets: createSets(exercise, nextTargets[exercise.id] ?? exercise.targetWeight),
+    // Issue #33: prefer exercise.targetWeight (planned) over nextTargets (history).
+    sets: createSets(exercise, exercise.targetWeight || nextTargets[exercise.id] || 0),
   })
 
   function updateSet(setIndex: number, patch: Partial<SetDraft>) {
@@ -144,8 +150,9 @@ export function useWorkoutSetActions({
       const existing = current[activeExercise.id] ?? createExerciseLog(activeExercise)
       const lastSet = existing.sets[existing.sets.length - 1]
       const newSet: SetDraft = {
-        weight: lastSet?.weight ?? nextTargets[activeExercise.id] ?? activeExercise.targetWeight,
-        weightInput: formatWeight(lastSet?.weight ?? nextTargets[activeExercise.id] ?? activeExercise.targetWeight),
+        // Issue #33: prefer planned targetWeight over nextTargets from history.
+        weight: lastSet?.weight ?? (activeExercise.targetWeight || nextTargets[activeExercise.id] || 0),
+        weightInput: formatWeight(lastSet?.weight ?? (activeExercise.targetWeight || nextTargets[activeExercise.id] || 0)),
         reps: 0,
         repsInput: '',
         rpe: lastSet?.rpe ?? 7,
