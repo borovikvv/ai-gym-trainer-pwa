@@ -279,9 +279,9 @@ select:disabled {
   height: 42px;
   flex: 0 0 auto;
   place-items: center;
-  color: #ffffff;
+  color: var(--hero-text);
   border-radius: 15px;
-  background: var(--text-primary);
+  background: var(--hero-bg);
   font-weight: 800;
 }
 
@@ -329,15 +329,15 @@ select:disabled {
 .coach,
 .hero-status {
   padding: 18px;
-  color: #ffffff;
+  color: var(--hero-text);
   border-radius: var(--radius-xl);
-  background: var(--text-primary);
+  background: var(--hero-bg);
   box-shadow: var(--shadow-soft);
 }
 
 .coach .label,
 .hero-status .eyebrow {
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--hero-text-tertiary);
 }
 
 .coach h1,
@@ -351,7 +351,7 @@ select:disabled {
 
 .coach p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.76);
+  color: var(--hero-text-muted);
   font-size: 14px;
   line-height: 1.42;
 }
@@ -380,7 +380,7 @@ select:disabled {
 .hero-status__metadata,
 .hero-status__reason {
   margin: 0;
-  color: rgba(255, 255, 255, 0.76);
+  color: var(--hero-text-muted);
   font-size: 14px;
   line-height: 1.42;
 }
@@ -999,9 +999,9 @@ select:disabled {
   width: 34px;
   height: 34px;
   place-items: center;
-  color: #ffffff;
+  color: var(--hero-text);
   border-radius: 12px;
-  background: var(--text-primary);
+  background: var(--hero-bg);
   font-weight: 800;
 }
 
@@ -1266,9 +1266,9 @@ select:disabled {
   left: 50%;
   padding: 10px 14px;
   transform: translateX(-50%);
-  color: #ffffff;
+  color: var(--hero-text);
   border-radius: 999px;
-  background: var(--text-primary);
+  background: var(--hero-bg);
   font-size: 13px;
   font-weight: 780;
 }
@@ -1535,8 +1535,8 @@ select:disabled {
 
 .rest-timer,
 .next-card {
-  color: #ffffff;
-  background: var(--text-primary);
+  color: var(--hero-text);
+  background: var(--hero-bg);
 }
 
 .rest-timer {
@@ -1561,7 +1561,7 @@ select:disabled {
 }
 
 .next-card .muted {
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--hero-text-tertiary);
 }
 
 .bars {
@@ -1632,13 +1632,13 @@ select:disabled {
   gap: 12px;
   margin: 10px 0 12px;
   padding: 14px;
-  color: #ffffff;
+  color: var(--hero-text);
   border-radius: var(--radius-lg);
-  background: var(--text-primary);
+  background: var(--hero-bg);
 }
 
 .movement-diagram .muted {
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--hero-text-tertiary);
 }
 
 .movement-diagram svg,
@@ -1850,8 +1850,8 @@ select:disabled {
 }
 
 .home-profile-action {
-  color: #ffffff;
-  background: var(--text-primary);
+  color: var(--hero-text);
+  background: var(--hero-bg);
   font-size: 13px;
   font-weight: 850;
 }
