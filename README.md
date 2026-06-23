@@ -9,7 +9,8 @@ The app computes a personalized mesocycle (loading → accumulation → intensif
 | Layer | Tech |
 |-------|------|
 | Frontend | React 19, TypeScript 6, Vite 8, Tailwind 4, vite-plugin-pwa 1.3 |
-| Backend | Node.js (ESM, `--env-file`), Express 5, pg 8 |
+| Backend | Node.js (ESM, `--env-file`), Express 5, pg 8 — **migrating to TypeScript via tsx** |
+| Shared | `shared/types.ts` — single source of truth for cross-stack contracts |
 | DB / Auth | PostgreSQL (local) + Supabase (optional fallback) |
 | Tests | Vitest 4 + Testing Library + jsdom |
 | Lint | ESLint 10 + typescript-eslint 8 (type-checked) |
