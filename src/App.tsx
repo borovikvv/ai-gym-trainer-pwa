@@ -12,6 +12,7 @@ import { CoachHome } from './components/CoachHome'
 import { GymScreen } from './components/GymScreen'
 import { WorkoutReviewScreen } from './components/WorkoutReviewScreen'
 import { ExerciseLibraryScreen } from './components/ExerciseLibraryScreen'
+import { OnboardingScreen } from './components/OnboardingScreen'
 import { AppShell } from './components/ui'
 import './App.css'
 import type { ExercisePlan, WorkoutDay } from './data/mockProgram'
@@ -43,7 +44,9 @@ import {
   type ReadinessCheckIn,
 } from './domain/readinessCheckIn'
 
-type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library'
+type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library' | 'onboarding'
+
+const ONBOARDING_STORAGE_KEY = 'ai-gym-trainer:v0.1:onboarding-completed'
 
 function formatDateTime(isoDate: string) {
   const date = new Date(isoDate)
@@ -61,7 +64,13 @@ const fallbackFirstUser = fallbackProgramData.users[0]
 
 function App() {
   const initialDraft = loadActiveWorkoutDraft()
-  const [screen, setScreen] = useState<Screen>('home')
+  // Show onboarding on first ever launch; user can skip or finish it.
+  // Subsequent launches go straight to 'home'. The onboarding can also be
+  // re-opened from UserProfileScreen.
+  const [screen, setScreen] = useState<Screen>(() => {
+    if (typeof localStorage === 'undefined') return 'home'
+    return localStorage.getItem(ONBOARDING_STORAGE_KEY) === '1' ? 'home' : 'onboarding'
+  })
   const {
     activeExerciseIndex,
     setActiveExerciseIndex,
@@ -585,9 +594,28 @@ function App() {
         {screen === 'library' && (
           <ExerciseLibraryScreen exerciseLibrary={programData.exerciseLibrary} />
         )}
+
+        {screen === 'onboarding' && (
+          <OnboardingScreen
+            onFinish={() => {
+              if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(ONBOARDING_STORAGE_KEY, '1')
+              }
+              setScreen('home')
+            }}
+            onSkip={() => {
+              if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(ONBOARDING_STORAGE_KEY, '1')
+              }
+              setScreen('home')
+            }}
+          />
+        )}
       </AppShell>
 
-      <BottomNav screen={screen} onNavigate={navigate} onStartWorkout={() => startWorkout()} />
+      {screen !== 'onboarding' && (
+        <BottomNav screen={screen} onNavigate={navigate} onStartWorkout={() => startWorkout()} />
+      )}
 
       {editingExercise && editDraft && (
         <ProgramExerciseEditor
