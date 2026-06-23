@@ -3,6 +3,8 @@ import { computeCoachMemory } from '../coachMemory.js'
 import { dayTemplate } from '../programTemplates.js'
 import { groupBy, normalizeLibraryExercise, normalizeProfile, normalizeProgramExercise, normalizeSet } from '../utils.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
+import { loadVolumeLandmarkOverrides, saveVolumeLandmarkAdjustments } from '../volumeLandmarkOverrides.js'
+import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 
 export async function loadProgramData(client) {
   const [users, profileRows, dayRows, exerciseRows, libraryRows] = await Promise.all([
@@ -310,15 +312,22 @@ export async function loadCoachStateForUser(client, userId, now = new Date()) {
 }
 
 export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
-  const [profile, workoutDays, exerciseLibrary, history, coachDecisionLogs] = await Promise.all([
+  const [profile, workoutDays, exerciseLibrary, history, coachDecisionLogs, volumeLandmarkOverrides] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
     loadRecentCoachDecisionLogs(client, userId),
+    loadVolumeLandmarkOverrides(client, userId),
   ])
+  // Build e1RM histories once — used by the adaptive volume engine to
+  // detect strength trends per muscle group.
+  const e1rmHistories = buildAllExerciseE1RMHistories(history)
   // First pass: coachState without coachMemory (mesocycle MRV triggers unavailable).
-  const coachStatePass1 = computeCoachState({ profile, workoutDays, history, now })
+  const coachStatePass1 = computeCoachState({
+    profile, workoutDays, history, now,
+    volumeLandmarkOverrides, e1rmHistories,
+  })
   const coachMemory = computeCoachMemory({
     profile,
     exerciseLibrary: enrichLibraryForMemory(exerciseLibrary, workoutDays),
@@ -328,7 +337,20 @@ export async function loadCoachMemoryForUser(client, userId, now = new Date()) {
     now,
   })
   // Second pass: coachState WITH coachMemory — mesocycle MRV triggers now work.
-  const coachState = computeCoachState({ profile, workoutDays, history, coachMemory, now })
+  const coachState = computeCoachState({
+    profile, workoutDays, history, coachMemory, now,
+    volumeLandmarkOverrides, e1rmHistories,
+  })
+  // Persist any non-hold adjustment decisions to volume_landmark_overrides.
+  // This updates lastAdjustmentIso so the 2-week cooldown applies next time.
+  // Errors here are non-fatal — coach state is still returned.
+  try {
+    if (coachState.volumeAdjustmentLog && coachState.volumeAdjustmentLog.length > 0) {
+      await saveVolumeLandmarkAdjustments(client, userId, coachState.volumeAdjustmentLog, now)
+    }
+  } catch (err) {
+    console.error('volumeLandmarkOverrides save failed (non-fatal):', err.message)
+  }
   return { coachMemory, coachState }
 }
 

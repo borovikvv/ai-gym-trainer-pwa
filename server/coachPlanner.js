@@ -44,12 +44,17 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       ? 'Качество прошлой тренировки низкое — снижаем объём и держим технику. '
       : ''
 
-    // Volume landmark awareness: clamp sets if weekly volume is approaching MRV
+    // Volume landmark awareness: clamp sets if weekly volume is approaching MRV.
+    // Uses the effective landmark table from coachState (which merges base
+    // landmarks with per-user overrides from volume_landmark_overrides table).
+    // Falls back to base landmarks if coachState or overrides are unavailable.
     let muscleGroupSetsLast7Days = 0
     const ageProfile = getUserTrainingPolicy(profile?.userId ?? profile)
     const phase = ageProfile?.ageRecoveryProfile?.phase ?? 'adult'
     const volumeMuscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
-    const landmarks = getVolumeLandmarks(volumeMuscleKey, phase)
+    const baseLandmarks = getVolumeLandmarks(volumeMuscleKey, phase)
+    const overrideLandmarks = coachState?.volumeLandmarkOverrides?.[volumeMuscleKey]
+    const landmarks = overrideLandmarks ?? baseLandmarks
 
     if (landmarks) {
       // Count sets for this muscle group in the last 7 days from history

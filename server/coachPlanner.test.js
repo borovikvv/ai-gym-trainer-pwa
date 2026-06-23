@@ -462,3 +462,159 @@ describe('buildSafeCoachPlan — mesocycle deload integration', () => {
     expect(plan.changes[0].setsCount).toBe(4)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Adaptive volume landmark overrides integration (Phase 3 issue #6)
+// ---------------------------------------------------------------------------
+
+describe('buildSafeCoachPlan — adaptive volume landmark overrides', () => {
+  const profileAdult = {
+    userId: 'vyacheslav',
+    goal: 'сила',
+    workoutsPerWeek: 3,
+    trainingDays: ['Вторник', 'Четверг', 'Суббота'],
+    age: 30,
+  }
+
+  const workoutDayWithBench = {
+    id: 'day-override-test',
+    name: 'День A',
+    label: 'Грудь',
+    sortOrder: 1,
+    exercises: [
+      {
+        programExerciseId: 'pe-bench-override',
+        exerciseId: 'bench-press',
+        name: 'Жим лёжа',
+        muscleGroup: 'Грудь',
+        setsCount: 4,
+        repMin: 8,
+        repMax: 10,
+        targetWeight: 60,
+        weightStep: 2.5,
+        restSeconds: 120,
+      },
+    ],
+  }
+
+  it('uses override MRV instead of base MRV when coachState provides overrides', () => {
+    // Base chest adult MRV = 16. Override to 12 (lower ceiling).
+    // With 13 sets in last 7 days, base MRV=16 → 'above_mav' (clamp to 3).
+    // But override MRV=12 → 13 >= 12 → 'at_mrv' → clamp setsCount to 2.
+    const history = [{
+      id: 'session-override-test',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      completedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      totalVolume: 60 * 8 * 13,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        muscleGroup: 'Грудь',
+        pain: false,
+        sets: Array.from({ length: 13 }, () => ({ weight: 60, reps: 8, rpe: 7, completed: true })),
+        volume: 60 * 8 * 13,
+        nextRecommendedWeight: 62.5,
+        progressionType: 'hold',
+        progressionReason: 'удержание',
+      }],
+    }]
+
+    const coachState = {
+      volumeLandmarkOverrides: {
+        chest: { mev: 6, mav: 12, mrv: 12 },
+      },
+    }
+
+    const plan = buildSafeCoachPlan({
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history,
+      coachState,
+      exerciseLibrary: [],
+      workoutQualityScore: 80,
+      now: new Date('2026-06-22T12:00:00.000Z'),
+    })
+
+    const change = plan.changes[0]
+    expect(change.setsCount).toBeLessThanOrEqual(2)
+  })
+
+  it('ignores overrides for unrelated muscle groups', () => {
+    const history = [{
+      id: 'session-unrelated-override',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      completedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      totalVolume: 60 * 8 * 8,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        muscleGroup: 'Грудь',
+        pain: false,
+        sets: Array.from({ length: 8 }, () => ({ weight: 60, reps: 8, rpe: 7, completed: true })),
+        volume: 60 * 8 * 8,
+        nextRecommendedWeight: 62.5,
+        progressionType: 'hold',
+        progressionReason: 'удержание',
+      }],
+    }]
+
+    const coachState = {
+      volumeLandmarkOverrides: {
+        back: { mev: 8, mav: 14, mrv: 18 },
+      },
+    }
+
+    const plan = buildSafeCoachPlan({
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history,
+      coachState,
+      exerciseLibrary: [],
+      workoutQualityScore: 80,
+      now: new Date('2026-06-22T12:00:00.000Z'),
+    })
+
+    expect(plan.changes[0].setsCount).toBe(4)
+  })
+
+  it('falls back to base landmarks when coachState is null', () => {
+    const history = [{
+      id: 'session-null-coachstate',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      completedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      totalVolume: 60 * 8 * 8,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        muscleGroup: 'Грудь',
+        pain: false,
+        sets: Array.from({ length: 8 }, () => ({ weight: 60, reps: 8, rpe: 7, completed: true })),
+        volume: 60 * 8 * 8,
+        nextRecommendedWeight: 62.5,
+        progressionType: 'hold',
+        progressionReason: 'удержание',
+      }],
+    }]
+
+    const plan = buildSafeCoachPlan({
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history,
+      coachState: null,
+      exerciseLibrary: [],
+      workoutQualityScore: 80,
+      now: new Date('2026-06-22T12:00:00.000Z'),
+    })
+
+    expect(plan.changes[0].setsCount).toBe(4)
+  })
+})
