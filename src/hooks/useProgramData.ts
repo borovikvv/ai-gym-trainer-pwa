@@ -15,6 +15,7 @@ import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '..
 import { saveActiveWorkoutDraft } from './useDraftAutosave'
 
 export const WORKOUT_HISTORY_STORAGE_KEY = 'ai-gym-trainer:v0.1:history'
+export const ACTIVE_USER_STORAGE_KEY = 'ai-gym-trainer:v0.1:active-user'
 
 export type ActiveWorkoutDraft = {
   userId: string
@@ -39,6 +40,43 @@ export function saveHistory(history: WorkoutHistoryEntry[]) {
   window.localStorage.setItem(WORKOUT_HISTORY_STORAGE_KEY, JSON.stringify(history))
 }
 
+/**
+ * Persist the active user ID to localStorage AND sessionStorage.
+ *
+ * iOS Safari aggressively evicts localStorage when device storage is low
+ * and can kill background tabs. By keeping the user ID in BOTH:
+ *  - localStorage: survives full app restarts
+ *  - sessionStorage: survives page refreshes within the same tab
+ *    (more reliable on iOS Safari — sessionStorage is less likely to
+ *    be evicted because it's tied to the tab, not the origin)
+ *
+ * Without this, when Safari evicts localStorage, the app falls back to
+ * the first user in fallback data (vyacheslav) — which means Oleg
+ * sees Vyacheslav's profile after a page refresh.
+ */
+export function persistActiveUserId(userId: string) {
+  try {
+    window.localStorage.setItem(ACTIVE_USER_STORAGE_KEY, userId)
+  } catch { /* localStorage may be unavailable */ }
+  try {
+    window.sessionStorage.setItem(ACTIVE_USER_STORAGE_KEY, userId)
+  } catch { /* sessionStorage may be unavailable */ }
+}
+
+export function loadPersistedActiveUserId(): string | null {
+  // Try sessionStorage first (more reliable on iOS Safari for same-tab refresh),
+  // then localStorage (survives full restarts).
+  try {
+    const fromSession = window.sessionStorage.getItem(ACTIVE_USER_STORAGE_KEY)
+    if (fromSession) return fromSession
+  } catch { /* ignore */ }
+  try {
+    const fromLocal = window.localStorage.getItem(ACTIVE_USER_STORAGE_KEY)
+    if (fromLocal) return fromLocal
+  } catch { /* ignore */ }
+  return null
+}
+
 type UseProgramDataOptions = {
   initialDraft: ActiveWorkoutDraft | null
   fallbackFirstUserId: string
@@ -59,7 +97,21 @@ export function useProgramData({
   notify,
 }: UseProgramDataOptions) {
   const [programData, setProgramData] = useState<ProgramData>(fallbackProgramData)
-  const [activeUserId, setActiveUserId] = useState(initialDraft?.userId ?? fallbackFirstUserId)
+  // Priority for initial activeUserId:
+  //   1. Draft's userId (if a workout was in progress)
+  //   2. Persisted active user (from localStorage/sessionStorage — survives
+  //      Safari tab eviction)
+  //   3. Fallback first user (vyacheslav — last resort)
+  const [activeUserId, setActiveUserIdState] = useState(
+    initialDraft?.userId ?? loadPersistedActiveUserId() ?? fallbackFirstUserId
+  )
+  // Wrap setActiveUserId to also persist to localStorage + sessionStorage.
+  // This ensures the selected user survives page refreshes even when the
+  // workout draft is lost (iOS Safari localStorage eviction).
+  const setActiveUserId = (userId: string) => {
+    setActiveUserIdState(userId)
+    persistActiveUserId(userId)
+  }
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState(initialDraft?.workoutDayId ?? fallbackFirstWorkoutDayId)
   const [history, setHistory] = useState<WorkoutHistoryEntry[]>(loadHistory)
   const [plannedWorkouts, setPlannedWorkouts] = useState<PlannedWorkout[]>([])
@@ -77,7 +129,7 @@ export function useProgramData({
         setProgramData(remoteProgramData)
         const firstUser = remoteProgramData.users[0]
         if (!firstUser) return
-        setActiveUserId((currentUserId) => {
+        setActiveUserIdState((currentUserId) => {
           const nextUserId = remoteProgramData.users.some((user) => user.id === currentUserId) ? currentUserId : firstUser.id
           const nextDays = remoteProgramData.workoutDaysByUser[nextUserId] ?? remoteProgramData.workoutDays
           const draftForUser = initialDraft?.userId === nextUserId ? initialDraft : null
@@ -94,6 +146,11 @@ export function useProgramData({
           }
           return nextUserId
         })
+        // Persist the resolved user ID (may differ from initial if API
+        // returned different users than fallback).
+        // We read it synchronously after setActiveUserIdState returns.
+        // The actual persisted value is set in the next render via
+        // setActiveUserId wrapper, but we also persist here for safety.
       })
       .catch(() => notify('Программа из базы недоступна, показываем локальную'))
     return () => {

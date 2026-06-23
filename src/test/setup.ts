@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 
-const localStorageMock = (() => {
+function createStorageMock() {
   let store = new Map<string, string>()
   return {
     get length() {
@@ -22,10 +22,18 @@ const localStorageMock = (() => {
       store.set(key, String(value))
     },
   }
-})()
+}
+
+const localStorageMock = createStorageMock()
+const sessionStorageMock = createStorageMock()
 
 Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
+  configurable: true,
+})
+
+Object.defineProperty(window, 'sessionStorage', {
+  value: sessionStorageMock,
   configurable: true,
 })
 
