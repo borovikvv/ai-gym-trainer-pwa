@@ -1,5 +1,6 @@
 import type { WorkoutHistoryEntry } from './workoutHistory'
 import { formatWeight, pluralRu } from '../lib/format'
+import { isAssistedExercise } from '../lib/muscleGroups'
 
 export type WorkoutDebrief = {
   summary: string
@@ -69,7 +70,12 @@ export function buildWorkoutDebrief(entry: WorkoutHistoryEntry, serverQualitySco
   const completedExercises = exercises.filter((exercise) => exercise.sets.some((set) => set.completed))
   const progressed = exercises
     .filter((exercise) => exercise.progressionType === 'increase')
-    .map((exercise) => `${exercise.exerciseName}: можно осторожно повысить до ${formatWeight(exercise.nextRecommendedWeight)} кг.`)
+    .map((exercise) => {
+      const assisted = isAssistedExercise(exercise.exerciseName)
+      return assisted
+        ? `${exercise.exerciseName}: можно уменьшить помощь до ${formatWeight(exercise.nextRecommendedWeight)} кг.`
+        : `${exercise.exerciseName}: можно осторожно повысить до ${formatWeight(exercise.nextRecommendedWeight)} кг.`
+    })
   const overload = exercises
     .filter((exercise) => exercise.pain || exercise.sets.some((set) => set.completed && set.rpe >= 9) || ['deload', 'pain', 'skip'].includes(exercise.progressionType))
     .map((exercise) => `${exercise.exerciseName}: ${exercise.pain ? 'была боль, прогрессию блокируем.' : exercise.progressionReason}`)

@@ -2,6 +2,7 @@ import type { WorkoutDay } from '../data/mockProgram'
 import type { CompletedExerciseHistory, WorkoutHistoryEntry } from './workoutHistory'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildAllExerciseE1RMHistories, sparklineData, trendDescription, type ExerciseE1RMHistory } from './estimatedOneRepMax'
+import { isAssistedExercise } from '../lib/muscleGroups'
 
 export type ExerciseProgressStatus = 'растёт' | 'можно повысить' | 'закрепляем' | 'застой' | 'перегрузка' | 'была боль' | 'нет данных'
 
@@ -201,7 +202,16 @@ function workoutNote(workout: WorkoutHistoryEntry) {
 }
 
 function focusText(item: ProgressDashboard['exerciseStatuses'][number]) {
-  if (item.status === 'можно повысить') return `${item.exerciseName}: можно пробовать ${item.nextTarget}`
+  if (item.status === 'можно повысить') {
+    // For assisted exercises (gravitron, assisted dips) "progression" means
+    // DECREASING the counterweight, not increasing weight. Phrase accordingly
+    // to avoid confusing the user with "можно пробовать 47.5 кг" when the
+    // number actually went DOWN.
+    const assisted = isAssistedExercise(item.exerciseName)
+    return assisted
+      ? `${item.exerciseName}: можно уменьшать помощь до ${item.nextTarget}`
+      : `${item.exerciseName}: можно пробовать ${item.nextTarget}`
+  }
   if (item.status === 'закрепляем') return `${item.exerciseName}: закрепить ${item.lastResult} без отказа`
   if (item.status === 'была боль') return `${item.exerciseName}: не повышать, проверить технику или замену`
   if (item.status === 'перегрузка') return `${item.exerciseName}: разгрузить вес/объём`
@@ -214,7 +224,11 @@ function summaryText(input: { overview: ProgressDashboard['overview']; exerciseS
   const firstIncrease = input.exerciseStatuses.find((item) => item.status === 'можно повысить')
   const parts = []
   if (firstHold) parts.push(`${firstHold.exerciseName}: ${firstHold.status}`)
-  if (firstIncrease) parts.push(`${firstIncrease.exerciseName}: можно повышать нагрузку`)
+  if (firstIncrease) {
+    // Use the correct verb for assisted vs regular exercises.
+    const assisted = isAssistedExercise(firstIncrease.exerciseName)
+    parts.push(`${firstIncrease.exerciseName}: ${assisted ? 'можно уменьшать помощь' : 'можно повышать нагрузку'}`)
+  }
   return parts.length > 0
     ? parts.join('. ') + '.'
     : 'Динамика спокойная: продолжаем копить историю и повышать нагрузку без рывков.'

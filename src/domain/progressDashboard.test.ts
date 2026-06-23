@@ -146,4 +146,79 @@ describe('buildProgressDashboard', () => {
     expect(dashboard.coachDecisions[0]).toMatchObject({ title: 'Жим лёжа', source: 'правила прогрессии' })
     expect(dashboard.recentWorkouts[0].title).toBe('04.06 · День A')
   })
+
+  it('uses "уменьшать помощь" wording for gravitron exercises in focus and summary', () => {
+    // Gravitron pull-up: progressionType 'increase' means the counterweight
+    // should DECREASE. The UI text must reflect this — saying "можно пробовать
+    // 32.5 кг" without context would confuse (number went DOWN).
+    const gravitronHistory = [
+      {
+        id: 'session-gravitron',
+        userId: 'vyacheslav',
+        workoutDayId: 'day-a',
+        workoutDayName: 'День A',
+        completedAt: '2026-06-04T19:30:00.000Z',
+        totalVolume: 1500,
+        exercises: [
+          {
+            exerciseId: 'assisted-pull-up',
+            exerciseName: 'Подтягивания в гравитроне',
+            pain: false,
+            sets: [
+              { weight: 35, reps: 10, rpe: 7, completed: true },
+              { weight: 35, reps: 10, rpe: 8, completed: true },
+            ],
+            volume: 700,
+            nextRecommendedWeight: 32.5,
+            progressionType: 'increase' as const,
+            progressionReason: 'все подходы на верхней границе — уменьшаем помощь',
+          },
+        ],
+      },
+    ]
+    const gravitronWorkoutDays = [
+      {
+        id: 'day-a',
+        name: 'День A',
+        label: 'Спина',
+        description: '',
+        exercises: [
+          {
+            id: 'assisted-pull-up',
+            name: 'Подтягивания в гравитроне',
+            muscleGroup: 'Спина',
+            prescription: '3x10',
+            setsCount: 3,
+            repMin: 8,
+            repMax: 10,
+            targetWeight: 35,
+            weightStep: 2.5,
+            restSeconds: 90,
+            previous: 'нет данных',
+            todayGoal: 'контроль',
+            coachFocus: 'техника',
+            alternatives: [],
+            instruction: 'техника',
+            commonMistakes: [],
+          },
+        ],
+      },
+    ]
+
+    const dashboard = buildProgressDashboard({
+      history: gravitronHistory,
+      workoutDays: gravitronWorkoutDays,
+      now: new Date('2026-06-05T10:00:00.000Z'),
+    })
+
+    // Focus text should say "уменьшать помощь до", not "можно пробовать"
+    const gravitronFocus = dashboard.focus.find((f) => f.exerciseName === 'Подтягивания в гравитроне')
+    expect(gravitronFocus).toBeDefined()
+    expect(gravitronFocus!.text).toContain('уменьшать помощь')
+    expect(gravitronFocus!.text).not.toContain('можно пробовать')
+
+    // Summary should say "уменьшать помощь", not "повышать нагрузку"
+    expect(dashboard.summary).toContain('уменьшать помощь')
+    expect(dashboard.summary).not.toContain('повышать нагрузку')
+  })
 })

@@ -1,6 +1,6 @@
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, isAssistedExerciseName } from './lib/muscleGroups.js'
 import { computeMesocycleState } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { computeAllAdjustments } from './adaptiveVolumeLandmarks.js'
@@ -196,7 +196,7 @@ function buildExerciseState({ history, exerciseCatalog }) {
       maxEffortSets,
       hardSets,
       pain,
-      target: targetTextForStatus(status),
+      target: targetTextForStatus(status, catalogItem.name),
     }
   }
   return result
@@ -265,8 +265,13 @@ function completedSetsOf(exercise) {
   return (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
 }
 
-function targetTextForStatus(status) {
-  if (status === 'progress_possible') return 'можно повышать нагрузку'
+function targetTextForStatus(status, exerciseName = '') {
+  if (status === 'progress_possible') {
+    // For assisted exercises (gravitron, assisted dips) progression means
+    // decreasing the counterweight, not increasing weight.
+    const assisted = isAssistedExerciseName(exerciseName)
+    return assisted ? 'можно уменьшать помощь' : 'можно повышать нагрузку'
+  }
   if (status === 'consolidate') return 'закрепить вес без отказа'
   if (status === 'pain') return 'не прогрессировать и подобрать замену'
   if (status === 'no_data') return 'собрать первые данные'
