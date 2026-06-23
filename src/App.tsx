@@ -13,6 +13,7 @@ import { GymScreen } from './components/GymScreen'
 import { WorkoutReviewScreen } from './components/WorkoutReviewScreen'
 import { ExerciseLibraryScreen } from './components/ExerciseLibraryScreen'
 import { OnboardingScreen } from './components/OnboardingScreen'
+import { NavigationProvider, CoachProvider, ProgramProvider } from './contexts'
 import { AppShell } from './components/ui'
 import './App.css'
 import type { ExercisePlan, WorkoutDay } from './data/mockProgram'
@@ -434,42 +435,60 @@ function App() {
 
 
   return (
-    <>
-      <AppShell mode={screen === 'session' ? 'gym' : 'default'}>
-        {toast && <div className="toast show">{toast}</div>}
+    <NavigationProvider screen={screen} navigate={navigate}>
+      <CoachProvider
+        coachMemory={coachMemory}
+        coachState={coachState}
+        setCoachMemory={setCoachMemory}
+        setCoachState={setCoachState}
+      >
+        <ProgramProvider value={{
+          users,
+          activeUser,
+          activeUserId,
+          workoutDays,
+          exerciseLibrary: programData.exerciseLibrary,
+          plannedWorkouts,
+          userHistory,
+          nextTargets,
+          coachTodaySummary,
+        }}>
+          <>
+            <AppShell mode={screen === 'session' ? 'gym' : 'default'}>
+              {toast && <div className="toast show">{toast}</div>}
 
-        {screen === 'home' && (
-          <CoachHome
-            users={users}
-            activeUser={activeUser}
-            activeUserId={activeUserId}
-            activeWorkoutDay={activeWorkoutDay}
-            manualWorkoutDaySelected={manualWorkoutDaySelected}
-            workoutDays={workoutDays}
-            plannedWorkouts={plannedWorkouts}
-            scheduledWorkoutDays={scheduledWorkoutDays}
-            allUserWorkoutDays={allUserWorkoutDays}
-            extraExercisesByDay={extraExercisesByDay}
-            extraDayPickerOpen={extraDayPickerOpen}
-            coachTodaySummary={coachTodaySummary}
-            userHistory={userHistory}
-            nextTargets={nextTargets}
-            coachMemory={coachMemory}
-            coachState={coachState}
-            onSelectUser={selectUser}
-            onOpenProfile={() => navigate('profile')}
-            onOpenLibrary={() => navigate('library')}
-            onStartWorkout={startWorkout}
-            onSelectWorkoutDay={selectWorkoutDay}
-            onRequestWorkoutToday={() => requestWorkoutToday(selectWorkoutDay)}
-            onAddExtraWorkoutDay={addExtraWorkoutDay}
-            formatWeight={formatWeight}
-            formatDateOnly={formatDateOnly}
-            formatDateTime={formatDateTime}
-            addDays={addDays}
-            todayDateInputValue={todayDateInputValue}
-          />
-        )}
+              {screen === 'home' && (
+                <CoachHome
+                  users={users}
+                  activeUser={activeUser}
+                  activeUserId={activeUserId}
+                  activeWorkoutDay={activeWorkoutDay}
+                  manualWorkoutDaySelected={manualWorkoutDaySelected}
+                  workoutDays={workoutDays}
+                  plannedWorkouts={plannedWorkouts}
+                  scheduledWorkoutDays={scheduledWorkoutDays}
+                  allUserWorkoutDays={allUserWorkoutDays}
+                  extraExercisesByDay={extraExercisesByDay}
+                  extraDayPickerOpen={extraDayPickerOpen}
+                  coachTodaySummary={coachTodaySummary}
+                  userHistory={userHistory}
+                  nextTargets={nextTargets}
+                  coachMemory={coachMemory}
+                  coachState={coachState}
+                  onSelectUser={selectUser}
+                  onOpenProfile={() => navigate('profile')}
+                  onOpenLibrary={() => navigate('library')}
+                  onStartWorkout={startWorkout}
+                  onSelectWorkoutDay={selectWorkoutDay}
+                  onRequestWorkoutToday={() => requestWorkoutToday(selectWorkoutDay)}
+                  onAddExtraWorkoutDay={addExtraWorkoutDay}
+                  formatWeight={formatWeight}
+                  formatDateOnly={formatDateOnly}
+                  formatDateTime={formatDateTime}
+                  addDays={addDays}
+                  todayDateInputValue={todayDateInputValue}
+                />
+              )}
 
         {screen === 'preview' && (
           <PreWorkoutPreview
@@ -651,7 +670,10 @@ function App() {
                   }}
                 />
       )}
-    </>
+          </>
+        </ProgramProvider>
+      </CoachProvider>
+    </NavigationProvider>
   )
 }
 
