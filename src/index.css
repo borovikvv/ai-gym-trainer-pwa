@@ -2,6 +2,9 @@
   box-sizing: border-box;
 }
 
+/* =========================================================================
+   Light theme (default)
+   ========================================================================= */
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
   color: #1d1d1f;
@@ -29,6 +32,56 @@
   --radius-lg: 22px;
   --radius-xl: 30px;
   --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.09);
+
+  /* Used by GymScreen sticky bar (Phase 1) — kept as alias for backwards compat */
+  color-scheme: light;
+}
+
+/* =========================================================================
+   Dark theme — applied via [data-theme="dark"] on <html> or prefers-color-scheme
+   ========================================================================= */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --app-bg: #000000;
+    --bg: #1c1c1e;
+    --border: rgba(255, 255, 255, 0.18);
+    --surface: rgba(28, 28, 30, 0.88);
+    --surface-solid: #1c1c1e;
+    --surface-muted: #2c2c2e;
+    --separator: rgba(255, 255, 255, 0.18);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(235, 235, 245, 0.72);
+    --text-tertiary: rgba(235, 235, 245, 0.48);
+    --accent: #30d158;
+    --accent-pressed: #25c24a;
+    --warning: #ff9f0a;
+    --danger: #ff453a;
+    --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.4);
+    color-scheme: dark;
+    color: #ffffff;
+    background: #000000;
+  }
+}
+
+:root[data-theme="dark"] {
+  --app-bg: #000000;
+  --bg: #1c1c1e;
+  --border: rgba(255, 255, 255, 0.18);
+  --surface: rgba(28, 28, 30, 0.88);
+  --surface-solid: #1c1c1e;
+  --surface-muted: #2c2c2e;
+  --separator: rgba(255, 255, 255, 0.18);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(235, 235, 245, 0.72);
+  --text-tertiary: rgba(235, 235, 245, 0.48);
+  --accent: #30d158;
+  --accent-pressed: #25c24a;
+  --warning: #ff9f0a;
+  --danger: #ff453a;
+  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+  color: #ffffff;
+  background: #000000;
 }
 
 body {

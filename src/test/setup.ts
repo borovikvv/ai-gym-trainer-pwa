@@ -33,3 +33,19 @@ Object.defineProperty(window, 'scrollTo', {
   value: () => undefined,
   writable: true,
 })
+
+// jsdom does not implement matchMedia — provide a minimal polyfill so
+// useTheme and any other caller can run in tests.
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  }),
+})
