@@ -28,7 +28,7 @@ export function saveActiveWorkoutDraft(draft: ActiveWorkoutDraft & { id?: string
   window.localStorage.setItem(ACTIVE_DRAFT_KEY, JSON.stringify(draft))
 }
 
-function clearLocalActiveWorkoutDraft() {
+export function clearLocalActiveWorkoutDraft() {
   window.localStorage.removeItem(ACTIVE_DRAFT_KEY)
 }
 

@@ -12,7 +12,7 @@ import { supabase } from '../lib/supabaseClient'
 import { loadWorkoutHistoryFromSupabase } from '../data/workoutRepository'
 import { isWorkoutApiConfigured, loadActiveWorkoutDraftFromApi, loadWorkoutHistoryFromApi } from '../data/workoutApi'
 import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '../domain/workoutHistory'
-import { saveActiveWorkoutDraft } from './useDraftAutosave'
+import { clearLocalActiveWorkoutDraft, saveActiveWorkoutDraft } from './useDraftAutosave'
 
 export const WORKOUT_HISTORY_STORAGE_KEY = 'ai-gym-trainer:v0.1:history'
 export const ACTIVE_USER_STORAGE_KEY = 'ai-gym-trainer:v0.1:active-user'
@@ -159,12 +159,23 @@ export function useProgramData({
   }, [])
 
   useEffect(() => {
-    if (!isWorkoutApiConfigured || !activeUserId || initialDraft || remoteDraftLoadedUsers.current.has(activeUserId)) return
+    if (!isWorkoutApiConfigured || !activeUserId || remoteDraftLoadedUsers.current.has(activeUserId)) return
     remoteDraftLoadedUsers.current.add(activeUserId)
     let cancelled = false
     loadActiveWorkoutDraftFromApi(activeUserId)
       .then((draft) => {
-        if (cancelled || !draft) return
+        if (cancelled) return
+        if (!draft) {
+          // API has no active draft — clear stale local draft if any.
+          // Without this, a stale localStorage draft (e.g. from before
+          // a DB reset) keeps hasActiveDraft=true indefinitely, causing
+          // the gym tab to skip readiness check-in (issue #32).
+          if (restoredDraftKey) {
+            clearLocalActiveWorkoutDraft()
+            setRestoredDraftKey(null)
+          }
+          return
+        }
         setActiveUserId(draft.userId)
         setActiveWorkoutDayId(draft.workoutDayId)
         setActiveExerciseIndex(draft.activeExerciseIndex)
