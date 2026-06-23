@@ -407,7 +407,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText('Все упражнения программы')).toBeInTheDocument()
     expect(screen.getByText('Все упражнения').closest('details')).not.toHaveAttribute('open')
     expect(screen.getByText(/Жим лёжа: закрепить/i)).toBeInTheDocument()
-    expect(screen.getByText(/Тяга верхнего блока: можно повышать нагрузку/i)).toBeInTheDocument()
+    expect(screen.getByText(/Тяга верхнего блока: можно пробовать 37.5 кг/i)).toBeInTheDocument()
     expect(screen.getByText('Ритм')).toBeInTheDocument()
     expect(screen.getByText('Движение')).toBeInTheDocument()
     expect(screen.getAllByText(/1\s*500 кг/i).length).toBeGreaterThan(0)
