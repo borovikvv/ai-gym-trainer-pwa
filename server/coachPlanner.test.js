@@ -270,7 +270,7 @@ describe('buildSafeCoachPlan — volume landmark clamping', () => {
       coachState: null,
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     const change = plan.changes[0]
@@ -291,7 +291,7 @@ describe('buildSafeCoachPlan — volume landmark clamping', () => {
       coachState: null,
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     const change = plan.changes[0]
@@ -309,7 +309,7 @@ describe('buildSafeCoachPlan — volume landmark clamping', () => {
       coachState: null,
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     const change = plan.changes[0]
@@ -326,7 +326,7 @@ describe('buildSafeCoachPlan — volume landmark clamping', () => {
       coachState: null,
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     expect(plan.changes[0].setsCount).toBe(4)
@@ -393,7 +393,7 @@ describe('buildSafeCoachPlan — mesocycle deload integration', () => {
       coachState: { mesocycle: makeMesocycleDeload() },
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     const change = plan.changes[0]
@@ -420,7 +420,7 @@ describe('buildSafeCoachPlan — mesocycle deload integration', () => {
       coachState: { mesocycle },
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     const change = plan.changes[0]
@@ -438,7 +438,7 @@ describe('buildSafeCoachPlan — mesocycle deload integration', () => {
       coachState: { mesocycle: null },
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     const change = plan.changes[0]
@@ -456,7 +456,7 @@ describe('buildSafeCoachPlan — mesocycle deload integration', () => {
       coachState: null,
       exerciseLibrary: [],
       workoutQualityScore: 80,
-      now: new Date(),
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
     })
 
     expect(plan.changes[0].setsCount).toBe(4)
