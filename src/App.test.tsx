@@ -185,7 +185,9 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByText('Прошлый раз: 50×9 / 50×9 / 50×9')).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('52,5')
+    // Issue #33: weight is now pre-filled from plan (targetWeight=60), not
+    // from history (nextRecommendedWeight=52.5).
+    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
 
     const firstWeight = screen.getByLabelText('Вес, подход 1')
     await user.clear(firstWeight)
@@ -353,8 +355,10 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('62,5 кг')).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('62,5')
+    // Issue #33: weight pre-filled from plan (targetWeight=60), not from
+    // history (nextRecommendedWeight=62.5).
+    expect(screen.getByText('60 кг')).toBeInTheDocument()
+    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
   })
 
   it('shows the progress tab as a trainer dashboard instead of a mock bench-only chart', async () => {
