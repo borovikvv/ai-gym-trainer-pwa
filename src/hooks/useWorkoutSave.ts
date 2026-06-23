@@ -14,6 +14,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { saveWorkoutEntryToSupabase } from '../data/workoutRepository'
 import { createInitialLogs } from './useWorkoutSession'
 import { loadPlannedWorkoutsFromApi, type PlannedWorkout } from '../data/programApi'
+import { enqueueRequest } from '../lib/offlineQueue'
 
 type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library'
 
@@ -86,7 +87,19 @@ export function useWorkoutSave({
                   clearActiveWorkoutDraft()
                   notify(saveResult?.debrief?.summary ? `Тренировка сохранена. ${saveResult.debrief.summary}` : 'Тренировка сохранена в базе')
                 } catch {
-                  notify('Сохранено локально, но API не ответил')
+                  // Issue #39: API failed — enqueue for background sync.
+                  // Data is already in localStorage (saveHistory above),
+                  // so it's not lost. When connectivity returns, the
+                  // queued POST will be replayed automatically.
+                  const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
+                  if (apiBase) {
+                    await enqueueRequest(
+                      `${apiBase}/api/workout-history`,
+                      'POST',
+                      entry,
+                    )
+                  }
+                  notify('Сохранено локально. Отправим в базу при появлении интернета.')
                 }
               } else if (supabase) {
                 try {
