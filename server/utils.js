@@ -59,6 +59,12 @@ export function normalizeLibraryExercise(row) {
       targetWeight: Number(row.target_weight),
     }),
     coachFocus: row.instruction || 'Держи технику под контролем и не гонись за весом.',
+    // Phase 3 issue #12: new metadata fields for coach decision-making
+    targetMuscles: row.target_muscles ?? [],
+    movementPattern: row.movement_pattern ?? null,
+    equipment: row.equipment ?? null,
+    exerciseType: row.exercise_type ?? null,
+    difficultyLevel: row.difficulty_level ?? null,
   }
 }
 
