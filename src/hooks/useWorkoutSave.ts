@@ -13,6 +13,7 @@ import { saveHistory } from './useProgramData'
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { saveWorkoutEntryToSupabase } from '../data/workoutRepository'
 import { createInitialLogs } from './useWorkoutSession'
+import { loadPlannedWorkoutsFromApi, type PlannedWorkout } from '../data/programApi'
 
 type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library'
 
@@ -24,6 +25,7 @@ type UseWorkoutSaveOptions = {
   logs: Record<string, ExerciseLog>
   history: WorkoutHistoryEntry[]
   setHistory: Dispatch<SetStateAction<WorkoutHistoryEntry[]>>
+  setPlannedWorkouts: Dispatch<SetStateAction<PlannedWorkout[]>>
   clearActiveWorkoutDraft: () => void
   reloadProgramDataForUser: (userId: string, toastMessage?: string) => Promise<void>
   setActiveExerciseIndex: Dispatch<SetStateAction<number>>
@@ -40,21 +42,22 @@ export function useWorkoutSave({
   logs,
   history,
   setHistory,
+  setPlannedWorkouts,
   clearActiveWorkoutDraft,
   reloadProgramDataForUser,
   setActiveExerciseIndex,
   setLogs,
   navigate,
-	notify,
+        notify,
 }: UseWorkoutSaveOptions) {
-	const [isSavingWorkout, setIsSavingWorkout] = useState(false)
-	const savingRef = useRef(false)
+        const [isSavingWorkout, setIsSavingWorkout] = useState(false)
+        const savingRef = useRef(false)
 
-	async function saveWorkoutAndExit() {
-		if (savingRef.current) return
-		savingRef.current = true
-		setIsSavingWorkout(true)
-	    const entry = createWorkoutHistoryEntry({
+        async function saveWorkoutAndExit() {
+                if (savingRef.current) return
+                savingRef.current = true
+                setIsSavingWorkout(true)
+            const entry = createWorkoutHistoryEntry({
       userId: activeUserId,
       workoutDayId: activeWorkoutDay.id,
       workoutDayName: activeWorkoutDay.name,
@@ -65,44 +68,51 @@ export function useWorkoutSave({
     const nextHistory = [entry, ...history]
     setHistory(nextHistory)
     saveHistory(nextHistory)
-	    try {
-	      if (isWorkoutApiConfigured) {
-	        try {
-	          const saveResult = await saveWorkoutEntryToApi(entry)
-	          const remoteHistory = await loadWorkoutHistoryFromApi()
-	          setHistory(remoteHistory)
-	          saveHistory(remoteHistory)
-	          await reloadProgramDataForUser(activeUserId)
-	          clearActiveWorkoutDraft()
-	          notify(saveResult?.debrief?.summary ? `Тренировка сохранена. ${saveResult.debrief.summary}` : 'Тренировка сохранена в базе')
-	        } catch {
-	          notify('Сохранено локально, но API не ответил')
-	        }
-	      } else if (supabase) {
-	        try {
-	          await saveWorkoutEntryToSupabase(supabase, entry)
-	          clearActiveWorkoutDraft()
-	          notify('Тренировка сохранена в базе')
-	        } catch {
-	          notify('Сохранено локально, но база не ответила')
-	        }
-	      } else {
-	        clearActiveWorkoutDraft()
-	        notify('Тренировка сохранена')
-	      }
-	      setActiveExerciseIndex(0)
-	      const updatedTargets = buildNextTargets(nextHistory.filter((workout) => workout.userId === activeUserId))
-	      setLogs(createInitialLogs(activeWorkoutDay, updatedTargets))
-	      navigate('home', { allowReviewExit: true })
-	    } finally {
-	      savingRef.current = false
-	      setIsSavingWorkout(false)
-	    }
-	  }
+            try {
+              if (isWorkoutApiConfigured) {
+                try {
+                  const saveResult = await saveWorkoutEntryToApi(entry)
+                  const remoteHistory = await loadWorkoutHistoryFromApi()
+                  setHistory(remoteHistory)
+                  saveHistory(remoteHistory)
+                  // Reload plannedWorkouts so completed workouts are filtered out.
+                  // Without this, the stale list still shows the just-completed
+                  // workout as "next" on CoachHome and Gym tab (issue #28).
+                  try {
+                    const freshPlanned = await loadPlannedWorkoutsFromApi(activeUserId)
+                    setPlannedWorkouts(freshPlanned)
+                  } catch { /* non-fatal — planned workouts will refresh on next activeUserId effect */ }
+                  await reloadProgramDataForUser(activeUserId)
+                  clearActiveWorkoutDraft()
+                  notify(saveResult?.debrief?.summary ? `Тренировка сохранена. ${saveResult.debrief.summary}` : 'Тренировка сохранена в базе')
+                } catch {
+                  notify('Сохранено локально, но API не ответил')
+                }
+              } else if (supabase) {
+                try {
+                  await saveWorkoutEntryToSupabase(supabase, entry)
+                  clearActiveWorkoutDraft()
+                  notify('Тренировка сохранена в базе')
+                } catch {
+                  notify('Сохранено локально, но база не ответила')
+                }
+              } else {
+                clearActiveWorkoutDraft()
+                notify('Тренировка сохранена')
+              }
+              setActiveExerciseIndex(0)
+              const updatedTargets = buildNextTargets(nextHistory.filter((workout) => workout.userId === activeUserId))
+              setLogs(createInitialLogs(activeWorkoutDay, updatedTargets))
+              navigate('home', { allowReviewExit: true })
+            } finally {
+              savingRef.current = false
+              setIsSavingWorkout(false)
+            }
+          }
 
-	  return {
-	    saveWorkoutAndExit,
-	    isSavingWorkout,
-	    isWorkoutStorageConfigured: isWorkoutApiConfigured || isSupabaseConfigured,
-	  }
+          return {
+            saveWorkoutAndExit,
+            isSavingWorkout,
+            isWorkoutStorageConfigured: isWorkoutApiConfigured || isSupabaseConfigured,
+          }
 }

@@ -416,6 +416,7 @@ function App() {
     logs,
     history,
     setHistory,
+    setPlannedWorkouts,
     clearActiveWorkoutDraft,
     reloadProgramDataForUser,
     setActiveExerciseIndex,
