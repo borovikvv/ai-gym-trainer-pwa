@@ -102,6 +102,7 @@ function App() {
     plannedWorkouts,
     setPlannedWorkouts,
     restoredDraftKey,
+    setRestoredDraftKey,
   } = useProgramData({
     initialDraft,
     fallbackFirstUserId: fallbackFirstUser.id,
@@ -187,7 +188,7 @@ function App() {
     draftStatus,
     activeDraftId,
     persistWorkoutDraft,
-    clearActiveWorkoutDraft,
+    clearActiveWorkoutDraft: clearDraftOriginal,
   } = useDraftAutosave({
     initialDraft,
     activeUserId,
@@ -195,6 +196,14 @@ function App() {
     activeExerciseIndex,
     formatDateTime,
   })
+  // Wrap clearActiveWorkoutDraft to also reset restoredDraftKey.
+  // Without this, hasActiveDraft stays true after workout save (because
+  // restoredDraftKey is never cleared), causing startWorkout() to skip
+  // the readiness check-in screen and go straight to 'session'.
+  const clearActiveWorkoutDraft = () => {
+    clearDraftOriginal()
+    setRestoredDraftKey(null)
+  }
   const previewWorkoutDay = adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn)
   const exerciseAddSuggestion = screen === 'session'
     ? suggestExerciseToAdd({ workoutDay: activeWorkoutDay, exerciseLibrary: programData.exerciseLibrary })
