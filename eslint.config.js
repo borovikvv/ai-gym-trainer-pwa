@@ -76,6 +76,9 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
+      // Allow @ts-nocheck during gradual TS migration (issue #4)
+      '@typescript-eslint/ban-ts-comment': 'off',
+      '@typescript-eslint/restrict-plus-operands': 'off',
     },
   },
   {

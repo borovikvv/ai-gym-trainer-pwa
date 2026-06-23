@@ -1,3 +1,4 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from './lib/muscleGroups.js'
 
@@ -27,7 +28,7 @@ export function computeCoachMemory({ profile = {}, exerciseLibrary = [], history
   }
 }
 
-function buildExerciseProfiles({ library, history, profile }) {
+function buildExerciseProfiles({ library, history, profile }: any) {
   const profiles = {}
   for (const exercise of library) {
     const sessions = []
@@ -87,7 +88,7 @@ function buildExerciseProfiles({ library, history, profile }) {
   return profiles
 }
 
-function buildMuscleGroupProfiles({ library, history, now, profile, coachState }) {
+function buildMuscleGroupProfiles({ library, history, now, profile, coachState }: any) {
   const profiles = {}
   for (const exercise of library) {
     const key = exercise.muscleKey
@@ -125,7 +126,7 @@ function buildMuscleGroupProfiles({ library, history, now, profile, coachState }
   return profiles
 }
 
-function buildWeeklyBalance({ profile, history, library, now }) {
+function buildWeeklyBalance({ profile, history, library, now }: any) {
   const muscleSetCounts = {}
   const completedWorkoutsLast7Days = history.filter((session) => daysBetween(new Date(session.completedAt), now) <= 7).length
   for (const session of history) {
@@ -147,7 +148,7 @@ function buildWeeklyBalance({ profile, history, library, now }) {
   }
 }
 
-function buildRecommendations({ profile, muscleGroupProfiles, exerciseProfiles, weeklyBalance, coachState, coachDecisionLogs = [] }) {
+function buildRecommendations({ profile, muscleGroupProfiles, exerciseProfiles, weeklyBalance, coachState, coachDecisionLogs = [] }: any) {
   const recommendations = []
   if (profileIsReturningAfterBreak(profile) && muscleGroupProfiles.legs?.status === 'avoid') {
     recommendations.push('Ноги ещё восстанавливаются — не ставить тяжёлую нагрузку ног в ближайшую тренировку.')
@@ -162,7 +163,7 @@ function buildRecommendations({ profile, muscleGroupProfiles, exerciseProfiles, 
   return [...new Set(recommendations)].slice(0, 5)
 }
 
-function buildSummary({ muscleGroupProfiles, weeklyBalance, recommendations }) {
+function buildSummary({ muscleGroupProfiles, weeklyBalance, recommendations }: any) {
   const statuses = Object.values(muscleGroupProfiles)
     .filter((group) => group.lastTrainedDaysAgo !== null)
     .sort((a, b) => Number(a.lastTrainedDaysAgo) - Number(b.lastTrainedDaysAgo))
@@ -172,7 +173,7 @@ function buildSummary({ muscleGroupProfiles, weeklyBalance, recommendations }) {
   return `Память тренера: ${weeklyBalance.completedWorkoutsLast7Days}/${weeklyBalance.plannedWorkoutsPerWeek} тренировок за 7 дней. ${statuses.join('; ')}.${firstRecommendation}`
 }
 
-function emptyMuscleProfile(key) {
+function emptyMuscleProfile(key: any) {
   return {
     key,
     label: MUSCLE_LABELS[key] ?? key,
@@ -187,7 +188,7 @@ function emptyMuscleProfile(key) {
   }
 }
 
-function classifyMuscleStatus(group, profile) {
+function classifyMuscleStatus(group: any, profile: any) {
   if (group.pain) return 'avoid'
   if (profileIsReturningAfterBreak(profile) && group.key === 'legs' && group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 2) return 'avoid'
   if (group.fatigue === 'high') return 'fatigued'
@@ -195,7 +196,7 @@ function classifyMuscleStatus(group, profile) {
   return 'ready'
 }
 
-function classifyFatigue(group) {
+function classifyFatigue(group: any) {
   if (group.maxEffortSetsLast7Days > 0 || group.heavySetsLast7Days >= 3) return 'high'
   if (group.heavySetsLast7Days > 0 || (group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1)) return 'medium'
   return 'low'
@@ -212,7 +213,7 @@ function recommendationForExerciseStatus(status, exerciseName = '') {
   return 'держать качество и добрать план'
 }
 
-function normalizeExerciseLibrary(exerciseLibrary) {
+function normalizeExerciseLibrary(exerciseLibrary: any) {
   return (exerciseLibrary ?? []).map((exercise) => ({
     id: canonicalExerciseId(exercise),
     name: exercise.name,
@@ -224,38 +225,38 @@ function normalizeExerciseLibrary(exerciseLibrary) {
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
-function completedSetsOf(exercise) {
+function completedSetsOf(exercise: any) {
   return (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
 }
 
-function profileIsReturningAfterBreak(profile = {}) {
+function profileIsReturningAfterBreak(profile: any = {}) {
   const level = String(profile.level ?? '').toLowerCase()
   return level.includes('перерыв') || level.includes('возвращ') || level.includes('return') || level.includes('beginner') || level.includes('нович')
 }
 
-function statusText(status) {
+function statusText(status: any) {
   if (status === 'avoid') return 'не грузить тяжело'
   if (status === 'fatigued') return 'усталость высокая'
   if (status === 'medium') return 'умеренно'
   return 'готова'
 }
 
-function daysBetween(from, to) {
+function daysBetween(from: any, to: any) {
   return Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
 }
 
-function wholeDaysBetween(from, to) {
+function wholeDaysBetween(from: any, to: any) {
   const fromDay = new Date(`${new Date(from).toISOString().slice(0, 10)}T00:00:00.000Z`)
   const toDay = new Date(`${new Date(to).toISOString().slice(0, 10)}T00:00:00.000Z`)
   return Math.floor(daysBetween(fromDay, toDay))
 }
 
-function clampNumber(value, min, max, fallback) {
+function clampNumber(value: any, min: any, max: any, fallback: any) {
   const number = Number(value)
   if (!Number.isFinite(number)) return fallback
   return Math.max(min, Math.min(max, number))
 }
 
-function roundNumber(value) {
+function roundNumber(value: any) {
   return Number(Number(value).toFixed(1))
 }

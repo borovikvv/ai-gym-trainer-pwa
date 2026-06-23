@@ -1,3 +1,4 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { buildCoachDecision } from './coachDecision.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
@@ -7,7 +8,7 @@ import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
-export function buildGeneratedPlannedWorkout({ profile = {}, scheduledDate, coachState = {}, coachMemory = null, coachDecision = null, exerciseLibrary = [], history = [], previousGeneratedWorkouts = [] }) {
+export function buildGeneratedPlannedWorkout({ profile = {}, scheduledDate, coachState = {}, coachMemory = null, coachDecision = null, exerciseLibrary = [], history = [], previousGeneratedWorkouts = [] }: any) {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
   const userTrainingPolicy = getUserTrainingPolicy(profile?.userId)
@@ -79,7 +80,7 @@ export function buildGeneratedPlannedWorkout({ profile = {}, scheduledDate, coac
   }
 }
 
-function targetExerciseCount({ targetMinutes, preferences = {} }) {
+function targetExerciseCount({ targetMinutes, preferences = {} }: any) {
   const minutes = Number(targetMinutes)
   const base = !Number.isFinite(minutes)
     ? 5
@@ -89,7 +90,7 @@ function targetExerciseCount({ targetMinutes, preferences = {} }) {
   return base
 }
 
-function orderExercisesForWorkout(exercises) {
+function orderExercisesForWorkout(exercises: any) {
   return [...(exercises ?? [])]
     .map((exercise, index) => ({ exercise, index }))
     .sort((left, right) => {
@@ -99,7 +100,7 @@ function orderExercisesForWorkout(exercises) {
     .map(({ exercise }) => exercise)
 }
 
-function ensureCoreFinisher({ selected, library, coachState, coachMemory, decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, profile, exerciseTarget }) {
+function ensureCoreFinisher({ selected, library, coachState, coachMemory, decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, profile, exerciseTarget }: any) {
   const current = [...(selected ?? [])]
   if (current.length === 0 || workoutIsCoreFocused(current) || current.some((exercise) => normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`) === 'core')) return current
   if (decision?.avoidMuscleGroups?.includes('core') || isRecoveryRestricted('core', weeklyContext) || isCoachMemoryRestricted('core', coachMemory)) return current
@@ -139,12 +140,12 @@ function ensureCoreFinisher({ selected, library, coachState, coachMemory, decisi
   return next
 }
 
-function workoutIsCoreFocused(exercises) {
+function workoutIsCoreFocused(exercises: any) {
   const coreCount = (exercises ?? []).filter((exercise) => normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`) === 'core').length
   return coreCount > 0 && coreCount / Math.max(1, exercises.length) >= 0.6
 }
 
-function findCoreFinisherReplacementIndex(exercises) {
+function findCoreFinisherReplacementIndex(exercises: any) {
   for (let index = exercises.length - 1; index >= 0; index -= 1) {
     const exercise = exercises[index]
     const muscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
@@ -155,7 +156,7 @@ function findCoreFinisherReplacementIndex(exercises) {
   return exercises.length - 1
 }
 
-function exerciseOrderPriority(exercise) {
+function exerciseOrderPriority(exercise: any) {
   const text = normalizeText(`${exercise?.exerciseName ?? exercise?.name ?? ''} ${exercise?.muscleGroup ?? ''}`)
   const muscleKey = normalizeMuscleGroup(text)
   if (muscleKey === 'core') return 70
@@ -168,7 +169,7 @@ function exerciseOrderPriority(exercise) {
   return 60
 }
 
-function compoundMuscleOrder(muscleKey) {
+function compoundMuscleOrder(muscleKey: any) {
   if (muscleKey === 'legs') return 1
   if (muscleKey === 'chest') return 2
   if (muscleKey === 'back') return 3
@@ -176,27 +177,27 @@ function compoundMuscleOrder(muscleKey) {
   return 5
 }
 
-function isPrimaryCompound(text, muscleKey) {
+function isPrimaryCompound(text: any, muscleKey: any) {
   if (muscleKey === 'legs' && /(присед|squat|станов|deadlift|румын|romanian|выпад|lunge)/u.test(text)) return true
   if (muscleKey === 'chest' && /(жим|bench|press|отжим)/u.test(text)) return true
   if (muscleKey === 'back' && /(тяга|row|pulldown|pull-up|подтяг)/u.test(text) && !isLowerBackAccessory(text)) return true
   return false
 }
 
-function isSecondaryCompound(text, muscleKey) {
+function isSecondaryCompound(text: any, muscleKey: any) {
   if (muscleKey === 'shoulders' && /(жим|press)/u.test(text)) return true
   if (muscleKey === 'legs' && /(leg press|жим ногами|step-up|болгар)/u.test(text)) return true
   return false
 }
 
-function isIsolationOrAccessory(text, muscleKey) {
+function isIsolationOrAccessory(text: any, muscleKey: any) {
   if (muscleKey === 'arms') return true
   if (muscleKey === 'legs' && /(сгиб|разгиб|curl|extension|икр|calf)/u.test(text)) return true
   if (muscleKey === 'shoulders' && /(развед|raise|face pull|мах)/u.test(text)) return true
   return false
 }
 
-function isLowerBackAccessory(text) {
+function isLowerBackAccessory(text: any) {
   return /(гиперэкстенз|hyperextension|back extension|разгибание спины)/u.test(text)
 }
 
@@ -225,7 +226,7 @@ function chooseTargetPattern(coachState, preferences = {}, coachDecision = null,
   return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
 }
 
-function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext }) {
+function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext }: any) {
   if (isRecoveryRestricted(muscleKey, weeklyContext) || isCoachMemoryRestricted(muscleKey, coachMemory) || coachDecision?.avoidMuscleGroups?.includes(muscleKey)) return null
   const candidates = library
     .filter((exercise) => exercise.muscleKey === muscleKey)
@@ -237,7 +238,7 @@ function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemo
   return candidates[0] ?? null
 }
 
-function applyPrescription({ exercise, profile, coachState, coachDecision = null, history, lowReadiness, preferences = {}, weeklyContext = {}, userTrainingPolicy = null }) {
+function applyPrescription({ exercise, profile, coachState, coachDecision = null, history, lowReadiness, preferences = {}, weeklyContext = {}, userTrainingPolicy = null }: any) {
   const recent = latestExerciseHistory(history, exercise.id)
   const recentWeight = Number(recent?.nextRecommendedWeight ?? NaN)
   const baseWeight = Number.isFinite(recentWeight) && recentWeight >= 0 ? recentWeight : exercise.targetWeight
@@ -306,7 +307,7 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
   }
 }
 
-function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext = {}, policy = null }) {
+function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext = {}, policy = null }: any) {
   const fatigue = coachState?.muscleGroups?.[exercise.muscleKey]?.fatigue ?? 'unknown'
   const historyText = recent ? 'учтён последний рабочий вес' : 'стартовый вес взят из библиотеки'
   const loadText = lowReadiness ? 'нагрузка снижена из-за восстановления' : 'группа мышц доступна для работы'
@@ -317,7 +318,7 @@ function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyC
   return `${loadText}; ${exercise.muscleGroup}: усталость ${fatigue}; ${historyText}${diversityText ? `; ${diversityText}` : ''}${policyText ? `; ${policyText}` : ''}.`
 }
 
-function buildCoachReason({ coachState, coachMemory, coachDecision, lowReadiness, scheduledDate, preferences = {}, weeklyContext = {} }) {
+function buildCoachReason({ coachState, coachMemory, coachDecision, lowReadiness, scheduledDate, preferences = {}, weeklyContext = {} }: any) {
   const readiness = Number(coachState?.readinessScore ?? 70)
   const recovery = coachState?.recoveryStatus ?? 'unknown'
   const weekly = coachState?.weeklyLoadStatus ?? 'unknown'
@@ -453,12 +454,12 @@ function isCoachDecisionRestricted(exercise, coachDecision = null) {
   return coachDecision.exercisePolicies?.[exercise.id] === 'avoid_today'
 }
 
-function isReturningAfterBreak(profile = {}) {
+function isReturningAfterBreak(profile: any = {}) {
   const level = normalizeText(profile?.level)
   return level.includes('перерыв') || level.includes('возвращ') || level.includes('return') || level.includes('beginner') || level.includes('нович')
 }
 
-function daysBetweenDates(fromDate, toDate) {
+function daysBetweenDates(fromDate: any, toDate: any) {
   if (!fromDate || !toDate) return Number.NaN
   const from = new Date(`${String(fromDate).slice(0, 10)}T00:00:00.000Z`)
   const to = new Date(`${String(toDate).slice(0, 10)}T00:00:00.000Z`)
@@ -466,7 +467,7 @@ function daysBetweenDates(fromDate, toDate) {
   return Math.round((to.getTime() - from.getTime()) / 86_400_000)
 }
 
-function normalizeExerciseLibrary(exerciseLibrary) {
+function normalizeExerciseLibrary(exerciseLibrary: any) {
   return (exerciseLibrary ?? []).map((exercise) => ({
     id: canonicalExerciseId(exercise),
     name: exercise.name,
@@ -481,7 +482,7 @@ function normalizeExerciseLibrary(exerciseLibrary) {
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
-function normalizePreferences(profile = {}) {
+function normalizePreferences(profile: any = {}) {
   const preferences = profile.preferences ?? {}
   const focusAreas = Array.isArray(preferences.focusAreas) ? preferences.focusAreas.map(String).filter(Boolean) : []
   const bannedExerciseNames = Array.isArray(profile.bannedExercises) ? profile.bannedExercises.map(normalizeText).filter(Boolean) : []
@@ -497,49 +498,49 @@ function normalizePreferences(profile = {}) {
   }
 }
 
-function normalizeText(value) {
+function normalizeText(value: any) {
   return String(value ?? '').trim().toLowerCase()
 }
 
-function matchesExercisePreference(exercise, preference) {
+function matchesExercisePreference(exercise: any, preference: any) {
   const normalized = normalizeText(preference)
   if (!normalized) return false
   return normalizeText(exercise.id).includes(normalized) || normalizeText(exercise.name).includes(normalized)
 }
 
-function isBannedExercise(exercise, preferences) {
+function isBannedExercise(exercise: any, preferences: any) {
   return preferences?.bannedExerciseNames?.some((name) => matchesExercisePreference(exercise, name)) ?? false
 }
 
-function isMachineLike(exercise) {
+function isMachineLike(exercise: any) {
   const text = normalizeText(`${exercise.name} ${exercise.muscleGroup}`)
   return text.includes('тренаж') || text.includes('блок') || text.includes('машин') || text.includes('machine') || text.includes('cable')
 }
 
-function isFreeWeightLike(exercise) {
+function isFreeWeightLike(exercise: any) {
   const text = normalizeText(`${exercise.name} ${exercise.muscleGroup}`)
   return text.includes('штанг') || text.includes('гантел') || text.includes('barbell') || text.includes('dumbbell')
 }
 
-function latestExerciseHistory(history, exerciseId) {
+function latestExerciseHistory(history: any, exerciseId: any) {
   return [...(history ?? [])]
     .sort((a, b) => String(b.completedAt).localeCompare(String(a.completedAt)))
     .flatMap((workout) => workout.exercises ?? [])
     .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId))
 }
 
-function intensityForGoal(goal) {
+function intensityForGoal(goal: any) {
   const text = String(goal ?? '').toLowerCase()
   if (text.includes('сил')) return 'strength_quality'
   if (text.includes('масс') || text.includes('рост')) return 'hypertrophy'
   return 'normal'
 }
 
-function isHighFatigue(muscleKey, coachState) {
+function isHighFatigue(muscleKey: any, coachState: any) {
   return coachState?.muscleGroups?.[muscleKey]?.fatigue === 'high'
 }
 
-function clamp(value, min, max) {
+function clamp(value: any, min: any, max: any) {
   const number = Number(value)
   if (!Number.isFinite(number)) return min
   return Math.max(min, Math.min(max, Math.round(number)))

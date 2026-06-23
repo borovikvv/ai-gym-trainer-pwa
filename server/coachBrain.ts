@@ -15,7 +15,7 @@ export async function buildLiveStrategyDecision({
   coachState = {},
   session = {},
   requestLlm = null,
-}) {
+}: any) {
   const rulesDecision = buildRulesLiveStrategy({ userId, exercise, completedSets, coachState, session })
   if (!requestLlm) return rulesDecision
 
@@ -34,7 +34,7 @@ export async function buildLiveStrategyDecision({
   }
 }
 
-export async function requestLlmLiveStrategy({ userId, exercise, completedSets, coachState, session, rulesDecision }) {
+export async function requestLlmLiveStrategy({ userId, exercise, completedSets, coachState, session, rulesDecision }: any) {
   const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
   if (!apiKey) return null
   const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
@@ -56,7 +56,7 @@ export async function requestLlmLiveStrategy({ userId, exercise, completedSets, 
       }),
     })
     if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body = await response.json()
+    const body = await response.json() as any
     const content = body?.choices?.[0]?.message?.content
     if (!content) return null
     return { ...JSON.parse(content), source: 'llm', decisionType: 'live_strategy' }
@@ -66,7 +66,7 @@ export async function requestLlmLiveStrategy({ userId, exercise, completedSets, 
   }
 }
 
-export function clampLiveStrategyDecision(rawDecision, { userId }) {
+export function clampLiveStrategyDecision(rawDecision: any, { userId }) {
   const policy = getUserTrainingPolicy(userId)
   const actions = (Array.isArray(rawDecision?.actions) ? rawDecision.actions : [])
     .filter((action) => ALLOWED_LIVE_ACTIONS.has(action?.type))
@@ -92,7 +92,7 @@ export function clampLiveStrategyDecision(rawDecision, { userId }) {
   }
 }
 
-function buildLiveStrategyPrompt({ userId, exercise, completedSets, coachState, session, rulesDecision }) {
+function buildLiveStrategyPrompt({ userId, exercise, completedSets, coachState, session, rulesDecision }: any) {
   return `Пользователь: ${userId}
 
 Текущее упражнение: ${JSON.stringify(exercise)}
@@ -111,7 +111,7 @@ Coach State: ${JSON.stringify(coachState)}
 Не предлагай отказные подходы подростку. Не повышай нагрузку при боли, низком восстановлении или RPE 9-10. Не добавляй больше одного упражнения.`
 }
 
-function buildRulesLiveStrategy({ userId, completedSets, coachState }) {
+function buildRulesLiveStrategy({ userId, completedSets, coachState }: any) {
   const policy = getUserTrainingPolicy(userId)
   const hardSets = completedSets.filter((set) => Number(set.rpe) >= 9).length
   const lowRecovery = coachState.recoveryStatus === 'low' || Number(coachState.readinessScore ?? 70) < 55

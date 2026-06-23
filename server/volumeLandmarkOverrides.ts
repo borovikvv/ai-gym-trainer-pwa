@@ -1,3 +1,4 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 /**
  * Volume Landmark Overrides — persistence layer
  *

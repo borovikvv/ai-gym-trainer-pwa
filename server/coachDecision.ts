@@ -1,9 +1,10 @@
+// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { normalizeMuscleGroup, labelFor } from './lib/muscleGroups.js'
 import { isDeloadWeek } from './mesocycle.js'
 
 const DEFAULT_PRIORITY = ['back', 'chest', 'arms', 'shoulders', 'core', 'legs']
 
-export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory = null, scheduledDate, previousGeneratedWorkouts = [] } = {}) {
+export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory = null, scheduledDate, previousGeneratedWorkouts = [] }: any = {}) {
   const preferences = profile.preferences ?? {}
   const focusMuscleKeys = (Array.isArray(preferences.focusAreas) ? preferences.focusAreas : [])
     .map(normalizeMuscleGroup)
@@ -17,7 +18,7 @@ export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory 
   const mesocycleIsDeload = isDeloadWeek(coachState?.mesocycle)
   const returningAfterBreak = isReturningAfterBreak(profile)
 
-  for (const [muscleKey, group] of Object.entries(coachMemory?.muscleGroupProfiles ?? {})) {
+  for (const [muscleKey, group] of Object.entries(coachMemory?.muscleGroupProfiles ?? {} as any)) {
     if (group?.status === 'avoid') {
       avoidMuscleGroups.add(muscleKey)
       reasons.push(`${labelFor(muscleKey)} сегодня не грузим тяжело: восстановление ещё неполное.`)
@@ -39,7 +40,7 @@ export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory 
     reasons.push('Готовность снижена — тренировка должна быть умеренной, без тяжёлой нагрузки ног и без отказа.')
   }
 
-  for (const [exerciseId, exercise] of Object.entries(coachMemory?.exerciseProfiles ?? {})) {
+  for (const [exerciseId, exercise] of Object.entries(coachMemory?.exerciseProfiles ?? {} as any)) {
     if (exercise?.status === 'pain') {
       exercisePolicies[exerciseId] = 'avoid_today'
       reasons.push(`${exercise.name}: не ставим сегодня из-за отметки боли.`)
@@ -108,7 +109,7 @@ export function buildCoachDecision({ profile = {}, coachState = {}, coachMemory 
   }
 }
 
-function buildSummary({ type, priorityMuscleGroups, avoidMuscleGroups, loadPolicy }) {
+function buildSummary({ type, priorityMuscleGroups, avoidMuscleGroups, loadPolicy }: any) {
   const priority = priorityMuscleGroups.slice(0, 3).map(labelFor).join(' + ') || 'умеренная общая нагрузка'
   const avoid = avoidMuscleGroups.length ? `; исключаем: ${avoidMuscleGroups.map(labelFor).join(', ')}` : ''
   const typeText = type === 'upper_body_accessory'
@@ -120,12 +121,12 @@ function buildSummary({ type, priorityMuscleGroups, avoidMuscleGroups, loadPolic
   return `${typeText}: ${priority}, ${loadText}${avoid}.`
 }
 
-function isReturningAfterBreak(profile = {}) {
+function isReturningAfterBreak(profile: any = {}) {
   const level = String(profile.level ?? '').toLowerCase()
   return level.includes('перерыв') || level.includes('возвращ') || level.includes('return') || level.includes('beginner') || level.includes('нович')
 }
 
-function daysBetweenDates(fromDate, toDate) {
+function daysBetweenDates(fromDate: any, toDate: any) {
   if (!fromDate || !toDate) return Number.NaN
   const from = new Date(`${String(fromDate).slice(0, 10)}T00:00:00.000Z`)
   const to = new Date(`${String(toDate).slice(0, 10)}T00:00:00.000Z`)
