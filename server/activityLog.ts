@@ -1,6 +1,6 @@
 const PREFIX = 'TRAINER_EVENT'
 
-export function logActivity(event, payload = {}) {
+export function logActivity(event: string, payload: any = {}) {
 	const body = {
 		ts: new Date().toISOString(),
 		event,
@@ -9,7 +9,7 @@ export function logActivity(event, payload = {}) {
 	console.log(`${PREFIX} ${JSON.stringify(body)}`)
 }
 
-export function buildCoachNextSetEvent({ body = {}, recommendation = {}, coachState = null }) {
+export function buildCoachNextSetEvent({ body = {}, recommendation = {}, coachState = null }: any) {
 	const completedSets = Array.isArray(body.completedSets) ? body.completedSets : []
 	const lastSet = completedSets.at(-1)
 	return {
@@ -40,7 +40,7 @@ export function buildCoachNextSetEvent({ body = {}, recommendation = {}, coachSt
 	}
 }
 
-export function buildWorkoutTodayEvent({ userId, plan = {}, coachState = null }) {
+export function buildWorkoutTodayEvent({ userId, plan = {}, coachState = null }: any) {
 	return {
 		userId,
 		mode: plan.mode ?? null,
@@ -55,7 +55,7 @@ export function buildWorkoutTodayEvent({ userId, plan = {}, coachState = null })
 	}
 }
 
-export function buildWorkoutSavedEvent(entry = {}) {
+export function buildWorkoutSavedEvent(entry: any = {}) {
 	const exercises = Array.isArray(entry.exercises) ? entry.exercises : []
 	return {
 		userId: entry.userId ?? null,
@@ -74,7 +74,7 @@ export function buildWorkoutSavedEvent(entry = {}) {
 	}
 }
 
-export function buildProfileUpdatedEvent({ userId, age, workoutsPerWeek, targetWorkoutMinutes, trainingDays = [], preferences = {} }) {
+export function buildProfileUpdatedEvent({ userId, age, workoutsPerWeek, targetWorkoutMinutes, trainingDays = [], preferences = {} }: any) {
 	return {
 		userId,
 		age: numberOrNull(age),
@@ -88,7 +88,7 @@ export function buildProfileUpdatedEvent({ userId, age, workoutsPerWeek, targetW
 	}
 }
 
-export function buildPlannedWeekEvent({ userId, dates = [], rangeStart, rangeEnd, plannedWorkouts = [] }) {
+export function buildPlannedWeekEvent({ userId, dates = [], rangeStart, rangeEnd, plannedWorkouts = [] }: any) {
 	return {
 		userId,
 		dates,
@@ -99,7 +99,7 @@ export function buildPlannedWeekEvent({ userId, dates = [], rangeStart, rangeEnd
 	}
 }
 
-function summarizeSet(set) {
+function summarizeSet(set: any) {
 	return {
 		weight: numberOrNull(set.weight),
 		reps: numberOrNull(set.reps),
@@ -108,7 +108,7 @@ function summarizeSet(set) {
 	}
 }
 
-function numberOrNull(value) {
+function numberOrNull(value: any) {
 	const number = Number(value)
 	return Number.isFinite(number) ? number : null
 }
