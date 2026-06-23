@@ -1,7 +1,7 @@
--- Apply the volume_landmark_overrides migration.
--- Usage: node supabase/apply-volume-landmark-overrides.mjs
---
--- This script is idempotent — safe to run multiple times.
+// Apply the volume_landmark_overrides migration.
+// Usage: node supabase/apply-volume-landmark-overrides.mjs
+//
+// This script is idempotent — safe to run multiple times.
 
 import pkg from 'pg';
 

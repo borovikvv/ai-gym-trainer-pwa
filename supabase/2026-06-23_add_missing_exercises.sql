@@ -29,9 +29,7 @@ insert into public.exercise_library (
   '{"image":"/exercise-guides/dumbbell-bench-press.svg"}'::jsonb,
   3, 8, 12, 16, 2, 90,
   array['средняя груди', 'передняя дельта', 'трицепс'], 'push', 'dumbbell', 'compound', 'intermediate'
-)
-on conflict (id) do nothing,
-
+),
 (
   'cable-crossover', 'Кроссовер на блоках', 'Грудь',
   'Встань между блоками, возьми рукояти, чуть наклонись вперёд. Своди руки дугой перед собой на уровне низа груди, в конце движения сжимай грудные. Возвращай плавно, не бросая вес, сохраняй напряжение в груди на протяжении всего подхода.',
@@ -40,8 +38,7 @@ on conflict (id) do nothing,
   '{"image":"/exercise-guides/generic.svg"}'::jsonb,
   3, 12, 15, 10, 2.5, 60,
   array['низ груди', 'внутренняя часть груди'], 'isolation', 'cable', 'isolation', 'intermediate'
-)
-on conflict (id) do nothing,
+),
 
 -- ============================================================================
 -- СПИНА (+2)
@@ -55,8 +52,7 @@ on conflict (id) do nothing,
   '{"image":"/exercise-guides/generic.svg"}'::jsonb,
   3, 6, 10, 40, 2.5, 120,
   array['широчайшие', 'ромбовидные', 'трапеции', 'задняя дельта'], 'pull', 'barbell', 'compound', 'intermediate'
-)
-on conflict (id) do nothing,
+),
 
 (
   'seated-cable-row', 'Тяга на блоке сидя', 'Спина',
@@ -66,8 +62,7 @@ on conflict (id) do nothing,
   '{"image":"/exercise-guides/seated-cable-row.svg"}'::jsonb,
   3, 8, 12, 35, 2.5, 90,
   array['широчайшие', 'ромбовидные', 'бицепс'], 'pull', 'cable', 'compound', 'beginner'
-)
-on conflict (id) do nothing,
+),
 
 -- ============================================================================
 -- ПЛЕЧИ (+2)
@@ -81,8 +76,7 @@ on conflict (id) do nothing,
   '{"image":"/exercise-guides/lateral-raise.svg"}'::jsonb,
   3, 12, 15, 6, 1, 60,
   array['средняя дельта'], 'isolation', 'dumbbell', 'isolation', 'beginner'
-)
-on conflict (id) do nothing,
+),
 
 (
   'rear-delt-raise-dumbbell', 'Махи гантелями в наклоне на заднюю дельту', 'Задняя дельта',
@@ -92,8 +86,7 @@ on conflict (id) do nothing,
   '{"image":"/exercise-guides/generic.svg"}'::jsonb,
   3, 12, 15, 5, 1, 60,
   array['задняя дельта', 'ромбовидные'], 'pull', 'dumbbell', 'isolation', 'beginner'
-)
-on conflict (id) do nothing,
+),
 
 -- ============================================================================
 -- РУКИ (+2)
@@ -107,8 +100,7 @@ on conflict (id) do nothing,
   '{"image":"/exercise-guides/generic.svg"}'::jsonb,
   3, 8, 12, 20, 2.5, 75,
   array['бицепс', 'предплечье'], 'isolation', 'barbell', 'isolation', 'beginner'
-)
-on conflict (id) do nothing,
+),
 
 (
   'triceps-rope-pushdown', 'Разгибания на блоке с канатом', 'Руки · трицепс',
