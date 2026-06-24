@@ -328,7 +328,7 @@ select:disabled {
 /* components: hero */
 .coach,
 .hero-status {
-  padding: 18px;
+  padding: var(--space-5);
   color: var(--hero-text);
   border-radius: var(--radius-xl);
   background: var(--hero-bg);
@@ -343,8 +343,8 @@ select:disabled {
 .coach h1,
 .hero-status h1,
 .hero-status h2 {
-  margin: 8px 0;
-  font-size: 24px;
+  margin: var(--space-2) 0;
+  font-size: var(--text-heading);
   font-weight: 780;
   line-height: 1.08;
 }
@@ -352,7 +352,7 @@ select:disabled {
 .coach p {
   margin: 0;
   color: var(--hero-text-muted);
-  font-size: 14px;
+  font-size: var(--text-small);
   line-height: 1.42;
 }
 
@@ -360,7 +360,7 @@ select:disabled {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: var(--space-4);
 }
 
 .hero-status__main > div:first-child {
@@ -370,7 +370,7 @@ select:disabled {
 .hero-status__metric {
   flex: 0 0 auto;
   max-width: 42%;
-  font-size: 34px;
+  font-size: var(--text-hero);
   font-weight: 800;
   line-height: 1;
   overflow-wrap: anywhere;
@@ -381,23 +381,23 @@ select:disabled {
 .hero-status__reason {
   margin: 0;
   color: var(--hero-text-muted);
-  font-size: 14px;
+  font-size: var(--text-small);
   line-height: 1.42;
 }
 
 .hero-status__metadata {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .hero-status__reason {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 
 .hero-status__actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 16px;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 
 .hero-status__actions .primary,
@@ -476,7 +476,7 @@ select:disabled {
 .next-card,
 .plan-workout-row,
 .workout-row {
-  padding: 15px;
+  padding: var(--space-4);
   border: 0.5px solid var(--separator);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -485,14 +485,14 @@ select:disabled {
 
 .card h3,
 .day-card h3 {
-  margin: 0 0 6px;
-  font-size: 16px;
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-body);
   line-height: 1.16;
 }
 
 .preview-exercise-list {
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .preview-exercise {
@@ -528,19 +528,19 @@ select:disabled {
 .progress-list,
 .section-list__body {
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .timeline {
-  margin-top: 18px;
+  margin-top: var(--space-5);
 }
 
 .section-list__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .section-list__header h2,
@@ -727,7 +727,7 @@ select:disabled {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .workout-row__copy,
@@ -741,9 +741,9 @@ select:disabled {
 }
 
 .workout-row__copy p {
-  margin-top: 4px;
+  margin-top: var(--space-1);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-small);
   line-height: 1.35;
 }
 
@@ -751,7 +751,7 @@ select:disabled {
   display: block;
   margin-bottom: 3px;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--text-caption);
   font-weight: 700;
 }
 
