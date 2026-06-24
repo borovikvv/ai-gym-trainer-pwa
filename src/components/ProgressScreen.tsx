@@ -1,5 +1,5 @@
 import type { ProgressDashboard } from '../domain/progressDashboard'
-import { HeroStatus, MetricPair, ScreenHeader, SectionList } from './ui'
+import { HeroStatus, ScreenHeader, SectionList } from './ui'
 
 type ProgressScreenProps = {
   progressDashboard: ProgressDashboard
@@ -88,10 +88,6 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
     <section className="screen active progress-screen">
       <ScreenHeader eyebrow="Прогресс" title="Динамика" />
       <span className="sr-only">Панель динамики</span>
-      <span className="sr-only">Обзор за 14 дней</span>
-      <span className="sr-only">Следующий фокус</span>
-      <span className="sr-only">Лучшие движения</span>
-      <span className="sr-only">Все упражнения программы</span>
 
       <HeroStatus
         eyebrow="14 дней"
@@ -103,34 +99,8 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
             <small>{rhythmLabel(progressDashboard.overview.workouts14d)}</small>
           </div>
         )}
-        reason={progressDashboard.summary}
         primaryAction={<span className="badge">{progressDashboard.overview.exercisesGrowing} растёт</span>}
         secondaryAction={<span className="badge">{painSignal}</span>}
-      />
-
-      <div className="progress-signal-grid" aria-label="Короткий обзор прогресса">
-        <div className="progress-signal">
-          <span>Ритм</span>
-          <b>{weeklyTargetText(progressDashboard.overview.workouts14d)}</b>
-          <small>цель на 2 недели</small>
-        </div>
-        <div className="progress-signal">
-          <span>Движение</span>
-          <b>{progressDashboard.overview.exercisesGrowing}</b>
-          <small>упражнений растут</small>
-        </div>
-        <div className="progress-signal">
-          <span>Контроль</span>
-          <b>{painSignal}</b>
-          <small>{progressDashboard.overview.overloadSets} подходов на пределе</small>
-        </div>
-      </div>
-
-      <MetricPair
-        metrics={[
-          { label: 'Тренировок', value: String(progressDashboard.overview.workouts14d), trend: '14 дней' },
-          { label: 'Объём', value: volume14d },
-        ]}
       />
 
       <SectionList title="Следующий фокус">
@@ -149,22 +119,6 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
                   <div className="muted">{item.text}</div>
                 </div>
                 <span className="badge">{item.status}</span>
-              </article>
-            ))}
-          </div>
-        )}
-      </SectionList>
-
-      <SectionList title="Лучшие движения">
-        {bestMovers.length === 0 ? (
-          <div className="muted">Пока нет явного роста. Главная задача — стабильно закрывать тренировки без боли.</div>
-        ) : (
-          <div className="progress-mover-grid">
-            {bestMovers.map((item) => (
-              <article className="progress-mover" key={item.exerciseId}>
-                <span>{item.status}</span>
-                <b>{item.exerciseName}</b>
-                <small>{item.lastResult} → {item.nextTarget}</small>
               </article>
             ))}
           </div>
@@ -208,26 +162,59 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
         </SectionList>
       )}
 
-      <SectionList title="Последние тренировки">
-        {recentWorkouts.length === 0 ? (
-          <div className="muted">Пока нет сохранённых тренировок.</div>
-        ) : recentWorkouts.map((workout) => (
-          <div className="history-line" key={workout.id}>
-            <b>{workout.title}</b>
-            <div className="muted">объём {formatKg(workout.volume)} · {workout.note}</div>
-          </div>
-        ))}
-      </SectionList>
+      {/* Secondary sections — collapsed by default (issue #47) */}
+      <details className="progress-details">
+        <summary>
+          <span>Лучшие движения</span>
+        </summary>
+        <div className="progress-list">
+          {bestMovers.length === 0 ? (
+            <div className="muted">Пока нет явного роста. Главная задача — стабильно закрывать тренировки без боли.</div>
+          ) : (
+            <div className="progress-mover-grid">
+              {bestMovers.map((item) => (
+                <article className="progress-mover" key={item.exerciseId}>
+                  <span>{item.status}</span>
+                  <b>{item.exerciseName}</b>
+                  <small>{item.lastResult} → {item.nextTarget}</small>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
 
-      {coachDecisions.length > 0 && (
-        <SectionList title="Почему так">
-          {coachDecisions.map((decision, index) => (
-            <div className="decision" key={`${decision.title}-${index}`}>
-              <b>{decision.title}</b>
-              <div className="muted">{decision.body}</div>
+      <details className="progress-details">
+        <summary>
+          <span>Последние тренировки</span>
+        </summary>
+        <div className="progress-list">
+          {recentWorkouts.length === 0 ? (
+            <div className="muted">Пока нет сохранённых тренировок.</div>
+          ) : recentWorkouts.map((workout) => (
+            <div className="history-line" key={workout.id}>
+              <b>{workout.title}</b>
+              <div className="muted">объём {formatKg(workout.volume)} · {workout.note}</div>
             </div>
           ))}
-        </SectionList>
+        </div>
+      </details>
+
+      {/* Coach decisions — collapsed by default (issue #46) */}
+      {coachDecisions.length > 0 && (
+        <details className="progress-details">
+          <summary>
+            <span>Почему так</span>
+          </summary>
+          <div className="progress-list">
+            {coachDecisions.map((decision, index) => (
+              <div className="decision" key={`${decision.title}-${index}`}>
+                <b>{decision.title}</b>
+                <div className="muted">{decision.body}</div>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       <details className="progress-details">
