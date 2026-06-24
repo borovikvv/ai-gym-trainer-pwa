@@ -79,9 +79,14 @@ describe('ProgressScreen', () => {
     render(<ProgressScreen progressDashboard={dashboard} />)
 
     expect(screen.getByRole('heading', { name: 'Динамика' })).toBeInTheDocument()
-    expect(screen.getByText('Движение')).toBeInTheDocument()
+    // Issue #43: progress-signal-grid removed (was duplicating Hero data)
+    expect(screen.queryByText('Ритм')).not.toBeInTheDocument()
+    // "Следующий фокус" is still a SectionList heading
     expect(screen.getByRole('heading', { name: 'Следующий фокус' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Лучшие движения' })).toBeInTheDocument()
+
+    // Issue #47: "Лучшие движения" is now inside <details>, not a heading
+    expect(screen.queryByRole('heading', { name: 'Лучшие движения' })).not.toBeInTheDocument()
+    expect(screen.getByText('Лучшие движения')).toBeInTheDocument()
 
     const details = screen.getByText('Все упражнения').closest('details')
     expect(details).toBeInTheDocument()
