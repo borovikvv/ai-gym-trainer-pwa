@@ -19,6 +19,25 @@ function SparklineSVG({ points, trendDirection, width = 140, height = 36 }: {
   width?: number
   height?: number
 }) {
+  const strokeColor = trendDirection === 'up' ? 'var(--accent)' : trendDirection === 'down' ? 'var(--danger)' : 'var(--text-tertiary)'
+
+  // Single data point — show a dot in the center instead of returning null.
+  // This gives visual feedback that data exists, even without a trend line.
+  if (points.length === 1) {
+    return (
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height={height}
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+        style={{ display: 'block', maxWidth: '100%' }}
+      >
+        <circle cx={(width / 2).toFixed(1)} cy={(height / 2).toFixed(1)} r="4" fill={strokeColor} />
+      </svg>
+    )
+  }
+
   if (points.length < 2) return null
 
   const yMin = Math.min(...points.map((p) => p.y))
@@ -33,8 +52,6 @@ function SparklineSVG({ points, trendDirection, width = 140, height = 36 }: {
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
     })
     .join(' ')
-
-  const strokeColor = trendDirection === 'up' ? 'var(--accent)' : trendDirection === 'down' ? 'var(--danger)' : 'var(--text-tertiary)'
 
   const last = points[points.length - 1]
   const lx = (points.length - 1) * xStep
@@ -147,8 +164,11 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
                     width={140}
                     height={36}
                   />
-                  {ex.sparkline.length < 2 && (
-                    <span className="muted">нужно минимум 2 тренировки</span>
+                  {ex.sparkline.length === 0 && (
+                    <span className="muted">нет данных</span>
+                  )}
+                  {ex.sparkline.length === 1 && (
+                    <span className="muted">1 тренировка — график появится после 2-й</span>
                   )}
                 </div>
                 <div className="e1rm-sparkline-card__footer">
