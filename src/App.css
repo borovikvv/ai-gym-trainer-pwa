@@ -944,7 +944,6 @@ select:disabled {
 }
 
 .progress-signal,
-.progress-task,
 .progress-mover,
 .progress-empty,
 .progress-details {
@@ -982,16 +981,26 @@ select:disabled {
 
 .progress-task-list {
   display: grid;
-  gap: 10px;
+  gap: 0;
 }
 
 .progress-task {
+  /* Issue #45: list-row style instead of card — border-top divider,
+     no background/border/shadow. Visual hierarchy: Hero and actionable
+     items are cards; focus tasks are a list within a card. */
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: flex-start;
-  gap: 10px;
-  padding: 13px;
-  border-radius: var(--radius-lg);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 0.5px solid var(--separator);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.progress-task:first-child {
+  border-top: 0;
 }
 
 .progress-task__index {
@@ -1016,8 +1025,8 @@ select:disabled {
 
 .progress-mover-grid {
   display: flex;
-  gap: 10px;
-  padding: 1px 2px 5px;
+  gap: var(--space-3);
+  padding: 1px 2px var(--space-1);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
@@ -1027,7 +1036,7 @@ select:disabled {
   display: grid;
   flex: 0 0 156px;
   min-height: 118px;
-  padding: 12px;
+  padding: var(--space-3);
   align-content: space-between;
   border-radius: var(--radius-lg);
   scroll-snap-align: start;
@@ -1038,8 +1047,14 @@ select:disabled {
 }
 
 .progress-mover b {
-  font-size: 18px;
+  font-size: var(--text-subtitle);
   overflow-wrap: anywhere;
+  /* Issue #45: clamp long exercise names to 2 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .progress-mover small {
