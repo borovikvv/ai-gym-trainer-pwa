@@ -129,7 +129,6 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
         {focusItems.length === 0 ? (
           <div className="progress-empty">
             <b>Сохрани первую тренировку</b>
-            <div className="muted">После неё здесь появятся 2-3 конкретные цели на следующий зал.</div>
           </div>
         ) : (
           <div className="progress-task-list">
@@ -147,11 +146,15 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
         )}
       </SectionList>
 
-      {/* e1RM Sparklines — Strength Trends */}
-      {progressDashboard.e1RMHistories.length > 0 && (
+      {/* e1RM Sparklines — Strength Trends.
+          Issue #55: only show exercises with >= 2 data points.
+          Exercises with 1 or 0 points have no useful visualization. */}
+      {progressDashboard.e1RMHistories.filter((ex) => ex.sparkline.length >= 2).length > 0 && (
         <SectionList title="Сила (e1RM)">
           <div className="e1rm-sparkline-grid">
-            {progressDashboard.e1RMHistories.map((ex) => (
+            {progressDashboard.e1RMHistories
+              .filter((ex) => ex.sparkline.length >= 2)
+              .map((ex) => (
               <article className="e1rm-sparkline-card" key={ex.exerciseId}>
                 <div className="e1rm-sparkline-card__header">
                   <b>{ex.exerciseName}</b>
@@ -164,22 +167,18 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
                     width={140}
                     height={36}
                   />
-                  {ex.sparkline.length === 0 && (
-                    <span className="muted">нет данных</span>
-                  )}
-                  {ex.sparkline.length === 1 && (
-                    <span className="muted">1 тренировка — график появится после 2-й</span>
-                  )}
                 </div>
                 <div className="e1rm-sparkline-card__footer">
                   <small className="e1rm-sparkline-card__muscle">{ex.muscleGroup}</small>
-                  <small className={
-                    ex.trendDirection === 'up' ? 'e1rm-trend--up'
-                    : ex.trendDirection === 'down' ? 'e1rm-trend--down'
-                    : 'muted'
-                  }>
-                    {ex.trendText}
-                  </small>
+                  {ex.trendDirection !== 'insufficient_data' && (
+                    <small className={
+                      ex.trendDirection === 'up' ? 'e1rm-trend--up'
+                      : ex.trendDirection === 'down' ? 'e1rm-trend--down'
+                      : 'muted'
+                    }>
+                      {ex.trendText}
+                    </small>
+                  )}
                 </div>
               </article>
             ))}
@@ -194,7 +193,7 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
         </summary>
         <div className="progress-list">
           {bestMovers.length === 0 ? (
-            <div className="muted">Пока нет явного роста. Главная задача — стабильно закрывать тренировки без боли.</div>
+            <div className="muted">Пока нет явного роста.</div>
           ) : (
             <div className="progress-mover-grid">
               {bestMovers.map((item) => (
@@ -215,7 +214,7 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
         </summary>
         <div className="progress-list">
           {recentWorkouts.length === 0 ? (
-            <div className="muted">Пока нет сохранённых тренировок.</div>
+            <div className="muted">История пуста.</div>
           ) : recentWorkouts.map((workout) => (
             <div className="history-line" key={workout.id}>
               <b>{workout.title}</b>
