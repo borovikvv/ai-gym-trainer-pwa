@@ -13,7 +13,7 @@ function formatKg(value: number) {
 // Inline SVG Sparkline
 // ---------------------------------------------------------------------------
 
-function SparklineSVG({ points, trendDirection, width = 120, height = 32 }: {
+function SparklineSVG({ points, trendDirection, width = 140, height = 36 }: {
   points: Array<{ x: number; y: number }>
   trendDirection: string
   width?: number
@@ -36,16 +36,21 @@ function SparklineSVG({ points, trendDirection, width = 120, height = 32 }: {
 
   const strokeColor = trendDirection === 'up' ? 'var(--accent)' : trendDirection === 'down' ? 'var(--danger)' : 'var(--text-tertiary)'
 
+  const last = points[points.length - 1]
+  const lx = (points.length - 1) * xStep
+  const ly = height - ((last.y - yMin) / yRange) * (height - 4) - 2
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      width="100%"
+      height={height}
+      preserveAspectRatio="xMidYMid meet"
+      aria-hidden="true"
+      style={{ display: 'block', maxWidth: '100%' }}
+    >
       <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Dot on the last point */}
-      {(() => {
-        const last = points[points.length - 1]
-        const lx = (points.length - 1) * xStep
-        const ly = height - ((last.y - yMin) / yRange) * (height - 4) - 2
-        return <circle cx={lx.toFixed(1)} cy={ly.toFixed(1)} r="3" fill={strokeColor} />
-      })()}
+      <circle cx={lx.toFixed(1)} cy={ly.toFixed(1)} r="3" fill={strokeColor} />
     </svg>
   )
 }
