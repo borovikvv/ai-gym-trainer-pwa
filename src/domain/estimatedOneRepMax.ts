@@ -1,3 +1,5 @@
+import { getCanonicalExerciseId } from './exerciseIdentity'
+
 /**
  * Estimated One-Rep Max (e1RM) — Helms / RTS formula.
  *
@@ -50,6 +52,10 @@ export function bestE1RMFromExercise(
   for (const set of exercise.sets ?? []) {
     if (!set.completed && set.reps <= 0) continue
     if (set.reps <= 0) continue
+    // Issue #54: skip sets with weight=0 (bodyweight/isometric exercises).
+    // e1RM formula gives 0 for weight=0 which is meaningless — these
+    // exercises (plank, crunches, push-ups) track reps/seconds, not load.
+    if (set.weight <= 0) continue
     const e1rm = estimateE1RM(set.weight, set.reps)
     if (!best || e1rm > best.e1rm) {
       best = {
@@ -153,8 +159,11 @@ export function buildAllExerciseE1RMHistories(
     for (const exercise of session.exercises ?? []) {
       const eid = exercise.exerciseId
       if (!eid) continue
-      if (!exerciseMap.has(eid)) {
-        exerciseMap.set(eid, {
+      // Issue #54: group by canonical ID to avoid fragmentation from
+      // replacement/extra suffixes (e.g. 'decline-bench-crunch-extra-178...')
+      const canonicalId = getCanonicalExerciseId(eid)
+      if (!exerciseMap.has(canonicalId)) {
+        exerciseMap.set(canonicalId, {
           name: exercise.exerciseName,
           muscle: exercise.muscleGroup ?? '',
           points: [],
@@ -162,12 +171,13 @@ export function buildAllExerciseE1RMHistories(
       }
       const best = bestE1RMFromExercise(exercise)
       if (best) {
-        exerciseMap.get(eid)!.points.push({ ...best, date: session.completedAt })
+        exerciseMap.get(canonicalId)!.points.push({ ...best, date: session.completedAt })
       }
     }
   }
 
   return [...exerciseMap.entries()]
+    .filter(([, info]) => info.points.length > 0) // Issue #54: skip exercises with 0 data points (all weight=0)
     .map(([id, info]) => {
       info.points.sort((a, b) => a.date.localeCompare(b.date))
       const currentBest = info.points.length > 0
