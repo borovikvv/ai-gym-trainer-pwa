@@ -13,20 +13,27 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 
-  --app-bg: #f5f5f7;
-  --bg: #ffffff;
-  --border: rgba(60, 60, 67, 0.18);
-  --surface: rgba(255, 255, 255, 0.88);
-  --surface-solid: #ffffff;
-  --surface-muted: #f2f2f7;
-  --separator: rgba(60, 60, 67, 0.18);
-  --text-primary: #1d1d1f;
-  --text-secondary: rgba(60, 60, 67, 0.72);
-  --text-tertiary: rgba(60, 60, 67, 0.48);
-  --accent: #34c759;
-  --accent-pressed: #28a745;
-  --warning: #ff9f0a;
-  --danger: #ff3b30;
+  /* Issue #44: Design Tokens — Typography Scale */
+  --text-caption: 12px;   /* подписи, метаданные, badges */
+  --text-small: 13px;     /* вторичный текст, hints */
+  --text-body: 15px;      /* основной текст */
+  --text-subtitle: 18px;  /* подзаголовки */
+  --text-title: 22px;     /* заголовки карточек, секций */
+  --text-heading: 24px;   /* заголовки экранов */
+  --text-hero: 34px;      /* hero-метрики, крупные числа */
+
+  /* Issue #44: Design Tokens — Spacing Scale (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Issue #44: Design Tokens — Radii (already had these) */
   --radius-sm: 12px;
   --radius-md: 16px;
   --radius-lg: 22px;
