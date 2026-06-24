@@ -345,8 +345,8 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
-    expect(screen.getByText(/День A · \d{2}\.\d{2}, \d{2}:\d{2} · 1800 кг/i)).toBeInTheDocument()
-    expect(screen.getByText(/Жим лёжа · 62,5 кг дальше/i)).toBeInTheDocument()
+    // Issue #57: history simplified — name + date in <b>, volume in <div class="muted">
+    expect(screen.getByText(/День A · \d{2}\.\d{2}, \d{2}:\d{2}/i)).toBeInTheDocument()
     const savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
     expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 3, energy: 3, availableMinutes: 60 }))
 
@@ -442,7 +442,8 @@ describe('Coach Timeline workout flow', () => {
     }
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
     await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
-    expect(screen.getByText(/Жим лёжа · 62,5 кг дальше/i)).toBeInTheDocument()
+    // Issue #57: history simplified — no more "X кг дальше" text
+    expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Пользователь'), 'oleg')
     expect(screen.queryByRole('heading', { name: 'История' })).not.toBeInTheDocument()

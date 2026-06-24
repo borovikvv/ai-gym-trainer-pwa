@@ -2,7 +2,6 @@ import { BookOpen, Dumbbell, RotateCcw } from 'lucide-react'
 import type { UserProfile, WorkoutDay } from '../data/mockProgram'
 import type { CoachMemory, CoachState, MesocycleState, PlannedWorkout } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
-import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
 
@@ -153,7 +152,7 @@ export function CoachHome({
   allUserWorkoutDays,
   extraExercisesByDay,
   extraDayPickerOpen,
-  coachTodaySummary,
+  coachTodaySummary: _coachTodaySummary,
   userHistory,
   nextTargets,
   coachMemory,
@@ -228,7 +227,7 @@ export function CoachHome({
             <small>упр.</small>
           </div>
         )}
-        reason={firstExercise && firstExerciseWeight ? `${firstExercise.name}: ${firstExerciseWeight} кг` : 'План готов к старту'}
+        reason={firstExercise && firstExerciseWeight ? `${firstExercise.name}: ${firstExerciseWeight} кг` : undefined}
         primaryAction={(
           <button className="primary" type="button" aria-label="Открыть тренировку" onClick={() => onStartWorkout(heroWorkoutDay)}>
             <Dumbbell aria-hidden="true" />
@@ -246,7 +245,6 @@ export function CoachHome({
 
       {extraDayPickerOpen && (
         <SectionList title="Вне плана">
-          {coachTodaySummary && <p className="compact-note">{coachTodaySummary}</p>}
           <div className="quick">
             {allUserWorkoutDays
               .filter((day) => !scheduledWorkoutDays.some((scheduledDay) => scheduledDay.id === day.id))
@@ -276,9 +274,8 @@ export function CoachHome({
                 key={item.id}
                 eyebrow={formatDateOnly(item.scheduledDate)}
                 title={item.workoutDayName}
-                metadata={day.label}
+                metadata={day.description || day.name}
                 badge={`${day.exercises.length + (extraExercisesByDay[day.id]?.length ?? 0)} упр.`}
-                reason={toHumanCoachText(item.coachReason)}
                 active={day.id === heroWorkoutDay.id}
                 primaryAction={(
                   <button className="secondary compact" type="button" onClick={() => onSelectWorkoutDay(day)} aria-label={`Выбрать ${item.workoutDayName}`}>
@@ -303,10 +300,8 @@ export function CoachHome({
         <SectionList title="История">
           {userHistory.slice(0, 3).map((workout) => (
             <div className="history-line" key={workout.id}>
-              <b>{workout.workoutDayName} · {formatDateTime(workout.completedAt)} · {Math.round(workout.totalVolume)} кг</b>
-              {workout.exercises.slice(0, 1).map((exercise) => (
-                <div className="muted" key={exercise.exerciseId}>{exercise.exerciseName} · {formatWeight(exercise.nextRecommendedWeight)} кг дальше</div>
-              ))}
+              <b>{workout.workoutDayName} · {formatDateTime(workout.completedAt)}</b>
+              <div className="muted">{Math.round(workout.totalVolume)} кг</div>
             </div>
           ))}
         </SectionList>
