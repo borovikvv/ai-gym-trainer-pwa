@@ -1078,10 +1078,11 @@ select:disabled {
 .e1rm-sparkline-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
+  gap: var(--space-1);
+  padding: var(--space-3);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  overflow: visible;
 }
 
 .e1rm-sparkline-card__header {
@@ -1091,8 +1092,13 @@ select:disabled {
 }
 
 .e1rm-sparkline-card__header b {
-  font-size: 15px;
+  font-size: var(--text-body);
   overflow-wrap: anywhere;
+  /* Reset any inherited -webkit-box/line-clamp from .progress-mover b etc. */
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  overflow: visible;
 }
 
 .e1rm-sparkline-card__best {
@@ -1105,11 +1111,16 @@ select:disabled {
 .e1rm-sparkline-card__chart {
   display: flex;
   align-items: center;
+  justify-content: center;
   min-height: 36px;
+  /* Ensure SVG is not clipped by parent overflow */
+  overflow: visible;
 }
 
 .e1rm-sparkline-card__chart svg {
   flex-shrink: 0;
+  max-width: 100%;
+  height: auto;
 }
 
 .e1rm-sparkline-card__footer {
