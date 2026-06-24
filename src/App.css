@@ -1120,8 +1120,6 @@ select:disabled {
 .e1rm-sparkline-card__chart svg {
   flex-shrink: 0;
   max-width: 100%;
-  height: auto;
-  aspect-ratio: 140 / 36;
 }
 
 .e1rm-sparkline-card__footer {
