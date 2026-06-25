@@ -1,15 +1,86 @@
+// Issue #67 (#36 decomposition): all `any` replaced with concrete types.
+import type { WorkoutHistoryEntry, ReadinessCheckIn } from '../../shared/types.js'
+import type { DbClient } from '../dbClient.js'
 import { groupBy, normalizeProgression, normalizeSet } from '../utils.js'
 import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 
-export async function loadWorkoutHistory(client: any) {
+interface WorkoutSetInput {
+  weight?: number
+  reps?: number
+  rpe?: number
+  completed?: boolean
+}
+
+interface ExerciseEntryInput {
+  exerciseId?: string
+  exerciseName?: string
+  pain?: boolean
+  sets?: WorkoutSetInput[]
+  nextRecommendedWeight?: number
+  progressionType?: string
+  progressionReason?: string
+}
+
+interface WorkoutHistoryEntryInput {
+  id?: string
+  userId?: string
+  workoutDayId?: string
+  workoutDayName?: string
+  completedAt?: string
+  totalVolume?: number
+  readinessCheckIn?: ReadinessCheckIn | null
+  qualityScore?: number | null
+  exercises?: ExerciseEntryInput[]
+  debrief?: { qualityScore?: number } | null
+}
+
+interface SanitizedSet {
+  weight: number
+  reps: number
+  rpe: number
+  completed: true
+}
+
+interface SanitizedExercise extends ExerciseEntryInput {
+  pain: boolean
+  sets: SanitizedSet[]
+  volume: number
+  nextRecommendedWeight: number
+}
+
+interface SanitizedEntry extends WorkoutHistoryEntryInput {
+  exercises: SanitizedExercise[]
+  totalVolume: number
+  qualityScore?: number | null
+}
+
+interface WorkoutDraft {
+  id?: string
+  userId?: string
+  workoutDayId?: string
+  activeExerciseIndex?: number
+  savedAt?: string | Date
+  logs?: unknown
+}
+
+interface WorkoutDraftRow {
+  id: string
+  user_id: string
+  workout_day_id: string
+  active_exercise_index: number | string
+  payload: WorkoutDraft | null
+  saved_at: Date | string
+}
+
+export async function loadWorkoutHistory(client: DbClient): Promise<WorkoutHistoryEntry[]> {
   const sessions = await client.query(`
     select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, quality_score, readiness_check_in
     from public.workout_sessions
     order by completed_at desc
   `)
-  const sessionIds = sessions.rows.map((row) => row.id)
+  const sessionIds = sessions.rows.map((row) => String(row.id))
   if (sessionIds.length === 0) return []
 
   const [sets, progressions] = await Promise.all([
@@ -32,16 +103,16 @@ export async function loadWorkoutHistory(client: any) {
   const progressionsBySession = groupBy(progressions.rows, 'session_id')
   return sessions.rows.map((row) => ({
     ...row,
-    completed_at: row.completed_at?.toISOString?.() ?? row.completed_at,
+    completed_at: (row.completed_at as Date)?.toISOString?.() ?? row.completed_at,
     total_volume: Number(row.total_volume),
     quality_score: row.quality_score ? Number(row.quality_score) : null,
-    workout_sets: (setsBySession.get(row.id) ?? []).map(normalizeSet),
-    progression_events: (progressionsBySession.get(row.id) ?? []).map(normalizeProgression),
-  }))
+    workout_sets: (setsBySession.get(String(row.id)) ?? []).map(normalizeSet),
+    progression_events: (progressionsBySession.get(String(row.id)) ?? []).map(normalizeProgression),
+  })) as unknown as WorkoutHistoryEntry[]
 }
 
-export async function saveWorkoutHistoryEntry(client: any, entry) {
-  const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry)
+export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHistoryEntryInput): Promise<{ coachPlan: SafeCoachPlan | null; debrief: ReturnType<typeof buildWorkoutDebrief> }> {
+  const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry) as SanitizedEntry
   await client.query(
     `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, source)
      values ($1, $2, $3, $4, $5, $6, $7, $8, 'pwa-api')
@@ -95,27 +166,27 @@ export async function saveWorkoutHistoryEntry(client: any, entry) {
     )
   }
 
-  const debrief = sanitizedEntry.debrief ?? buildWorkoutDebrief(sanitizedEntry)
+  const debrief = (sanitizedEntry.debrief ?? buildWorkoutDebrief(sanitizedEntry as unknown as Parameters<typeof buildWorkoutDebrief>[0])) as ReturnType<typeof buildWorkoutDebrief>
   sanitizedEntry.qualityScore = debrief.qualityScore
-  await saveWorkoutDebriefRecommendation(client, sanitizedEntry, debrief)
+  await saveWorkoutDebriefRecommendation(client, sanitizedEntry as unknown as Parameters<typeof saveWorkoutDebriefRecommendation>[1], debrief)
   await markPlannedWorkoutCompleted(client, sanitizedEntry)
-  const coachPlan = await planAndApplyNextWorkout(client, { ...sanitizedEntry, debrief })
+  const coachPlan = await planAndApplyNextWorkout(client, { ...sanitizedEntry, debrief } as unknown as Parameters<typeof planAndApplyNextWorkout>[1])
   return { coachPlan, debrief }
 }
 
-export function sanitizeWorkoutHistoryEntry(entry: any) {
+export function sanitizeWorkoutHistoryEntry(entry: WorkoutHistoryEntryInput): WorkoutHistoryEntryInput {
   let droppedSets = 0
   const beforeExerciseCount = (entry?.exercises ?? []).length
   const exercises = (entry?.exercises ?? [])
     .map((exercise) => {
       const beforeSetCount = (exercise.sets ?? []).length
-      const sets = (exercise.sets ?? [])
+      const sets: SanitizedSet[] = (exercise.sets ?? [])
         .filter(isValidCompletedSet)
         .map((set) => ({
           weight: roundGuardrailNumber(set.weight),
           reps: roundGuardrailNumber(set.reps),
           rpe: roundGuardrailNumber(set.rpe),
-          completed: true,
+          completed: true as const,
         }))
       droppedSets += Math.max(0, beforeSetCount - sets.length)
       const volume = roundGuardrailNumber(sets.reduce((sum, set) => sum + set.weight * set.reps, 0))
@@ -146,7 +217,7 @@ export function sanitizeWorkoutHistoryEntry(entry: any) {
   }
 }
 
-function isValidCompletedSet(set: any) {
+function isValidCompletedSet(set: WorkoutSetInput): boolean {
   if (set?.completed === false) return false
   const weight = Number(set?.weight)
   const reps = Number(set?.reps)
@@ -157,11 +228,11 @@ function isValidCompletedSet(set: any) {
   return true
 }
 
-function roundGuardrailNumber(value: any) {
+function roundGuardrailNumber(value: unknown): number {
   return Number(Number(value).toFixed(1))
 }
 
-async function markPlannedWorkoutCompleted(client, entry) {
+async function markPlannedWorkoutCompleted(client: DbClient, entry: SanitizedEntry): Promise<void> {
   if (!entry?.userId || !entry?.workoutDayId) return
   await client.query(
     `update public.planned_workouts
@@ -174,7 +245,7 @@ async function markPlannedWorkoutCompleted(client, entry) {
   )
 }
 
-export async function saveWorkoutDraft(client: any, draft) {
+export async function saveWorkoutDraft(client: DbClient, draft: WorkoutDraft): Promise<string> {
   const id = String(draft.id ?? `${draft.userId ?? 'unknown'}:${draft.workoutDayId ?? 'unknown'}`)
   const userId = String(draft.userId ?? '')
   const workoutDayId = String(draft.workoutDayId ?? '')
@@ -182,7 +253,7 @@ export async function saveWorkoutDraft(client: any, draft) {
   const savedAt = draft.savedAt ? new Date(String(draft.savedAt)) : new Date()
   const savedAtIso = Number.isNaN(savedAt.getTime()) ? new Date().toISOString() : savedAt.toISOString()
   if (!userId || !workoutDayId || !draft.logs) {
-    const error: any = new Error('userId, workoutDayId and logs are required')
+    const error: Error & { statusCode?: number } = new Error('userId, workoutDayId and logs are required')
     error.statusCode = 400
     throw error
   }
@@ -200,7 +271,7 @@ export async function saveWorkoutDraft(client: any, draft) {
   return id
 }
 
-export async function loadActiveWorkoutDraft(client: any, userId) {
+export async function loadActiveWorkoutDraft(client: DbClient, userId: string): Promise<WorkoutDraft | null> {
   if (!userId) return null
   const result = await client.query(
     `select id, user_id, workout_day_id, active_exercise_index, payload, saved_at
@@ -210,7 +281,7 @@ export async function loadActiveWorkoutDraft(client: any, userId) {
      limit 1`,
     [userId],
   )
-  const row = result.rows[0]
+  const row = result.rows[0] as unknown as WorkoutDraftRow | undefined
   if (!row) return null
   return {
     ...(row.payload ?? {}),
@@ -218,13 +289,16 @@ export async function loadActiveWorkoutDraft(client: any, userId) {
     userId: row.user_id,
     workoutDayId: row.workout_day_id,
     activeExerciseIndex: Number(row.active_exercise_index) || 0,
-    savedAt: row.saved_at?.toISOString?.() ?? row.saved_at,
+    savedAt: (row.saved_at as Date)?.toISOString?.() ?? row.saved_at,
   }
 }
 
-export async function deleteWorkoutDraft(client: any, id) {
+export async function deleteWorkoutDraft(client: DbClient, id: string): Promise<void> {
   const current = await client.query('select user_id from public.workout_drafts where id = $1', [id])
   if (current.rowCount === 0) return
   assertAllowedRowOwner(current.rows[0])
   await client.query('delete from public.workout_drafts where id = $1', [id])
 }
+
+// Type re-export for consumers
+import type { SafeCoachPlan } from '../coachPlanner.js'

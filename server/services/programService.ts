@@ -1,4 +1,8 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
+// Issue #67 (#36 decomposition): all `any` replaced with concrete types.
+// Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
+import type { CoachState, WorkoutHistoryEntry } from '../../shared/types.js'
+import type { DbClient } from '../dbClient.js'
+import type { NormalizedProfile } from '../utils.js'
 import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
 import { dayTemplate } from '../programTemplates.js'
@@ -7,7 +11,7 @@ import { assertAllowedRowOwner } from '../privateUsers.js'
 import { loadVolumeLandmarkOverrides, saveVolumeLandmarkAdjustments } from '../volumeLandmarkOverrides.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 
-export async function loadProgramData(client: any) {
+export async function loadProgramData(client: DbClient) {
   const [users, profileRows, dayRows, exerciseRows, libraryRows] = await Promise.all([
     client.query(`
       select id, name, initials, goal, streak
@@ -66,19 +70,19 @@ export async function loadProgramData(client: any) {
     users: users.rows,
     profiles: profileRows.rows.map(normalizeProfile),
     workoutDays: dayRows.rows.map((day) => ({
-      id: day.id,
-      dayKey: day.day_key,
-      name: day.name,
-      label: day.label,
-      description: day.description,
+      id: String(day.id ?? ""),
+      dayKey: String(day.day_key ?? ""),
+      name: String(day.name ?? ""),
+      label: String(day.label ?? ""),
+      description: String(day.description ?? ""),
       userId: day.user_id,
-      exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id: _pdid, sort_order: _so, ...exercise }) => exercise),
+      exercises: (exercisesByDay.get(String(day.id)) ?? []).map(({ program_day_id: _pdid, sort_order: _so, ...exercise }) => exercise),
     })),
     exerciseLibrary: libraryRows.rows.map(normalizeLibraryExercise),
   }
 }
 
-export async function updateUserProfile(client: any, { userId, age, heightCm, weightKg, goal, level, workoutsPerWeek, targetWorkoutMinutes, injuries, equipment, trainingDays, preferredExercises, bannedExercises, preferences, notes }) {
+export async function updateUserProfile(client: DbClient, { userId, age, heightCm, weightKg, goal, level, workoutsPerWeek, targetWorkoutMinutes, injuries, equipment, trainingDays, preferredExercises, bannedExercises, preferences, notes }) {
   const result = await client.query(
     `insert into public.user_profiles
      (user_id, age, height_cm, weight_kg, goal, level, workouts_per_week,
@@ -111,7 +115,7 @@ export async function updateUserProfile(client: any, { userId, age, heightCm, we
   return result.rows[0]
 }
 
-export async function updateProgramExercise(client: any, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus }) {
+export async function updateProgramExercise(client: DbClient, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus }) {
   const owner = await client.query(
     `select p.user_id
      from public.program_exercises pe
@@ -139,19 +143,20 @@ export async function updateProgramExercise(client: any, { id, setsCount, repMin
   return result.rows[0] ?? null
 }
 
-export async function ensureProgramMatchesWorkoutFrequency(client: any, userId, workoutsPerWeek) {
+export async function ensureProgramMatchesWorkoutFrequency(client: DbClient, userId: string, workoutsPerWeek: number) {
   const targetDays = Math.max(1, Math.min(Number(workoutsPerWeek) || 3, 4))
   const programResult = await client.query(
     `select id from public.programs where user_id = $1 and status = 'active' order by updated_at desc limit 1`,
     [userId],
   )
-  const programId = programResult.rows[0]?.id
+  const programId = String(programResult.rows[0]?.id ?? '')
   if (!programId) return
 
   for (let sortOrder = 1; sortOrder <= targetDays; sortOrder += 1) {
     const template = dayTemplate(sortOrder, targetDays)
     if (!template) continue
-    const dayId = `${programId}-${template.dayKey}`
+    const dayKey = String(template.dayKey)
+    const dayId = `${programId}-${dayKey}`
     const existingDay = await client.query('select id from public.program_days where id = $1', [dayId])
     await client.query(
       `insert into public.program_days (id, program_id, day_key, name, label, description, sort_order)
@@ -179,7 +184,7 @@ export async function ensureProgramMatchesWorkoutFrequency(client: any, userId, 
   }
 }
 
-export async function loadUserProfile(client: any, userId) {
+export async function loadUserProfile(client: DbClient, userId: string) {
   const result = await client.query(
     `select user_id, age, sex, height_cm, weight_kg, goal, level, workouts_per_week,
             target_workout_minutes, injuries, limitations, banned_exercises, preferred_exercises,
@@ -187,10 +192,10 @@ export async function loadUserProfile(client: any, userId) {
      from public.user_profiles where user_id = $1`,
     [userId],
   )
-  return result.rows[0] ? normalizeProfile(result.rows[0]) : { userId, workoutsPerWeek: 3, trainingDays: [] }
+  return result.rows[0] ? normalizeProfile(result.rows[0]) : { userId, workoutsPerWeek: 3, trainingDays: [] } as NormalizedProfile
 }
 
-export async function loadUserWorkoutDays(client: any, userId) {
+export async function loadUserWorkoutDays(client: DbClient, userId: string) {
   const days = await client.query(
     `select d.id, d.day_key, d.name, d.label, d.description, d.sort_order
      from public.program_days d
@@ -231,14 +236,14 @@ export async function loadUserWorkoutDays(client: any, userId) {
     [userId],
   )
   const exercisesByDay = groupBy(exercises.rows.map(normalizeProgramExercise), 'program_day_id')
-  return days.rows.map((day) => ({
-    id: day.id,
-    dayKey: day.day_key,
-    name: day.name,
-    label: day.label,
-    description: day.description,
+  return days.rows.map((day: Record<string, unknown>) => ({
+    id: String(day.id ?? ""),
+    dayKey: String(day.day_key ?? ""),
+    name: String(day.name ?? ""),
+    label: String(day.label ?? ""),
+    description: String(day.description ?? ""),
     sortOrder: Number(day.sort_order),
-    exercises: (exercisesByDay.get(day.id) ?? []).map(({ program_day_id: _pdid, sort_order, ...exercise }) => ({
+    exercises: (exercisesByDay.get(String(day.id)) ?? []).map(({ program_day_id: _pdid, sort_order, ...exercise }) => ({
       ...exercise,
       exerciseId: exercise.id,
       sortOrder: sort_order,
@@ -246,12 +251,12 @@ export async function loadUserWorkoutDays(client: any, userId) {
   }))
 }
 
-export async function loadExerciseLibrary(client: any) {
+export async function loadExerciseLibrary(client: DbClient) {
   const result = await client.query(librarySql())
   return result.rows.map(normalizeLibraryExercise)
 }
 
-export async function loadRecentHistory(client: any, userId) {
+export async function loadRecentHistory(client: DbClient, userId: string) {
   const sessions = await client.query(
     `select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume
      from public.workout_sessions
@@ -260,7 +265,7 @@ export async function loadRecentHistory(client: any, userId) {
      limit 8`,
     [userId],
   )
-  const sessionIds = sessions.rows.map((row) => row.id)
+  const sessionIds = sessions.rows.map((row) => String(row.id))
   if (sessionIds.length === 0) return []
   const [sets, progressions] = await Promise.all([
     client.query(
@@ -277,32 +282,32 @@ export async function loadRecentHistory(client: any, userId) {
   const setsBySession = groupBy(sets.rows, 'session_id')
   const progressionsBySession = groupBy(progressions.rows, 'session_id')
   return sessions.rows.map((row) => {
-    const progressionsByExercise = new Map((progressionsBySession.get(row.id) ?? []).map((item) => [item.exercise_id, item]))
-    const setsByExercise = groupBy(setsBySession.get(row.id) ?? [], 'exercise_id')
+    const progressionsByExercise = new Map((progressionsBySession.get(String(row.id)) ?? []).map((item) => [item.exercise_id, item]))
+    const setsByExercise = groupBy(setsBySession.get(String(row.id)) ?? [], 'exercise_id')
     return {
-      id: row.id,
-      userId: row.user_id,
-      workoutDayId: row.workout_day_id,
-      workoutDayName: row.workout_day_name,
-      completedAt: row.completed_at?.toISOString?.() ?? row.completed_at,
+      id: String(row.id ?? ""),
+      userId: String(row.user_id ?? ""),
+      workoutDayId: String(row.workout_day_id ?? ""),
+      workoutDayName: String(row.workout_day_name ?? ""),
+      completedAt: String((row.completed_at as Date)?.toISOString?.() ?? row.completed_at ?? ""),
       totalVolume: Number(row.total_volume),
       exercises: [...setsByExercise.entries()].map(([exerciseId, exerciseSets]) => {
         const progression = progressionsByExercise.get(exerciseId) ?? {}
         return {
           exerciseId,
-          exerciseName: progression.exercise_name ?? exerciseSets[0]?.exercise_name ?? exerciseId,
+          exerciseName: String(progression.exercise_name ?? exerciseSets[0]?.exercise_name ?? exerciseId),
           pain: exerciseSets.some((set) => Boolean(set.pain)),
           sets: exerciseSets.map(normalizeSet),
           nextRecommendedWeight: Number(progression.recommended_weight ?? exerciseSets[0]?.weight ?? 0),
-          progressionType: progression.progression_type ?? 'hold',
-          progressionReason: progression.reason ?? '',
+          progressionType: String(progression.progression_type ?? 'hold'),
+          progressionReason: String(progression.reason ?? ''),
         }
       }),
     }
-  })
+  }) as unknown as WorkoutHistoryEntry[]
 }
 
-export async function loadCoachStateForUser(client: any, userId, now = new Date()) {
+export async function loadCoachStateForUser(client: DbClient, userId: string, now: Date = new Date()): Promise<CoachState> {
   // Two-pass path: compute coachMemory first (which itself needs a first-pass
   // coachState), then recompute coachState with coachMemory available so the
   // mesocycle engine can use weeklyBalance.muscleSetCounts for early MRV
@@ -312,7 +317,7 @@ export async function loadCoachStateForUser(client: any, userId, now = new Date(
   return coachState
 }
 
-export async function loadCoachMemoryForUser(client: any, userId, now = new Date()) {
+export async function loadCoachMemoryForUser(client: DbClient, userId: string, now: Date = new Date()) {
   const [profile, workoutDays, exerciseLibrary, history, coachDecisionLogs, volumeLandmarkOverrides] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
@@ -355,7 +360,7 @@ export async function loadCoachMemoryForUser(client: any, userId, now = new Date
   return { coachMemory, coachState }
 }
 
-export async function loadRecentCoachDecisionLogs(client: any, userId) {
+export async function loadRecentCoachDecisionLogs(client: DbClient, userId: string) {
   const result = await client.query(
     `select session_id, body, source, created_at
      from public.recommendations
@@ -366,31 +371,36 @@ export async function loadRecentCoachDecisionLogs(client: any, userId) {
   )
   return result.rows.map((row) => {
     const payload = parseDecisionLogBody(row.body)
+    const decision = (payload?.decision ?? payload) as Record<string, unknown> | undefined
     return {
       sessionId: row.session_id ?? null,
-      source: row.source ?? payload?.decision?.source ?? 'rules',
-      decisionType: payload?.decision?.decisionType ?? null,
-      decisionSummary: payload?.decision?.summary ?? payload?.decisionSummary ?? '',
+      source: String(row.source ?? decision?.source ?? 'rules'),
+      decisionType: (decision?.decisionType as string) ?? null,
+      decisionSummary: String(decision?.summary ?? payload?.decisionSummary ?? ''),
       createdAt: row.created_at,
     }
   }).filter((row) => row.decisionSummary)
 }
 
-function enrichLibraryForMemory(exerciseLibrary: any, workoutDays: any) {
-  const byId = new Map()
+function enrichLibraryForMemory(exerciseLibrary: unknown[], workoutDays: unknown[]) {
+  const byId = new Map<string, Record<string, unknown>>()
   for (const day of workoutDays ?? []) {
-    for (const exercise of day.exercises ?? []) {
+    const d = day as { exercises?: Array<{ id?: string } & Record<string, unknown>> }
+    for (const exercise of d.exercises ?? []) {
       if (exercise?.id) byId.set(exercise.id, exercise)
     }
   }
-  return (exerciseLibrary ?? []).map((exercise) => ({ ...exercise, ...(byId.get(exercise.id) ?? {}) }))
+  return (exerciseLibrary ?? []).map((exercise) => {
+    const e = exercise as { id?: string } & Record<string, unknown>
+    return { ...e, ...(byId.get(e.id ?? '') ?? {}) }
+  })
 }
 
-function parseDecisionLogBody(body: any) {
+function parseDecisionLogBody(body: unknown) {
   if (!body) return null
-  if (typeof body === 'object') return body
+  if (typeof body === 'object') return body as Record<string, unknown>
   try {
-    return JSON.parse(body)
+    return JSON.parse(String(body)) as Record<string, unknown>
   } catch {
     return null
   }

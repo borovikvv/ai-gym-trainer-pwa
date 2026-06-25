@@ -95,7 +95,7 @@ interface BuildSafeCoachPlanInput {
   workoutQualityScore?: number | null
 }
 
-interface CoachPlanChange {
+export interface CoachPlanChange {
   programExerciseId?: string
   exerciseId?: string
   exerciseName?: string
@@ -109,7 +109,7 @@ interface CoachPlanChange {
   coachFocus?: string
 }
 
-interface SafeCoachPlan {
+export interface SafeCoachPlan {
   source: string
   summary: string
   nextWorkoutDayId: string | null
