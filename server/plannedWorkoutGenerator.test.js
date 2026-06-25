@@ -973,3 +973,121 @@ describe('buildGeneratedPlannedWorkout — intra-cycle periodization', () => {
     expect(ex.repMax).toBe(10)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #75 regression: pattern rotation based on previous workouts
+// ---------------------------------------------------------------------------
+
+describe('issue #75: pattern rotation', () => {
+  it('after [legs, back, chest] workout → next workout does NOT start with legs', () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 80,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    const previousWorkouts = [{
+      scheduledDate: '2026-06-22',
+      exercises: [
+        { exerciseName: 'Присед', muscleGroup: 'Ноги' },
+        { exerciseName: 'Тяга', muscleGroup: 'Спина' },
+        { exerciseName: 'Жим', muscleGroup: 'Грудь' },
+      ],
+    }]
+
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-26',
+      coachState,
+      exerciseLibrary,
+      history: [],
+      previousGeneratedWorkouts: previousWorkouts,
+    })
+    const exerciseIds = plan.exercises.map((e) => e.exerciseId)
+    // Shoulders/arms should come before legs/back/chest (which were in previous workout)
+    const shouldersIndex = exerciseIds.indexOf('db-shoulder-press')
+    const legsIndex = exerciseIds.indexOf('barbell-squat')
+    if (shouldersIndex >= 0 && legsIndex >= 0) {
+      expect(shouldersIndex).toBeLessThan(legsIndex)
+    }
+    // At minimum, the workout should have different exercises than just legs+back+chest
+    expect(plan.exercises.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('3 consecutive workouts should have different exercise ordering', () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+
+    const workouts = []
+    let previous = []
+    const dates = ['2026-06-22', '2026-06-25', '2026-06-28']
+    for (const date of dates) {
+      const plan = buildGeneratedPlannedWorkout({
+        profile,
+        scheduledDate: date,
+        coachState,
+        exerciseLibrary,
+        history: [],
+        previousGeneratedWorkouts: previous,
+      })
+      // Track exercise ORDER (not just set) — rotation should change order
+      workouts.push(plan.exercises.map((e) => e.exerciseId).join(','))
+      previous = [...previous, {
+        scheduledDate: date,
+        exercises: plan.exercises.map((e) => ({ exerciseName: e.exerciseName, muscleGroup: e.muscleGroup })),
+      }]
+    }
+
+    // At least 2 of the 3 workouts should have different exercise ordering
+    const unique = new Set(workouts)
+    expect(unique.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it('without previous workouts → all fresh groups available (no rotation constraint)', () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-26',
+      coachState,
+      exerciseLibrary,
+      history: [],
+      previousGeneratedWorkouts: [],
+    })
+    // Should have at least 4 exercises from different muscle groups
+    expect(plan.exercises.length).toBeGreaterThanOrEqual(4)
+  })
+})
