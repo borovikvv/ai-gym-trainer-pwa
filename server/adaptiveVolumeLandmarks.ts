@@ -27,42 +27,28 @@
  *   - All adjustments are logged with timestamp + reason for manual review.
  */
 
+import type {
+  AgeRecoveryPhase,
+  MuscleVolumeSnapshot,
+  VolumeAdjustmentDecision,
+  VolumeLandmark,
+} from '../shared/types.js'
 import { CANONICAL_MUSCLE_KEYS } from './lib/muscleGroups.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
-
-/**
- * @typedef {Object} MuscleVolumeSnapshot
- * @property {number} weeklySets              — current 7-day set count
- * @property {number} weeksAtOrAboveMrv       — consecutive weeks at/above MRV
- * @property {number} weeksBelowMev           — consecutive weeks below MEV
- * @property {('up'|'down'|'flat'|'insufficient_data')} e1rmTrend
- * @property {string|null} lastAdjustmentIso  — ISO date of last adj, or null
- */
-
-/**
- * @typedef {Object} AdjustmentDecision
- * @property {string} muscleKey
- * @property {'increase_mrv'|'decrease_mrv'|'decrease_mev'|'hold'} action
- * @property {number} delta                   — signed change in sets (0 for hold)
- * @property {string} reason                  — Russian explanation
- * @property {number} newMrv                  — proposed MRV (unchanged for hold)
- * @property {number} newMev                  — proposed MEV (unchanged for hold)
- */
 
 const TWO_WEEKS_MS = 14 * 86_400_000
 
 /**
  * Compute a single muscle group's adjustment.
- *
- * @param {string} muscleKey
- * @param {MuscleVolumeSnapshot} snapshot
- * @param {string} phase
- * @param {Date} now
- * @returns {AdjustmentDecision}
  */
-export function computeMuscleAdjustment(muscleKey: any, snapshot, phase = 'adult', now = new Date()) {
-  const landmarks = getVolumeLandmarks(muscleKey, phase)
-  const result = {
+export function computeMuscleAdjustment(
+  muscleKey: string,
+  snapshot: MuscleVolumeSnapshot,
+  phase: AgeRecoveryPhase = 'adult',
+  now: Date = new Date(),
+): VolumeAdjustmentDecision {
+  const landmarks: VolumeLandmark | null = getVolumeLandmarks(muscleKey, phase)
+  const result: VolumeAdjustmentDecision = {
     muscleKey,
     action: 'hold',
     delta: 0,
@@ -130,28 +116,36 @@ export function computeMuscleAdjustment(muscleKey: any, snapshot, phase = 'adult
 
 /**
  * Compute adjustments for all 6 canonical muscle groups at once.
- *
- * @param {Record<string, MuscleVolumeSnapshot>} snapshots
- * @param {string} phase
- * @param {Date} now
- * @returns {AdjustmentDecision[]}
  */
-export function computeAllAdjustments(snapshots: any, phase = 'adult', now = new Date()) {
+export function computeAllAdjustments(
+  snapshots: Record<string, MuscleVolumeSnapshot>,
+  phase: AgeRecoveryPhase = 'adult',
+  now: Date = new Date(),
+): VolumeAdjustmentDecision[] {
   return CANONICAL_MUSCLE_KEYS.map((key) =>
-    computeMuscleAdjustment(key, snapshots[key] ?? {}, phase, now),
+    computeMuscleAdjustment(key, snapshots[key] ?? emptySnapshot(), phase, now),
   )
+}
+
+function emptySnapshot(): MuscleVolumeSnapshot {
+  return {
+    weeklySets: 0,
+    weeksAtOrAboveMrv: 0,
+    weeksBelowMev: 0,
+    e1rmTrend: 'insufficient_data',
+    lastAdjustmentIso: null,
+  }
 }
 
 /**
  * Apply a list of adjustments to a base landmark table, returning a new
  * per-user landmark override. Adjustments with action 'hold' are ignored.
- *
- * @param {AdjustmentDecision[]} adjustments
- * @param {string} phase
- * @returns {Record<string, { mev: number, mav: number, mrv: number }>}
  */
-export function applyAdjustments(adjustments: any, phase = 'adult') {
-  const result = {}
+export function applyAdjustments(
+  adjustments: VolumeAdjustmentDecision[],
+  phase: AgeRecoveryPhase = 'adult',
+): Record<string, VolumeLandmark> {
+  const result: Record<string, VolumeLandmark> = {}
   for (const adj of adjustments) {
     const base = getVolumeLandmarks(adj.muscleKey, phase)
     if (!base) continue

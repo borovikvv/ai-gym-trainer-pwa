@@ -11,20 +11,21 @@
  *   - mature_adult: lower MRV, slightly lower MAV (slower recovery)
  */
 
+import type { AgeRecoveryPhase, MuscleKey, VolumeLandmark, VolumeRecommendation, VolumeStatus } from '../shared/types.js'
 import { labelFor } from './lib/muscleGroups.js'
 
 // Base landmarks (adult) — working sets per 7-day rolling window
-const BASE_LANDMARKS = {
-  chest:    { mev: 6,  mav: 12, mrv: 16 },
-  back:     { mev: 8,  mav: 14, mrv: 18 },
-  legs:     { mev: 8,  mav: 16, mrv: 20 },
+const BASE_LANDMARKS: Record<Exclude<MuscleKey, 'other'>, VolumeLandmark> = {
+  chest:     { mev: 6,  mav: 12, mrv: 16 },
+  back:      { mev: 8,  mav: 14, mrv: 18 },
+  legs:      { mev: 8,  mav: 16, mrv: 20 },
   shoulders: { mev: 4,  mav: 8,  mrv: 12 },
-  arms:     { mev: 4,  mav: 8,  mrv: 12 },
-  core:     { mev: 3,  mav: 6,  mrv: 10 },
+  arms:      { mev: 4,  mav: 8,  mrv: 12 },
+  core:      { mev: 3,  mav: 6,  mrv: 10 },
 }
 
 // Phase-specific multipliers applied to MAV and MRV (MEV stays the same)
-const PHASE_MULTIPLIERS = {
+const PHASE_MULTIPLIERS: Record<AgeRecoveryPhase, { mav: number; mrv: number }> = {
   teen:         { mav: 0.85, mrv: 0.80 },
   adult:        { mav: 1.00, mrv: 1.00 },
   mature_adult: { mav: 0.90, mrv: 0.85 },
@@ -32,12 +33,13 @@ const PHASE_MULTIPLIERS = {
 
 /**
  * Get volume landmarks for a specific muscle group and age phase.
- * @param {string} muscleKey - canonical muscle key (chest, back, legs, etc.)
- * @param {string} phase - ageRecoveryProfile phase: 'teen' | 'adult' | 'mature_adult'
- * @returns {{ mev: number, mav: number, mrv: number } | null}
+ * @returns landmarks object, or null if muscleKey is unknown.
  */
-export function getVolumeLandmarks(muscleKey: any, phase = 'adult') {
-  const base = BASE_LANDMARKS[muscleKey]
+export function getVolumeLandmarks(
+  muscleKey: string,
+  phase: AgeRecoveryPhase = 'adult',
+): VolumeLandmark | null {
+  const base = BASE_LANDMARKS[muscleKey as Exclude<MuscleKey, 'other'>]
   if (!base) return null
 
   const mult = PHASE_MULTIPLIERS[phase] ?? PHASE_MULTIPLIERS.adult
@@ -51,25 +53,25 @@ export function getVolumeLandmarks(muscleKey: any, phase = 'adult') {
 
 /**
  * Get all volume landmarks for a given phase.
- * @param {string} phase
- * @returns {Record<string, { mev: number, mav: number, mrv: number }>}
  */
-export function getAllVolumeLandmarks(phase = 'adult') {
-  const result = {}
+export function getAllVolumeLandmarks(
+  phase: AgeRecoveryPhase = 'adult',
+): Record<string, VolumeLandmark> {
+  const result: Record<string, VolumeLandmark> = {}
   for (const key of Object.keys(BASE_LANDMARKS)) {
-    result[key] = getVolumeLandmarks(key, phase)
+    const lm = getVolumeLandmarks(key, phase)
+    if (lm) result[key] = lm
   }
   return result
 }
 
 /**
  * Classify current weekly set count against landmarks.
- * Returns 'below_mev' | 'in_mev_mav' | 'above_mav' | 'at_mrv' | 'above_mrv'
- * @param {number} weeklySets - working sets for this muscle group in last 7 days
- * @param {{ mev: number, mav: number, mrv: number }} landmarks
- * @returns {string}
  */
-export function classifyVolumeStatus(weeklySets: any, landmarks) {
+export function classifyVolumeStatus(
+  weeklySets: number,
+  landmarks: VolumeLandmark | null,
+): VolumeStatus {
   if (!landmarks) return 'below_mev'
 
   const { mev, mav, mrv } = landmarks
@@ -83,13 +85,13 @@ export function classifyVolumeStatus(weeklySets: any, landmarks) {
 
 /**
  * Get a volume adjustment recommendation based on current status.
- * Returns an object with suggested sets delta and reason string.
- * @param {string} muscleKey
- * @param {number} weeklySets
- * @param {string} phase
- * @returns {{ action: string, reason: string, priority: number } | null}
+ * @returns recommendation object, or null if muscleKey is unknown.
  */
-export function getVolumeRecommendation(muscleKey: any, weeklySets, phase = 'adult') {
+export function getVolumeRecommendation(
+  muscleKey: string,
+  weeklySets: number,
+  phase: AgeRecoveryPhase = 'adult',
+): VolumeRecommendation | null {
   const landmarks = getVolumeLandmarks(muscleKey, phase)
   if (!landmarks) return null
 
