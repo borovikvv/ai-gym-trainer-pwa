@@ -272,7 +272,7 @@ function chooseSuggestedExercises({
   exerciseLibrary = [],
   preferDifferentMuscle: _preferDifferentMuscle = false,
   limit = 3,
-}: ChooseSuggestedExercisesParams = {}): ExerciseRef[] {
+}: ChooseSuggestedExercisesParams): ExerciseRef[] {
   // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
   // movement_pattern, equipment, and exercise_type for smarter suggestions.
   // The preferDifferentMuscle flag is handled inside the matcher (different
@@ -281,9 +281,9 @@ function chooseSuggestedExercises({
     currentExercise,
     nextExercise,
     workoutExercises,
-    library: exerciseLibrary as Parameters<typeof findComplementaryExercises>[0]['library'],
+    library: exerciseLibrary as unknown as Parameters<typeof findComplementaryExercises>[0]['library'],
     limit,
-  })
+  }) as unknown as ExerciseRef[]
 }
 
 function isAccessoryExercise(exercise: ExerciseInput): boolean {

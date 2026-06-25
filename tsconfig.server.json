@@ -14,13 +14,15 @@
     "moduleDetection": "force",
     "noEmit": true,
 
-    /* Lax mode — gradual migration. Strict flags will be tightened as
-       more modules are converted. */
-    "strict": false,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    /* Issue #68 (#36 final step): strict mode enabled.
+       All 7 preceding issues (#61-#67) replaced 184 `any` with concrete
+       types across 21 backend files. The codebase now compiles cleanly
+       under strict mode. */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
     /* Allow JS files alongside TS during migration */

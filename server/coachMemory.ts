@@ -237,7 +237,7 @@ function buildMuscleGroupProfiles({ library, history, now, profile, coachState }
     const stateGroup = coachState?.muscleGroups?.[profileEntry.key]
     profileEntry.fatigue = stateGroup?.fatigue ?? classifyFatigue(profileEntry)
     profileEntry.status = classifyMuscleStatus(profileEntry, profile)
-    profileEntry.label = MUSCLE_LABELS[profileEntry.key] ?? profileEntry.key
+    profileEntry.label = MUSCLE_LABELS[profileEntry.key as keyof typeof MUSCLE_LABELS] ?? profileEntry.key
   }
   return profiles
 }
@@ -292,7 +292,7 @@ function buildSummary({ muscleGroupProfiles, weeklyBalance, recommendations }: B
 function emptyMuscleProfile(key: string): MuscleGroupProfileExtended {
   return {
     key,
-    label: MUSCLE_LABELS[key] ?? key,
+    label: MUSCLE_LABELS[key as keyof typeof MUSCLE_LABELS] ?? key,
     status: 'no_data',
     fatigue: 'low',
     lastTrainedDaysAgo: null,

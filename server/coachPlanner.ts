@@ -160,7 +160,7 @@ export function buildSafeCoachPlan({
   coachState = null,
   exerciseLibrary = [],
   workoutQualityScore = null,
-}: BuildSafeCoachPlanInput = {}): SafeCoachPlan {
+}: BuildSafeCoachPlanInput): SafeCoachPlan {
   const nextWorkoutDay = chooseNextWorkoutDay({ workoutDays, completedWorkout, now, profile })
   if (!nextWorkoutDay) {
     return {
@@ -197,7 +197,7 @@ export function buildSafeCoachPlan({
       : ''
 
     let muscleGroupSetsLast7Days = 0
-    const ageProfile: UserTrainingPolicy | null = getUserTrainingPolicy(profile?.userId ?? profile)
+    const ageProfile: UserTrainingPolicy | null = getUserTrainingPolicy(profile?.userId ?? (profile as unknown as string))
     const phase = ageProfile?.ageRecoveryProfile?.phase ?? 'adult'
     const volumeMuscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
     const baseLandmarks = getVolumeLandmarks(volumeMuscleKey, phase)
@@ -272,12 +272,12 @@ export function buildSafeCoachPlan({
       ...baseChange,
       exerciseId: replacement.id,
       exerciseName: replacement.name,
-      targetWeight: roundWeight(replacement.targetWeight),
-      setsCount: replacement.setsCount,
-      repMin: replacement.repMin,
-      repMax: replacement.repMax,
-      restSeconds: replacement.restSeconds,
-      todayGoal: formatTodayGoal(replacement.targetWeight, replacement.setsCount, replacement.repMin),
+      targetWeight: roundWeight(replacement.targetWeight ?? 0),
+      setsCount: replacement.setsCount ?? 0,
+      repMin: replacement.repMin ?? 0,
+      repMax: replacement.repMax ?? 0,
+      restSeconds: replacement.restSeconds ?? 0,
+      todayGoal: formatTodayGoal(replacement.targetWeight ?? 0, replacement.setsCount ?? 0, replacement.repMin ?? 0),
       coachFocus: `${replacement.name}: замена вместо ${exercise.name}, потому что ${labelForLower(exerciseMuscleKey(exercise))} ещё не восстановились. Держим умеренный объём и качество движения.`,
     }
   })
