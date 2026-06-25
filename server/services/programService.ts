@@ -82,7 +82,23 @@ export async function loadProgramData(client: DbClient) {
   }
 }
 
-export async function updateUserProfile(client: DbClient, { userId, age, heightCm, weightKg, goal, level, workoutsPerWeek, targetWorkoutMinutes, injuries, equipment, trainingDays, preferredExercises, bannedExercises, preferences, notes }) {
+export async function updateUserProfile(client: DbClient, { userId, age, heightCm, weightKg, goal, level, workoutsPerWeek, targetWorkoutMinutes, injuries, equipment, trainingDays, preferredExercises, bannedExercises, preferences, notes }: {
+  userId: string
+  age?: number | null
+  heightCm?: number | null
+  weightKg?: number | null
+  goal?: string
+  level?: string
+  workoutsPerWeek?: number
+  targetWorkoutMinutes?: number
+  injuries?: string[]
+  equipment?: string[]
+  trainingDays?: string[]
+  preferredExercises?: string[]
+  bannedExercises?: string[]
+  preferences?: Record<string, unknown>
+  notes?: string
+}) {
   const result = await client.query(
     `insert into public.user_profiles
      (user_id, age, height_cm, weight_kg, goal, level, workouts_per_week,
@@ -115,7 +131,16 @@ export async function updateUserProfile(client: DbClient, { userId, age, heightC
   return result.rows[0]
 }
 
-export async function updateProgramExercise(client: DbClient, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus }) {
+export async function updateProgramExercise(client: DbClient, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus }: {
+  id: string
+  setsCount?: number
+  repMin?: number
+  repMax?: number
+  targetWeight?: number
+  weightStep?: number
+  restSeconds?: number
+  coachFocus?: string
+}) {
   const owner = await client.query(
     `select p.user_id
      from public.program_exercises pe
@@ -165,7 +190,7 @@ export async function ensureProgramMatchesWorkoutFrequency(client: DbClient, use
       [dayId, programId, template.dayKey, template.name, template.label, template.description, sortOrder],
     )
 
-    const exerciseCount = existingDay.rowCount > 0
+    const exerciseCount = (existingDay.rowCount ?? 0) > 0
       ? await client.query('select count(*)::int as count from public.program_exercises where program_day_id = $1', [dayId])
       : { rows: [{ count: 0 }] }
     if (Number(exerciseCount.rows[0]?.count ?? 0) > 0) continue
@@ -184,7 +209,7 @@ export async function ensureProgramMatchesWorkoutFrequency(client: DbClient, use
   }
 }
 
-export async function loadUserProfile(client: DbClient, userId: string) {
+export async function loadUserProfile(client: DbClient, userId: string): Promise<NormalizedProfile> {
   const result = await client.query(
     `select user_id, age, sex, height_cm, weight_kg, goal, level, workouts_per_week,
             target_workout_minutes, injuries, limitations, banned_exercises, preferred_exercises,
@@ -192,10 +217,10 @@ export async function loadUserProfile(client: DbClient, userId: string) {
      from public.user_profiles where user_id = $1`,
     [userId],
   )
-  return result.rows[0] ? normalizeProfile(result.rows[0]) : { userId, workoutsPerWeek: 3, trainingDays: [] } as NormalizedProfile
+  return result.rows[0] ? normalizeProfile(result.rows[0]) : ({ userId, workoutsPerWeek: 3, trainingDays: [] } as unknown as NormalizedProfile)
 }
 
-export async function loadUserWorkoutDays(client: DbClient, userId: string) {
+export async function loadUserWorkoutDays(client: DbClient, userId: string): Promise<unknown[]> {
   const days = await client.query(
     `select d.id, d.day_key, d.name, d.label, d.description, d.sort_order
      from public.program_days d
@@ -251,7 +276,7 @@ export async function loadUserWorkoutDays(client: DbClient, userId: string) {
   }))
 }
 
-export async function loadExerciseLibrary(client: DbClient) {
+export async function loadExerciseLibrary(client: DbClient): Promise<unknown[]> {
   const result = await client.query(librarySql())
   return result.rows.map(normalizeLibraryExercise)
 }
@@ -331,7 +356,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   const e1rmHistories = buildAllExerciseE1RMHistories(history)
   // First pass: coachState without coachMemory (mesocycle MRV triggers unavailable).
   const coachStatePass1 = computeCoachState({
-    profile, workoutDays, history, now,
+    profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, now,
     volumeLandmarkOverrides, e1rmHistories,
   })
   const coachMemory = computeCoachMemory({
@@ -344,7 +369,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   })
   // Second pass: coachState WITH coachMemory — mesocycle MRV triggers now work.
   const coachState = computeCoachState({
-    profile, workoutDays, history, coachMemory, now,
+    profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, coachMemory, now,
     volumeLandmarkOverrides, e1rmHistories,
   })
   // Persist any non-hold adjustment decisions to volume_landmark_overrides.
@@ -355,7 +380,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
       await saveVolumeLandmarkAdjustments(client, userId, coachState.volumeAdjustmentLog, now)
     }
   } catch (err) {
-    console.error('volumeLandmarkOverrides save failed (non-fatal):', err.message)
+    console.error('volumeLandmarkOverrides save failed (non-fatal):', (err as Error).message)
   }
   return { coachMemory, coachState }
 }

@@ -67,7 +67,7 @@ export function buildCoachDecision({
   coachMemory = null,
   scheduledDate,
   previousGeneratedWorkouts = [],
-}: BuildCoachDecisionInput = {}): CoachDecision {
+}: BuildCoachDecisionInput): CoachDecision {
   const preferences = profile.preferences ?? {}
   const focusMuscleKeys = (Array.isArray(preferences.focusAreas) ? preferences.focusAreas : [])
     .map(normalizeMuscleGroup)

@@ -244,10 +244,10 @@ export async function createGeneratedPlannedWorkoutForDate(client: DbClient, { u
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
   ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[]]
-  const coachState = computeCoachState({ profile, workoutDays, history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) })
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
-  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary, history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
-  const generated = buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary, history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts })
+  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  const generated = buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"] })
   const id = `planned-${userId}-${scheduledDate}-${Date.now()}`
   await insertGeneratedPlannedWorkout(client, { id, userId, generated, source })
   return (await loadPlannedWorkouts(client, userId, { includePast: true })).find((workout) => workout.id === id)
@@ -260,11 +260,11 @@ export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkou
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
   ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[]]
-  const coachState = computeCoachState({ profile, workoutDays, history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) })
   const previousGeneratedWorkouts = await loadPreviousGeneratedWorkoutContext(client, { userId, scheduledDate, excludeId: plannedWorkoutId })
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
-  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary, history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
-  const generated = buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary, history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts })
+  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  const generated = buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"] })
   await client.query('delete from public.planned_workout_exercises where planned_workout_id = $1', [plannedWorkoutId])
   await updateGeneratedPlannedWorkout(client, { id: plannedWorkoutId, generated })
 }

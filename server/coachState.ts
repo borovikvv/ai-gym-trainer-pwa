@@ -135,14 +135,14 @@ export function computeCoachState({
   coachMemory = null,
   volumeLandmarkOverrides = null,
   e1rmHistories = null,
-}: ComputeCoachStateInput = {}): CoachState {
+}: ComputeCoachStateInput): CoachState {
   const nowDate = new Date(now)
   const normalizedHistory = [...(history ?? [])]
     .filter((session): session is WorkoutHistoryEntryInput => Boolean(session?.completedAt))
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
 
   const lastWorkout = normalizedHistory[0] ?? null
-  const userTrainingPolicy = getUserTrainingPolicy(profile)
+  const userTrainingPolicy = getUserTrainingPolicy(profile as unknown as string)
   const trainingDataConfidence = computeTrainingDataConfidence(normalizedHistory)
   const daysSinceLastWorkout = lastWorkout ? wholeDaysBetween(new Date(lastWorkout.completedAt), nowDate) : null
   const workoutsLast7Days = normalizedHistory.filter((session) => daysBetween(new Date(session.completedAt), nowDate) <= 7).length

@@ -88,9 +88,9 @@ interface WorkoutTodayPlan {
   workoutDay: {
     id: string
     dayKey: string
-    name: string
-    label: string
-    description: string
+    name: string | undefined
+    label: string | undefined
+    description: string | undefined
     exercises: NormalizedExercise[] | LightenedExercise[]
   }
   coachState: CoachState | Partial<CoachState>
@@ -116,7 +116,7 @@ export function buildWorkoutTodayPlan({
   exerciseLibrary = [],
   coachState = {},
   now = new Date(),
-}: BuildWorkoutTodayPlanInput = {}): WorkoutTodayPlan {
+}: BuildWorkoutTodayPlanInput): WorkoutTodayPlan {
   const normalizedDays = normalizeWorkoutDays(workoutDays)
   const nextScheduled = chooseNextScheduledDay(normalizedDays, coachState)
   const shouldUseRecoveryAccessory = shouldBuildRecoveryAccessory(coachState)

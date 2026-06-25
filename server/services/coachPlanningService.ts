@@ -76,12 +76,12 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
     history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],
     now: new Date(completedEntry.completedAt ?? Date.now()),
     coachState,
-    exerciseLibrary,
+    exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildSafeCoachPlan>[0]>["exerciseLibrary"],
     workoutQualityScore: debriefQualityScore,
   })
 
   const llmPlan = await requestLlmCoachPlan({ profile, workoutDays, completedWorkout: completedEntry, history, nextWorkoutDay, coachState, exerciseLibrary })
-  const safePlan = clampCoachPlanToNextWorkout({ plan: llmPlan ?? rulesPlan, nextWorkoutDay, exerciseLibrary })
+  const safePlan = clampCoachPlanToNextWorkout({ plan: llmPlan ?? rulesPlan, nextWorkoutDay, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof clampCoachPlanToNextWorkout>[0]>["exerciseLibrary"] })
   if (safePlan.changes.length === 0) {
     safePlan.changes = rulesPlan.changes
     safePlan.source = rulesPlan.source
@@ -143,7 +143,7 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
   if (!apiKey) return null
   const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
-  const prompt = buildCoachPrompt({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary })
+  const prompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"] })
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',

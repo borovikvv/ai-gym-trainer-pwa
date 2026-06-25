@@ -591,7 +591,7 @@ interface ReasonForExerciseParams {
   recent: CompletedExerciseHistoryEntry | null
   lowReadiness: boolean
   weeklyContext: WeeklyContext
-  policy: string | undefined
+  policy: string | null | undefined
 }
 
 interface CompletedExerciseHistoryEntry {

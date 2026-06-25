@@ -9,7 +9,7 @@ export type DayTemplate = {
 export function dayTemplate(sortOrder: number, workoutsPerWeek: number = 3): DayTemplate | null {
   const targetDays = Math.max(1, Math.min(Number(workoutsPerWeek) || 3, 4))
   const templates = targetDays === 2 ? twoDayFullBodyTemplates() : defaultSplitTemplates()
-  return (templates[sortOrder] ?? null) as DayTemplate | null
+  return (templates as unknown as Record<number, DayTemplate>)[sortOrder] ?? null
 }
 
 function twoDayFullBodyTemplates() {
