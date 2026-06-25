@@ -1,31 +1,79 @@
+// Issue #67 (#36 decomposition): all `any` replaced with concrete types.
+import type { CoachState, WorkoutHistoryEntry } from '../../shared/types.js'
+import type { DbClient } from '../dbClient.js'
+import type { SafeCoachPlan, CoachPlanChange } from '../coachPlanner.js'
 import { COACH_PERSONA, buildCoachPrompt, buildSafeCoachPlan, clampCoachPlanToNextWorkout, chooseNextWorkoutDay } from '../coachPlanner.js'
 import { computeCoachState } from '../coachState.js'
 import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecisionLog.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 
-export async function planAndApplyNextWorkout(client: any, completedEntry) {
+interface CompletedEntry {
+  userId: string
+  id: string
+  completedAt?: string
+  workoutDayId?: string
+  debrief?: { qualityScore?: number } | null
+  exercises?: WorkoutHistoryEntry['exercises']
+}
+
+interface ProfileForPlanning {
+  userId?: string
+  age?: number | null
+  goal?: string
+  level?: string
+  workoutsPerWeek?: number
+  trainingDays?: string[]
+}
+
+interface WorkoutDayRef {
+  id?: string
+  name?: string
+  label?: string
+  exercises?: Array<{ programExerciseId?: string; name?: string }>
+}
+
+interface RequestLlmCoachPlanParams {
+  profile: ProfileForPlanning
+  workoutDays: WorkoutDayRef[]
+  completedWorkout: CompletedEntry
+  history: WorkoutHistoryEntry[]
+  nextWorkoutDay: WorkoutDayRef | null
+  coachState: CoachState | null
+  exerciseLibrary: unknown[]
+}
+
+interface LlmPlan extends Partial<SafeCoachPlan> {
+  source?: string
+  nextWorkoutDayId?: string
+}
+
+interface LlmResponseBody {
+  choices?: Array<{ message?: { content?: string } }>
+}
+
+export async function planAndApplyNextWorkout(client: DbClient, completedEntry: CompletedEntry): Promise<SafeCoachPlan | null> {
   const [profile, workoutDays, history, exerciseLibrary] = await Promise.all([
     loadUserProfile(client, completedEntry.userId),
     loadUserWorkoutDays(client, completedEntry.userId),
     loadRecentHistory(client, completedEntry.userId),
     loadExerciseLibrary(client),
-  ])
+  ]) as unknown as [ProfileForPlanning, WorkoutDayRef[], WorkoutHistoryEntry[], unknown[]]
   const nextWorkoutDay = chooseNextWorkoutDay({ workoutDays, completedWorkout: completedEntry })
   if (!nextWorkoutDay) return null
   const debriefQualityScore = completedEntry.debrief?.qualityScore ?? null
   const coachState = computeCoachState({
     profile,
-    workoutDays,
-    history: [completedEntry, ...history],
+    workoutDays: workoutDays as unknown as Parameters<typeof computeCoachState>[0]['workoutDays'],
+    history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],
     now: new Date(completedEntry.completedAt ?? Date.now()),
     lastWorkoutQualityScore: debriefQualityScore,
   })
 
   const rulesPlan = buildSafeCoachPlan({
     profile,
-    workoutDays,
+    workoutDays: workoutDays as unknown as Parameters<typeof buildSafeCoachPlan>[0]['workoutDays'],
     completedWorkout: completedEntry,
-    history: [completedEntry, ...history],
+    history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],
     now: new Date(completedEntry.completedAt ?? Date.now()),
     coachState,
     exerciseLibrary,
@@ -41,7 +89,7 @@ export async function planAndApplyNextWorkout(client: any, completedEntry) {
   } else {
     const rulesReplacements = new Map(rulesPlan.changes.filter((change) => change.exerciseId).map((change) => [change.programExerciseId, change]))
     safePlan.changes = safePlan.changes.map((change) => {
-      const safeReplacement: any = rulesReplacements.get(change.programExerciseId)
+      const safeReplacement: CoachPlanChange | undefined = rulesReplacements.get(change.programExerciseId)
       if (!safeReplacement || change.exerciseId) return change
       return { ...change, ...safeReplacement, coachFocus: `${safeReplacement.coachFocus} ${change.coachFocus ?? ''}`.slice(0, 500) }
     })
@@ -90,7 +138,7 @@ export async function planAndApplyNextWorkout(client: any, completedEntry) {
   return safePlan
 }
 
-async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary }) {
+async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary }: RequestLlmCoachPlanParams): Promise<LlmPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
   if (!apiKey) return null
   const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
@@ -111,17 +159,17 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
       }),
     })
     if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body: any = await response.json()
+    const body = (await response.json()) as LlmResponseBody
     const content = body?.choices?.[0]?.message?.content
     if (!content) return null
-    return { ...JSON.parse(content), source: 'llm', nextWorkoutDayId: nextWorkoutDay.id }
+    return { ...(JSON.parse(content) as Partial<LlmPlan>), source: 'llm', nextWorkoutDayId: nextWorkoutDay?.id }
   } catch (error) {
     console.warn('LLM coach plan failed, using rules fallback:', error instanceof Error ? error.message : error)
     return null
   }
 }
 
-function formatCoachPlanRecommendation(plan: any, nextWorkoutDay: any) {
+function formatCoachPlanRecommendation(plan: SafeCoachPlan, nextWorkoutDay: WorkoutDayRef): string {
   const changes = (plan.changes ?? [])
     .map((change) => `• ${change.exerciseName ?? exerciseNameByProgramExerciseId(nextWorkoutDay, change.programExerciseId)}: ${change.setsCount}×${change.repMin}–${change.repMax}, ${change.targetWeight} кг. ${change.coachFocus}`)
     .join('\n')
@@ -129,6 +177,6 @@ function formatCoachPlanRecommendation(plan: any, nextWorkoutDay: any) {
   return `${plan.summary}\n\n${changes}${warnings}`
 }
 
-function exerciseNameByProgramExerciseId(day: any, programExerciseId: any) {
-  return day.exercises.find((exercise) => exercise.programExerciseId === programExerciseId)?.name ?? programExerciseId
+function exerciseNameByProgramExerciseId(day: WorkoutDayRef, programExerciseId: string | undefined): string {
+  return day.exercises?.find((exercise) => exercise.programExerciseId === programExerciseId)?.name ?? programExerciseId ?? ''
 }

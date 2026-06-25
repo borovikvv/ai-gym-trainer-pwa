@@ -1,7 +1,15 @@
-export function dayTemplate(sortOrder, workoutsPerWeek = 3) {
+export type DayTemplate = {
+  dayKey: string
+  name: string
+  label: string
+  description: string
+  exercises: Array<[string, number, number, number, number, number, number, number, string, string, string]>
+}
+
+export function dayTemplate(sortOrder: number, workoutsPerWeek: number = 3): DayTemplate | null {
   const targetDays = Math.max(1, Math.min(Number(workoutsPerWeek) || 3, 4))
   const templates = targetDays === 2 ? twoDayFullBodyTemplates() : defaultSplitTemplates()
-  return templates[sortOrder] ?? null
+  return (templates[sortOrder] ?? null) as DayTemplate | null
 }
 
 function twoDayFullBodyTemplates() {
