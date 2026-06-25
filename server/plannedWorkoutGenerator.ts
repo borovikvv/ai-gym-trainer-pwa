@@ -276,7 +276,7 @@ export function buildGeneratedPlannedWorkout({
   const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited
   const targetMinutes = Number(profile?.targetWorkoutMinutes ?? 60)
   const exerciseTarget = targetExerciseCount({ targetMinutes, preferences })
-  const targetPattern = chooseTargetPattern(coachState, preferences, decision, lowReadiness, scheduledDate)
+  const targetPattern = chooseTargetPattern(coachState, preferences, decision, lowReadiness, scheduledDate, previousGeneratedWorkouts)
 
   const selected: GeneratedExercise[] = []
   const usedExerciseIds = new Set<string>()
@@ -462,13 +462,20 @@ function chooseTargetPattern(
   coachDecision: CoachDecisionForGenerator | null = null,
   lowReadiness = false,
   scheduledDate = '',
+  previousGeneratedWorkouts: PreviousGeneratedWorkout[] = [],
 ): string[] {
   const all = CANONICAL_MUSCLE_KEYS
   const avoid = new Set(coachDecision?.avoidMuscleGroups ?? [])
   const fresh = all.filter((muscleKey) => !avoid.has(muscleKey) && !isHighFatigue(muscleKey, coachState))
   const hasFresh = (muscleKey: string) => fresh.includes(muscleKey)
   const pattern: string[] = []
-  for (const priority of coachDecision?.priorityMuscleGroups ?? []) {
+  // Issue #75: reorder priority groups — groups NOT in the previous workout
+  // go first, groups that WERE in the previous workout go later.
+  const recentMuscleKeys = extractRecentMuscleKeys(previousGeneratedWorkouts, scheduledDate)
+  const recentSet = new Set(recentMuscleKeys)
+  const priorityNotRecent = (coachDecision?.priorityMuscleGroups ?? []).filter((p) => !recentSet.has(p))
+  const priorityWasRecent = (coachDecision?.priorityMuscleGroups ?? []).filter((p) => recentSet.has(p))
+  for (const priority of [...priorityNotRecent, ...priorityWasRecent]) {
     if (hasFresh(priority) && !pattern.includes(priority)) pattern.push(priority)
   }
   for (const focus of preferences.focusMuscleKeys ?? []) {
@@ -478,17 +485,57 @@ function chooseTargetPattern(
     for (const key of ['back', 'shoulders', 'arms', 'core']) if (hasFresh(key) && !pattern.includes(key)) pattern.push(key)
     return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
   }
-  // ponytail: alternate double-legs intensity by weekday parity so
-  //  consecutive workouts differ (e.g. Thu vs Sun).
-  const dayWeek = new Date(scheduledDate).getDay() // 0=Sun..6=Sat
-  const heavyLegs = dayWeek % 2 !== 0 // true on Mon/Wed/Fri/Sun, false on Tue/Thu/Sat
-  if (hasFresh('legs')) pattern.push('legs')
-  if (heavyLegs && hasFresh('legs')) pattern.push('legs')
-  if (hasFresh('back')) pattern.push('back')
-  if (hasFresh('chest')) pattern.push('chest')
-  if (hasFresh('shoulders')) pattern.push('shoulders')
-  if (hasFresh('arms')) pattern.push('arms')
+
+  // Issue #75: compute recently used muscle groups from previous workouts.
+  // This replaces the weekday parity rotation (a7d98b5) with real rotation
+  // based on what was actually trained in the previous planned workout.
+  // (recentMuscleKeys and recentSet already computed above)
+
+  // Build the full candidate list in a rotation-aware order.
+  // Muscle groups NOT in the previous workout go first (for variety),
+  // then muscle groups that WERE in the previous workout (lower priority).
+  const notRecent = all.filter((key) => hasFresh(key) && !recentSet.has(key) && !pattern.includes(key))
+  const wasRecent = all.filter((key) => hasFresh(key) && recentSet.has(key) && !pattern.includes(key))
+
+  // Rotation: if previous workout was push-heavy (chest+shoulders+arms),
+  // prioritize pull (back+legs) this time, and vice versa.
+  const pushGroups = new Set(['chest', 'shoulders', 'arms'])
+  const pullGroups = new Set(['back', 'legs'])
+  const wasPushHeavy = recentMuscleKeys.filter((k) => pushGroups.has(k)).length >= 2
+  const wasPullHeavy = recentMuscleKeys.filter((k) => pullGroups.has(k)).length >= 2
+
+  if (wasPushHeavy) {
+    // Previous was push → prioritize pull this time
+    for (const key of ['legs', 'back'] as const) {
+      if (hasFresh(key) && !pattern.includes(key)) pattern.push(key)
+    }
+  } else if (wasPullHeavy) {
+    // Previous was pull → prioritize push this time
+    for (const key of ['chest', 'shoulders', 'arms'] as const) {
+      if (hasFresh(key) && !pattern.includes(key)) pattern.push(key)
+    }
+  }
+
+  // Add remaining not-recent groups (allow duplicates — the main loop
+  // picks different exercises from the same muscle group via usedExerciseIds).
+  for (const key of notRecent) pattern.push(key)
+  // Add recent groups last (they'll only be used if we need more exercises)
+  for (const key of wasRecent) pattern.push(key)
+  // Core finisher always at the end
   if (hasFresh('core')) pattern.push('core')
+
+  // Issue #75: append ALL fresh groups again as duplicates so the main
+  // loop can pick a second exercise from the same muscle group (e.g.
+  // compound back + lower-back accessory). This preserves the old behavior.
+  // Not-recent groups come first (higher priority), then recent groups.
+  for (const key of notRecent) pattern.push(key)
+  for (const key of wasRecent) pattern.push(key)
+  // Also append groups that were already in pattern from priorities/focus
+  // (they were skipped by notRecent/wasRecent due to !pattern.includes).
+  for (const key of fresh) {
+    if (!notRecent.includes(key) && !wasRecent.includes(key)) pattern.push(key)
+  }
+
   return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
 }
 
@@ -787,6 +834,27 @@ function daysBetweenDates(fromDate: unknown, toDate: unknown): number {
   const to = new Date(`${String(toDate).slice(0, 10)}T00:00:00.000Z`)
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return Number.NaN
   return Math.round((to.getTime() - from.getTime()) / 86_400_000)
+}
+
+/**
+ * Issue #75: Extract muscle group keys from the most recent previous workout
+ * (by scheduledDate < current). Used to rotate the target pattern so
+ * consecutive workouts don't repeat the same muscle groups.
+ */
+function extractRecentMuscleKeys(
+  previousGeneratedWorkouts: PreviousGeneratedWorkout[],
+  scheduledDate: string,
+): string[] {
+  const prev = [...(previousGeneratedWorkouts ?? [])]
+    .filter((w) => w?.scheduledDate && w.scheduledDate < scheduledDate)
+    .sort((a, b) => String(b.scheduledDate).localeCompare(String(a.scheduledDate)))[0]
+  if (!prev?.exercises?.length) return []
+  const keys = new Set<string>()
+  for (const exercise of prev.exercises) {
+    const key = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.exerciseName ?? exercise.name ?? ''}`)
+    if (key !== 'other') keys.add(key)
+  }
+  return [...keys]
 }
 
 function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): NormalizedLibraryExercise[] {
