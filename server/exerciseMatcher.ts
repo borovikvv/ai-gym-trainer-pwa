@@ -34,6 +34,12 @@ interface LibraryExercise {
   equipment?: string | null
   exerciseType?: string | null
   setsCount?: number
+  // Issue #66: additional fields used by coachPlanner.findReplacementForFatigue
+  targetWeight?: number
+  repMin?: number
+  repMax?: number
+  weightStep?: number
+  restSeconds?: number
 }
 
 /** Minimal exercise shape for the "current" exercise being replaced. */

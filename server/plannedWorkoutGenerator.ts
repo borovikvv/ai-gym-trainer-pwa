@@ -11,6 +11,8 @@
 
 import type {
   CoachState,
+  MuscleGroupProfileExtended,
+  ExerciseProfile,
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { buildCoachDecision } from './coachDecision.js'
@@ -38,7 +40,10 @@ interface CoachMemoryForGenerator {
     muscleSetCounts?: Record<string, number>
     focusAreas?: string[]
   }
-  muscleGroupProfiles?: Record<string, { status?: string } | undefined>
+  // Issue #66: muscleGroupProfiles now uses MuscleGroupProfileExtended
+  // (compatible with coachMemory.ts output and coachDecision.ts input)
+  muscleGroupProfiles?: Record<string, MuscleGroupProfileExtended | undefined>
+  exerciseProfiles?: Record<string, ExerciseProfile | undefined>
 }
 
 interface CoachDecisionForGenerator {

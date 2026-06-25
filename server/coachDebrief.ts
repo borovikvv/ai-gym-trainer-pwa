@@ -1,6 +1,36 @@
+// Issue #66 (#36 decomposition): all `any` replaced with concrete types.
+import type { CompletedExerciseHistory, ReadinessCheckIn } from '../shared/types.js'
 import { formatWeight, pluralRu } from './lib/format.js'
 
-export function computeWorkoutQualityScore(entry: any = {}) {
+interface ExerciseEntry extends CompletedExerciseHistory {
+  exerciseName: string
+  nextRecommendedWeight: number
+  progressionReason: string
+}
+
+interface WorkoutEntry {
+  userId?: string
+  id?: string
+  exercises?: ExerciseEntry[]
+  totalVolume?: number
+  readinessCheckIn?: ReadinessCheckIn | null
+}
+
+interface DbClient {
+  query: (text: string, params: unknown[]) => Promise<unknown>
+}
+
+interface WorkoutDebrief {
+  summary: string
+  wentWell: string[]
+  overload: string[]
+  progressed: string[]
+  nextChanges: string[]
+  why: string
+  qualityScore: number
+}
+
+export function computeWorkoutQualityScore(entry: WorkoutEntry = {}): number {
   const exercises = entry.exercises ?? []
   if (exercises.length === 0) return 0
 
@@ -47,7 +77,7 @@ export function computeWorkoutQualityScore(entry: any = {}) {
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
-export function buildWorkoutDebrief(entry: any = {}) {
+export function buildWorkoutDebrief(entry: WorkoutEntry = {}): WorkoutDebrief {
   const exercises = entry.exercises ?? []
   const completedExercises = exercises.filter((exercise) => (exercise.sets ?? []).some((set) => set?.completed !== false && Number(set?.reps) > 0))
   const overload = exercises
@@ -75,7 +105,11 @@ export function buildWorkoutDebrief(entry: any = {}) {
   }
 }
 
-export async function saveWorkoutDebriefRecommendation(client: any, entry, debrief = buildWorkoutDebrief(entry)) {
+export async function saveWorkoutDebriefRecommendation(
+  client: DbClient,
+  entry: WorkoutEntry,
+  debrief: WorkoutDebrief = buildWorkoutDebrief(entry),
+): Promise<void> {
   await client.query(
     `insert into public.recommendations (user_id, session_id, recommendation_type, title, body, source)
      values ($1,$2,'post_workout_debrief','Итог тренера',$3,$4)`,
@@ -83,7 +117,7 @@ export async function saveWorkoutDebriefRecommendation(client: any, entry, debri
   )
 }
 
-export function formatDebrief(debrief: any) {
+export function formatDebrief(debrief: WorkoutDebrief): string {
   return [
     debrief.summary,
     '',
@@ -103,9 +137,9 @@ export function formatDebrief(debrief: any) {
   ].join('\n')
 }
 
-function buildWhy(entry: any) {
+function buildWhy(entry: WorkoutEntry): string {
   const checkIn = entry.readinessCheckIn
-  const reasons = []
+  const reasons: string[] = []
   if (checkIn && (Number(checkIn.sleepQuality) <= 2 || Number(checkIn.energy) <= 2 || Number(checkIn.stress) >= 4 || Number(checkIn.availableMinutes) < 45)) {
     reasons.push('мало восстановления')
   }
