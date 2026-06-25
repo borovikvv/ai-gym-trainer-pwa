@@ -40,6 +40,40 @@
   --radius-xl: 30px;
   --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.09);
 
+  /* Issue #58: Light theme surface & text tokens.
+     Previously these were only defined inside the dark-theme overrides
+     (@media prefers-color-scheme: dark and :root[data-theme="dark"]),
+     so when the user explicitly chose light theme via data-theme="light",
+     var(--accent) / var(--surface) / var(--text-primary) etc. were UNDEFINED
+     and collapsed to transparent / inherited. Hardcoded white text
+     (.week-day.active, .primary, .nav button.active, .dot.hot, .check,
+     .progress-orb span, .onboarding-actions .primary) then rendered
+     white-on-white through the transparent background. */
+  --app-bg: #f5f5f7;
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-muted: #f2f2f7;
+  --border: rgba(0, 0, 0, 0.12);
+  --separator: rgba(60, 60, 67, 0.29);
+  --text-primary: #1d1d1f;
+  --text-secondary: rgba(60, 60, 67, 0.6);
+  --text-tertiary: rgba(60, 60, 67, 0.3);
+
+  /* Issue #58: Accent / warning / danger in light theme — darker than the
+     dark-theme variants so that white text on accent fills passes WCAG AA
+     (≥ 4.5:1). Verification:
+       - white on #2e7d32 ≈ 5.1:1 ✓  (.primary, .week-day.active, .nav.active)
+       - white on #1b5e20 ≈ 8.2:1 ✓  (.primary:active pressed state)
+       - #d70015 on white ≈ 5.0:1 ✓  (.danger as text on white card)
+     The dark theme keeps the brighter systemGreen/systemRed (#30d158/#ff453a)
+     because on a dark surround the perceived contrast is higher and the
+     existing visual identity should not be regressed. */
+  --accent: #2e7d32;
+  --accent-pressed: #1b5e20;
+  --warning: #bf5600;
+  --danger: #d70015;
+
   /* "Inverted" surfaces — dark cards with white text (hero, rest-timer, etc.).
      In light theme this is the same as text-primary (#1d1d1f).
      In dark theme this stays dark (#1c1c1e) so the card remains a dark
