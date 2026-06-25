@@ -32,7 +32,7 @@ const generatedExerciseGuideImages: Record<string, string> = {
   'leg-extension': '/exercise-guides/leg-extension-gpt.png',
   'leg-press': '/exercise-guides/leg-press-gpt.png',
   'lying-leg-curl': '/exercise-guides/lying-leg-curl-gpt.png',
-  'machine-crunch': '/exercise-guides/generic.svg',
+  'machine-crunch': '/exercise-guides/machine-crunch.png',
   'overhead-triceps-extension': '/exercise-guides/overhead-triceps-extension-gpt.png',
   'pallof-press': '/exercise-guides/pallof-press-gpt.png',
   plank: '/exercise-guides/plank-gpt.png',

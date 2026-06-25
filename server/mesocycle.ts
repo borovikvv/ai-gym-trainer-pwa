@@ -122,7 +122,7 @@ export function computeMesocycleState({
   now = new Date(),
 }: ComputeMesocycleStateInput): MesocycleState {
   const nowDate = new Date(now)
-  const policy: UserTrainingPolicy | null = getUserTrainingPolicy(profile)
+  const policy: UserTrainingPolicy | null = getUserTrainingPolicy({ ...profile, age: profile.age ?? undefined })
   const phase: AgeRecoveryPhase = policy?.ageRecoveryProfile?.phase ?? 'adult'
   const config: MesocyclePhaseConfig = MESOCYCLE_CONFIG[phase] ?? MESOCYCLE_CONFIG.adult
   const cycleLength = config.loadingWeeks + config.deloadWeeks
