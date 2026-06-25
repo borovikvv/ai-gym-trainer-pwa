@@ -19,4 +19,20 @@ describe('toHumanCoachText', () => {
       'Жим лёжа: закрепить текущий вес без отказа.',
     )
   })
+
+  // Issue #57 regression: real production coachReason captured from a user
+  // screenshot (IMG_0849.png). The whole narration must be stripped — only
+  // an empty string should remain so the UI can hide the metadata field.
+  it('strips full server narration leaving no system text (issue #57 regression)', () => {
+    const rawServerNarration = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки. Coach State на 2026-06-28: readiness 85, восстановление ready, недельная нагрузка below_plan, фокус: Грудь, Спина, Руки. Собрана умеренная тренировка из наиболее свежих групп мышц. Учитывается разнообразие недели: соседние тренировки не должны быть одинаковыми. Прогноз календаря: пользовательский календарь даёт 2/2 тренировок за 7 дней, предыдущая за 6 дн. Решение тренера: Следующая'
+    const result = toHumanCoachText(rawServerNarration)
+    expect(result).not.toMatch(/Профиль тренера/i)
+    expect(result).not.toMatch(/Coach State/i)
+    expect(result).not.toMatch(/Прогноз календаря/i)
+    expect(result).not.toMatch(/Решение тренера/i)
+    expect(result).not.toMatch(/Собрана/i)
+    expect(result).not.toMatch(/Учитывается/i)
+    expect(result).not.toMatch(/below_plan/i)
+    expect(result).not.toMatch(/readiness/i)
+  })
 })

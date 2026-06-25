@@ -2,6 +2,7 @@ import { BookOpen, Dumbbell, RotateCcw } from 'lucide-react'
 import type { UserProfile, WorkoutDay } from '../data/mockProgram'
 import type { CoachMemory, CoachState, MesocycleState, PlannedWorkout } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
+import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
 
@@ -269,12 +270,20 @@ export function CoachHome({
         <SectionList title="Далее">
           {upcomingTimelineItems.map((item) => {
             const day = item.workoutDay
+            // Issue #57 regression: programApi.ts sets day.description =
+            // workout.coachReason, which is a long server-side narration
+            // ("Профиль тренера: ...", "Coach State: ...", "Прогноз
+            // календаря: ...", "Решение тренера: ..."). Running it through
+            // toHumanCoachText strips those sentences; if nothing
+            // human-readable remains, fall back to day.name so the row
+            // never shows raw system text.
+            const humanMetadata = toHumanCoachText(day.description || '') || day.name
             return (
               <WorkoutRow
                 key={item.id}
                 eyebrow={formatDateOnly(item.scheduledDate)}
                 title={item.workoutDayName}
-                metadata={day.description || day.name}
+                metadata={humanMetadata}
                 badge={`${day.exercises.length + (extraExercisesByDay[day.id]?.length ?? 0)} упр.`}
                 active={day.id === heroWorkoutDay.id}
                 primaryAction={(
