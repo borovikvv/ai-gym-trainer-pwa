@@ -1,4 +1,3 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 /**
  * Adaptive Mesocycle State Machine
  *
@@ -22,7 +21,15 @@
  *     not enough accumulated stress to warrant recovery).
  */
 
-import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+import type {
+  AgeRecoveryPhase,
+  CoachMemory,
+  MesocyclePhase,
+  MesocycleState,
+  MuscleKey,
+  WorkoutHistoryEntry,
+} from '../shared/types.js'
+import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { CANONICAL_MUSCLE_KEYS, labelFor } from './lib/muscleGroups.js'
 import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
 
@@ -30,18 +37,75 @@ import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
 // Configuration
 // ---------------------------------------------------------------------------
 
-const MESOCYCLE_CONFIG = {
+interface MesocyclePhaseConfig {
+  loadingWeeks: number
+  deloadWeeks: number
+}
+
+const MESOCYCLE_CONFIG: Record<AgeRecoveryPhase, MesocyclePhaseConfig> = {
   teen:         { loadingWeeks: 3, deloadWeeks: 1 },
   adult:        { loadingWeeks: 4, deloadWeeks: 1 },
   mature_adult: { loadingWeeks: 3, deloadWeeks: 1 },
 }
 
-const PHASE_NAMES = {
-  idle:           'Ожидание первой тренировки',
-  loading:        'Загрузка — первую неделю мезоцикла, умеренный объём',
-  accumulation:   'Накопление — рабочий объём растёт',
+const PHASE_NAMES: Record<MesocyclePhase, string> = {
+  idle:            'Ожидание первой тренировки',
+  loading:         'Загрузка — первую неделю мезоцикла, умеренный объём',
+  accumulation:    'Накопление — рабочий объём растёт',
   intensification: 'Интенсификация — пик нагрузки мезоцикла',
-  deload:         'Разгрузочная неделя — снижение объёма и интенсивности',
+  deload:          'Разгрузочная неделя — снижение объёма и интенсивности',
+}
+
+/** Minimal profile shape consumed by computeMesocycleState. */
+interface ProfileForMesocycle {
+  userId?: string
+  age?: number | null
+  workoutsPerWeek?: number
+}
+
+interface ComputeMesocycleStateInput {
+  profile: ProfileForMesocycle
+  history: WorkoutHistoryEntry[]
+  coachMemory: CoachMemory | null
+  now?: Date
+}
+
+/** Internal: a single ISO-week bucket of completed workouts. */
+interface WeekBucket {
+  weekKey: string
+  start: Date
+  end: Date
+  workouts: Array<WorkoutHistoryEntry & { completedAtDate: Date }>
+}
+
+interface CyclePosition {
+  weekInCycle: number
+  cycleStartWeekIndex: number
+  workoutsThisCycle: number
+  plannedThisCycle: number
+}
+
+interface EarlyDeloadResult {
+  force: boolean
+  reason: string | null
+}
+
+/** Minimal exercise shape for applyDeloadReduction. */
+interface ExerciseForDeload {
+  setsCount: number
+  targetWeight: number
+  repMin: number
+  repMax: number
+  weightStep: number
+}
+
+interface DeloadReductionResult {
+  setsCount: number
+  targetWeight: number
+  repMin: number
+  repMax: number
+  intensityTarget: string
+  deloadNote: string
 }
 
 // ---------------------------------------------------------------------------
@@ -50,32 +114,34 @@ const PHASE_NAMES = {
 
 /**
  * Compute the current mesocycle state.
- *
- * @param {{ profile: object, history: object[], coachMemory: object|null, now: Date }} input
- * @returns {object} mesocycle state
  */
-export function computeMesocycleState({ profile = {}, history = [], coachMemory = null, now = new Date() }) {
+export function computeMesocycleState({
+  profile = {},
+  history = [],
+  coachMemory = null,
+  now = new Date(),
+}: ComputeMesocycleStateInput): MesocycleState {
   const nowDate = new Date(now)
-  const policy = getUserTrainingPolicy(profile)
-  const phase = policy?.ageRecoveryProfile?.phase ?? 'adult'
-  const config = MESOCYCLE_CONFIG[phase] ?? MESOCYCLE_CONFIG.adult
+  const policy: UserTrainingPolicy | null = getUserTrainingPolicy(profile)
+  const phase: AgeRecoveryPhase = policy?.ageRecoveryProfile?.phase ?? 'adult'
+  const config: MesocyclePhaseConfig = MESOCYCLE_CONFIG[phase] ?? MESOCYCLE_CONFIG.adult
   const cycleLength = config.loadingWeeks + config.deloadWeeks
   const workoutsPerWeek = clampNumber(profile.workoutsPerWeek, 1, 7, 3)
 
   // --- 1. Build calendar-week buckets ---
-  const weeks = buildWeekBuckets(history, nowDate)
+  const weeks: WeekBucket[] = buildWeekBuckets(history, nowDate)
 
   // --- 2. Walk weeks to find current cycle position ---
   const { weekInCycle, cycleStartWeekIndex, workoutsThisCycle, plannedThisCycle } =
     findCyclePosition(weeks, cycleLength, workoutsPerWeek)
 
   // --- 3. Determine phase name ---
-  const currentPhase = weekInCycle <= config.loadingWeeks
+  const currentPhase: MesocyclePhase = weekInCycle <= config.loadingWeeks
     ? loadingPhaseName(weekInCycle, config.loadingWeeks)
     : 'deload'
 
   // --- 4. Early deload triggers ---
-  const earlyDeload = checkEarlyDeloadTriggers({
+  const earlyDeload: EarlyDeloadResult = checkEarlyDeloadTriggers({
     coachMemory,
     weeks,
     cycleStartWeekIndex,
@@ -89,8 +155,8 @@ export function computeMesocycleState({ profile = {}, history = [], coachMemory 
     && completionRatio < 0.5
 
   // --- 6. Resolve final phase ---
-  let finalPhase = currentPhase
-  let triggerReason = null
+  let finalPhase: MesocyclePhase = currentPhase
+  let triggerReason: string | null = null
   let deloadScheduled = weekInCycle === config.loadingWeeks && !shouldDelayDeload
 
   if (earlyDeload.force) {
@@ -126,18 +192,15 @@ export function computeMesocycleState({ profile = {}, history = [], coachMemory 
  * Whether the next workout should be treated as a deload workout.
  * Convenience wrapper — equivalent to `state.isDeload`.
  */
-export function isDeloadWeek(mesocycleState: any) {
+export function isDeloadWeek(mesocycleState: MesocycleState | null | undefined): boolean {
   return mesocycleState?.isDeload === true
 }
 
 /**
  * Apply deload reductions to an exercise prescription.
  * Called by plannedWorkoutGenerator and coachPlanner when mesocycle.isDeload.
- *
- * @param {{ setsCount: number, targetWeight: number, repMin: number, repMax: number, weightStep: number }} exercise
- * @returns {{ setsCount: number, targetWeight: number, repMin: number, repMax: number, intensityTarget: string, deloadNote: string }}
  */
-export function applyDeloadReduction(exercise: any) {
+export function applyDeloadReduction(exercise: ExerciseForDeload): DeloadReductionResult {
   const originalSets = clampNumber(exercise.setsCount, 1, 6, 3)
   // Reduce to ~60% of normal sets, minimum 2
   const deloadSets = Math.max(2, Math.round(originalSets * 0.6))
@@ -164,20 +227,19 @@ export function applyDeloadReduction(exercise: any) {
 
 /**
  * Group completed workouts into ISO calendar-week buckets.
- * Returns array of { weekStart (Date), weekEnd (Date), workouts: [...] },
- * most recent first.
+ * Returns array of WeekBucket, most recent first.
  */
-function buildWeekBuckets(history: any, now: any) {
+function buildWeekBuckets(history: WorkoutHistoryEntry[], now: Date): WeekBucket[] {
   const nowDate = new Date(now)
-  const completedSessions = (history ?? [])
-    .filter((s) => s?.completedAt)
+  const completedSessions: Array<WorkoutHistoryEntry & { completedAtDate: Date }> = (history ?? [])
+    .filter((s): s is WorkoutHistoryEntry => Boolean(s?.completedAt))
     .map((s) => ({ ...s, completedAtDate: new Date(s.completedAt) }))
     .sort((a, b) => b.completedAtDate.getTime() - a.completedAtDate.getTime())
 
   if (completedSessions.length === 0) return []
 
   // Use a Map keyed by ISO week string "YYYY-Www"
-  const weekMap = new Map()
+  const weekMap = new Map<string, WeekBucket>()
   for (const session of completedSessions) {
     const isoWeek = isoWeekKey(session.completedAtDate)
     if (!weekMap.has(isoWeek)) {
@@ -188,7 +250,7 @@ function buildWeekBuckets(history: any, now: any) {
         workouts: [],
       })
     }
-    weekMap.get(isoWeek).workouts.push(session)
+    weekMap.get(isoWeek)!.workouts.push(session)
   }
 
   // Return most-recent-week-first, only weeks within last 90 days
@@ -204,7 +266,11 @@ function buildWeekBuckets(history: any, now: any) {
  *   - A gap of 10+ days between week buckets (extended break)
  *   - Reaching the configured cycle length
  */
-function findCyclePosition(weeks: any, cycleLength: any, workoutsPerWeek: any) {
+function findCyclePosition(
+  weeks: WeekBucket[],
+  cycleLength: number,
+  workoutsPerWeek: number,
+): CyclePosition {
   let weekInCycle = 0
   let cycleStartWeekIndex = 0
   let workoutsThisCycle = 0
@@ -245,23 +311,33 @@ function findCyclePosition(weeks: any, cycleLength: any, workoutsPerWeek: any) {
   return { weekInCycle, cycleStartWeekIndex, workoutsThisCycle, plannedThisCycle }
 }
 
+interface EarlyDeloadInput {
+  coachMemory: CoachMemory | null
+  weeks: WeekBucket[]
+  cycleStartWeekIndex: number
+  phase: AgeRecoveryPhase
+}
+
 /**
  * Check for early deload triggers.
- * Returns { force: boolean, reason: string|null }
  */
-function checkEarlyDeloadTriggers({ coachMemory, weeks, cycleStartWeekIndex, phase }: any) {
-  // Only check during loading weeks, not if already in deload
-  const reasons = []
+function checkEarlyDeloadTriggers({
+  coachMemory,
+  weeks,
+  cycleStartWeekIndex,
+  phase,
+}: EarlyDeloadInput): EarlyDeloadResult {
+  const reasons: string[] = []
 
   // Trigger 1: 2+ muscle groups at/above MRV
   if (coachMemory?.weeklyBalance?.muscleSetCounts) {
-    const muscleSetCounts = coachMemory.weeklyBalance.muscleSetCounts
-    const landmarks = {}
+    const muscleSetCounts: Record<string, number> = coachMemory.weeklyBalance.muscleSetCounts
+    const landmarks: Partial<Record<MuscleKey, ReturnType<typeof getVolumeLandmarks>>> = {}
     for (const key of CANONICAL_MUSCLE_KEYS) {
-      landmarks[key] = getVolumeLandmarks(key, phase)
+      landmarks[key as MuscleKey] = getVolumeLandmarks(key, phase)
     }
     const criticalGroups = CANONICAL_MUSCLE_KEYS.filter((key) => {
-      const lm = landmarks[key]
+      const lm = landmarks[key as MuscleKey]
       if (!lm) return false
       const status = classifyVolumeStatus(muscleSetCounts[key] ?? 0, lm)
       return status === 'at_mrv' || status === 'above_mrv'
@@ -274,9 +350,9 @@ function checkEarlyDeloadTriggers({ coachMemory, weeks, cycleStartWeekIndex, pha
 
   // Trigger 2: 2+ pain-flagged sessions in current cycle
   const cycleWeeks = weeks.slice(cycleStartWeekIndex)
-  const painSessions = cycleWeeks.flatMap((w) => w.workouts).filter((w) =>
-    (w.exercises ?? []).some((e) => Boolean(e.pain))
-  )
+  const painSessions = cycleWeeks
+    .flatMap((w) => w.workouts)
+    .filter((w) => (w.exercises ?? []).some((e) => Boolean(e.pain)))
   if (painSessions.length >= 2) {
     reasons.push(`Раннее начало разгрузки: ${painSessions.length} тренировок с болью в текущем цикле.`)
   }
@@ -288,7 +364,7 @@ function checkEarlyDeloadTriggers({ coachMemory, weeks, cycleStartWeekIndex, pha
   return { force: false, reason: null }
 }
 
-function loadingPhaseName(weekInCycle: any, totalLoadingWeeks: any) {
+function loadingPhaseName(weekInCycle: number, totalLoadingWeeks: number): MesocyclePhase {
   if (weekInCycle === 0) return 'idle'
   if (weekInCycle === 1) return 'loading'
   if (weekInCycle >= totalLoadingWeeks) return 'intensification'
@@ -299,7 +375,7 @@ function loadingPhaseName(weekInCycle: any, totalLoadingWeeks: any) {
 // Date / ISO week utilities
 // ---------------------------------------------------------------------------
 
-function isoWeekKey(date: any) {
+function isoWeekKey(date: Date): string {
   const d = new Date(date)
   const jan4 = new Date(d.getFullYear(), 0, 4)
   const oneDay = 86_400_000
@@ -307,7 +383,7 @@ function isoWeekKey(date: any) {
   return `${d.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`
 }
 
-function startOfWeek(date: any) {
+function startOfWeek(date: Date): Date {
   const d = new Date(date)
   const day = d.getDay()
   const diff = d.getDate() - day + (day === 0 ? -6 : 1) // Monday
@@ -316,7 +392,7 @@ function startOfWeek(date: any) {
   return start
 }
 
-function endOfWeek(date: any) {
+function endOfWeek(date: Date): Date {
   const start = startOfWeek(date)
   const end = new Date(start)
   end.setDate(start.getDate() + 6)
@@ -324,7 +400,7 @@ function endOfWeek(date: any) {
   return end
 }
 
-function clampNumber(value: any, min: any, max: any, fallback: any) {
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const number = Number(value)
   if (!Number.isFinite(number)) return fallback
   return Math.max(min, Math.min(max, number))
