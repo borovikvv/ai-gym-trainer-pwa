@@ -6,6 +6,7 @@ import {
   type SorenessLevel,
 } from '../domain/readinessCheckIn'
 import { exerciseGuideImageSrc } from './ExerciseGuideModal'
+import { InfoHint } from './ui'
 
 const soreMuscleGroupOptions = ['Грудь', 'Спина', 'Ноги', 'Плечи', 'Руки', 'Кор']
 const painAreaOptions = ['Плечо', 'Локоть/рука', 'Спина', 'Колено/нога', 'Другое']
@@ -69,6 +70,13 @@ export function PreWorkoutPreview({
     })
   }
 
+  const humanDescription = toHumanCoachText(workoutDay.description) || 'Я подберу нагрузку под твоё состояние и историю тренировок.'
+  const checkinSummary = summarizeReadinessCheckIn(readinessCheckIn)
+  const readinessModeOption = readinessOptions.find((option) => option.mode === readinessMode)
+  const readinessModeStatus = readinessMode !== 'normal' && readinessModeOption
+    ? `${readinessModeOption.summary}. Нагрузка будет мягче под твоё состояние.`
+    : null
+
   return (
     <section className="screen active preview-screen">
       <button className="back" onClick={onBack}>← Тренер</button>
@@ -82,29 +90,22 @@ export function PreWorkoutPreview({
 
       <div className="coach preworkout-hero">
         <div className="label">Сегодня</div>
-        <h1>{workoutDay.label}: {workoutDay.exercises.length} упражнений, ~{estimateWorkoutMinutes(workoutDay)} минут.</h1>
-        <p>{toHumanCoachText(workoutDay.description) || 'Я подберу нагрузку под твоё состояние и историю тренировок.'}</p>
+        <h1>
+          <InfoHint hint={humanDescription} />
+          {workoutDay.label}: {workoutDay.exercises.length} упражнений, ~{estimateWorkoutMinutes(workoutDay)} минут.
+        </h1>
       </div>
 
-      {workoutDay.description && (
-        <div className="card top-gap">
-          <h3>Почему такая тренировка</h3>
-          <div className="muted">{toHumanCoachText(workoutDay.description)}</div>
-        </div>
-      )}
-
       <div className="card top-gap">
-        <h3>Как тренируемся сегодня?</h3>
-        <div className="muted">Выбери самочувствие — я подстрою вес, объём и отдых.</div>
+        <h3>
+          <InfoHint
+            hint="Выбери самочувствие — я подстрою вес, объём и отдых."
+            dynamicStatus={checkinSummary}
+          />
+          Как тренируемся сегодня?
+        </h3>
         <div className="checkin-panel top-gap">
-          <div className="set-head">
-            <div>
-              <h3>Быстрая проверка готовности</h3>
-              <div className="muted">Отметь то, что влияет на тренировку прямо сегодня.</div>
-            </div>
-            <span className="badge">{readinessMode === 'heavy' ? 'сильный день' : readinessMode === 'normal' ? 'план' : readinessMode === 'light' ? 'легче' : 'восстановление'}</span>
-          </div>
-          <div className="checkin-grid top-gap" role="group" aria-label="Быстрая проверка готовности">
+          <div className="checkin-grid" role="group" aria-label="Быстрая проверка готовности">
             <button
               className={readinessCheckIn.sleepQuality <= 2 ? 'active' : ''}
               onClick={() => onReadinessCheckInChange({ sleepQuality: readinessCheckIn.sleepQuality <= 2 ? 3 : 2 })}
@@ -178,7 +179,6 @@ export function PreWorkoutPreview({
               ))}
             </div>
           )}
-          <div className="coach-adjust-note top-gap">{summarizeReadinessCheckIn(readinessCheckIn)}</div>
         </div>
         <div className="readiness-grid top-gap" role="group" aria-label="Самочувствие перед тренировкой">
           {readinessOptions.map((option) => (
@@ -193,16 +193,20 @@ export function PreWorkoutPreview({
             </button>
           ))}
         </div>
-        {readinessMode !== 'normal' && (
-          <div className="coach-adjust-note top-gap">{readinessOptions.find((option) => option.mode === readinessMode)?.summary}. Нагрузка будет мягче под твоё состояние.</div>
+        {readinessModeStatus && (
+          <div className="info-hint-row top-gap">
+            <InfoHint hint="Как выбранный режим влияет на тренировку." dynamicStatus={readinessModeStatus} />
+          </div>
         )}
       </div>
 
       <div className="card top-gap">
         <div className="set-head">
           <div>
-            <h3>План тренировки</h3>
-            <div className="muted">Нажми на упражнение во время тренировки, чтобы открыть технику и подсказки.</div>
+            <h3>
+              <InfoHint hint="Нажми на упражнение во время тренировки, чтобы открыть технику и подсказки." />
+              План тренировки
+            </h3>
           </div>
           <span className="badge">{workoutDay.exercises.length} упр.</span>
         </div>
