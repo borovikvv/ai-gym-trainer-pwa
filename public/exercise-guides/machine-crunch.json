@@ -1,0 +1,8 @@
+{
+  "id": "machine-crunch",
+  "name": "Скручивания в тренажёре",
+  "model": "grok-imagine-image",
+  "provider": "xai",
+  "image": "/root/ai-gym-trainer-pwa/public/exercise-guides/machine-crunch.png",
+  "prompt": "Premium text-free instructional fitness illustration for a mobile personal trainer app. Exercise: Скручивания в тренажёре (machine crunch) — seated abdominal crunch machine. Target muscles: rectus abdominis, core. Equipment: machine crunch station with chest pad and foot platforms. Movement to show: seated with feet on platforms, upper back against chest pad, crunching forward by contracting the abs, controlled return.\n\nVisual style: realistic modern gym setting, clean premium editorial lighting, warm neutral tones, one male athlete demonstrating correct technique, subtle motion arrows to show movement path, uncluttered background, app-friendly 3/4 instructional composition.\n\nHard constraints: No readable text, no letters, no numbers, no captions, no logos, no watermarks, no UI labels. Do not include pseudo-text on machines, clothing, walls, screens or equipment. Avoid exaggerated anatomy, unsafe form, distorted hands, extra limbs or impossible equipment. Show correct safe technique clearly so a gym user can understand the exercise from the image."
+}
