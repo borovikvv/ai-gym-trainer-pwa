@@ -1,10 +1,86 @@
-import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+// Issue #65 (#36 decomposition): all `any` replaced with concrete types.
+import type {
+  CoachEngineContext,
+  CoachSessionContext,
+  ExerciseRef,
+  ReadinessCheckIn,
+} from '../shared/types.js'
+import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { roundWeight } from './lib/format.js'
 import { findComplementaryExercises } from './exerciseMatcher.js'
 
-export function recommendNextSet(input: any) {
-  const exercise = input.exercise ?? {}
+// ---------------------------------------------------------------------------
+// Input / output interfaces
+// ---------------------------------------------------------------------------
+
+interface ExerciseInput {
+  id?: string
+  name?: string
+  muscleGroup?: string
+  exerciseName?: string
+  targetWeight?: number
+  weightStep?: number
+  repMin?: number
+  repMax?: number
+  restSeconds?: number
+}
+
+interface SetInput {
+  weight?: number
+  reps?: number
+  rpe?: number
+  completed?: boolean
+}
+
+interface RecommendNextSetInput {
+  userId?: string
+  exercise?: ExerciseInput
+  userTrainingPolicy?: UserTrainingPolicy | null
+  completedSets?: SetInput[]
+  pain?: boolean
+  context?: CoachEngineContext
+  remainingSets?: number
+}
+
+interface SetRecommendation {
+  action: string
+  recommendedWeight: number
+  recommendedReps: number
+  recommendedRestSeconds: number
+  reason: string
+  suggestedExercise?: ExerciseRef
+  suggestedExercises?: ExerciseRef[]
+  remainingSetUpdates?: Array<{
+    setOffset: number
+    recommendedWeight: number
+    recommendedReps: number
+    recommendedRestSeconds: number
+  }>
+}
+
+interface ChooseSuggestedExercisesParams {
+  currentExercise?: ExerciseInput
+  nextExercise?: ExerciseInput | null
+  workoutExercises?: ExerciseInput[]
+  exerciseLibrary?: unknown[]
+  preferDifferentMuscle?: boolean
+  limit?: number
+}
+
+interface LiveReadinessConstraintInput {
+  exercise: ExerciseInput
+  readinessCheckIn?: ReadinessCheckIn | null
+}
+
+type ReadinessConstraint = 'pain' | 'sore' | null
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function recommendNextSet(input: RecommendNextSetInput): SetRecommendation {
+  const exercise: ExerciseInput = input.exercise ?? {}
   const userTrainingPolicy = input.userTrainingPolicy ?? getUserTrainingPolicy(input.userId)
   const completedSets = (input.completedSets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
   const lastSet = completedSets.at(-1)
@@ -63,7 +139,7 @@ export function recommendNextSet(input: any) {
   const lastWeight = safeNumber(lastSet.weight, safeNumber(exercise.targetWeight, 0))
   const lastReps = safeNumber(lastSet.reps, repMin)
   const lastRpe = safeNumber(lastSet.rpe, 7)
-  const session = input.context?.session ?? {}
+  const session: CoachSessionContext = input.context?.session ?? {}
   const timeConstrained = safeNumber(session.availableMinutes, 60) <= 35
 
   if ((input.remainingSets ?? 0) <= 0) {
@@ -83,7 +159,7 @@ export function recommendNextSet(input: any) {
       const suggestedExercises = chooseSuggestedExercises({
         currentExercise: exercise,
         nextExercise,
-        workoutExercises: session.workoutExercises,
+        workoutExercises: session.workoutExercises as ExerciseInput[] | undefined,
         exerciseLibrary: session.exerciseLibrary,
         preferDifferentMuscle: true,
       })
@@ -104,7 +180,7 @@ export function recommendNextSet(input: any) {
     if (!nextExercise && lastRpe <= 6 && lastReps >= repMax && (session.workoutExercises?.length ?? 0) < 6) {
       const suggestedExercises = chooseSuggestedExercises({
         currentExercise: exercise,
-        workoutExercises: session.workoutExercises,
+        workoutExercises: session.workoutExercises as ExerciseInput[] | undefined,
         exerciseLibrary: session.exerciseLibrary,
         preferDifferentMuscle: true,
       })
@@ -143,7 +219,7 @@ export function recommendNextSet(input: any) {
     }, input.remainingSets)
   }
 
-  if (userTrainingPolicy.allowFailureSets === false && lastRpe >= 9) {
+  if (userTrainingPolicy?.allowFailureSets === false && lastRpe >= 9) {
     return withRemainingSetUpdates({
       action: 'reduce_load',
       recommendedWeight: roundWeight(Math.max(0, lastWeight - step)),
@@ -184,12 +260,19 @@ export function recommendNextSet(input: any) {
   }, input.remainingSets)
 }
 
-function safeNumber(value: any, fallback: any) {
+function safeNumber(value: unknown, fallback: number): number {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
 }
 
-function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, workoutExercises = [], exerciseLibrary = [], preferDifferentMuscle: _preferDifferentMuscle = false, limit = 3 }: any) {
+function chooseSuggestedExercises({
+  currentExercise = {},
+  nextExercise = null,
+  workoutExercises = [],
+  exerciseLibrary = [],
+  preferDifferentMuscle: _preferDifferentMuscle = false,
+  limit = 3,
+}: ChooseSuggestedExercisesParams = {}): ExerciseRef[] {
   // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
   // movement_pattern, equipment, and exercise_type for smarter suggestions.
   // The preferDifferentMuscle flag is handled inside the matcher (different
@@ -198,16 +281,16 @@ function chooseSuggestedExercises({ currentExercise = {}, nextExercise = null, w
     currentExercise,
     nextExercise,
     workoutExercises,
-    library: exerciseLibrary,
+    library: exerciseLibrary as Parameters<typeof findComplementaryExercises>[0]['library'],
     limit,
   })
 }
 
-function isAccessoryExercise(exercise: any) {
+function isAccessoryExercise(exercise: ExerciseInput): boolean {
   return ['arms', 'shoulders', 'core'].includes(normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`))
 }
 
-function withRemainingSetUpdates(decision: any, remainingSets: any) {
+function withRemainingSetUpdates(decision: SetRecommendation, remainingSets: unknown): SetRecommendation {
   const count = Math.max(0, Math.floor(safeNumber(remainingSets, 0)))
   if (count <= 0 || decision.recommendedReps <= 0) return decision
   return {
@@ -221,7 +304,7 @@ function withRemainingSetUpdates(decision: any, remainingSets: any) {
   }
 }
 
-function liveReadinessConstraint({ exercise, readinessCheckIn = null }: any) {
+function liveReadinessConstraint({ exercise, readinessCheckIn = null }: LiveReadinessConstraintInput): ReadinessConstraint {
   if (!readinessCheckIn) return null
   const exerciseText = `${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`
   if (matchesAnyTrainingArea(exerciseText, readinessCheckIn.painAreas)) return 'pain'
@@ -229,8 +312,7 @@ function liveReadinessConstraint({ exercise, readinessCheckIn = null }: any) {
   return null
 }
 
-function matchesAnyTrainingArea(exerciseText: any, areas: any) {
+function matchesAnyTrainingArea(exerciseText: string, areas: string[] | undefined): boolean {
   const muscle = normalizeMuscleGroup(exerciseText)
   return (areas ?? []).some((area) => normalizeMuscleGroup(area) === muscle)
 }
-
