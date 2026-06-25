@@ -1,31 +1,308 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
+// Issue #64 (#36 decomposition): all `any` replaced with concrete types.
+// Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
+//
+// Note on type strategy: this module consumes CoachState / CoachMemory /
+// CoachDecision which are fully typed in shared/types.ts. However, several
+// callers (services layer — issue #67) pass loosely-typed objects from the
+// DB layer. To avoid breaking those callers before #67 is done, the input
+// interfaces here are permissive (optional fields, minimal shapes). Once
+// #67 lands and the DB layer is typed, these can be tightened to the full
+// shared interfaces.
+
+import type {
+  WorkoutHistoryEntry,
+} from '../shared/types.js'
 import { buildCoachDecision } from './coachDecision.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from './lib/muscleGroups.js'
 import { roundWeight } from './lib/format.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
 
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
-export function buildGeneratedPlannedWorkout({ profile = {}, scheduledDate, coachState = {}, coachMemory = null, coachDecision = null, exerciseLibrary = [], history = [], previousGeneratedWorkouts = [] }: any) {
+// ---------------------------------------------------------------------------
+// Local type aliases — issue #65 (coach core) will move these to shared/types.ts.
+// Until then, these minimal interfaces match the actual runtime shapes
+// consumed by this module. They are structurally compatible with the objects
+// produced by coachState.ts, coachMemory.ts, coachDecision.ts.
+// ---------------------------------------------------------------------------
+
+interface MuscleGroupInfo {
+  fatigue?: 'low' | 'medium' | 'high' | 'unknown'
+  status?: string
+  lastTrainedDaysAgo?: number | null
+  workingSetsLast7Days?: number
+  heavySetsLast7Days?: number
+}
+
+interface ExerciseStateInfo {
+  status?: string
+}
+
+interface CoachStateForGenerator {
+  userId?: string | null
+  readinessScore?: number
+  recoveryStatus?: string
+  weeklyLoadStatus?: string
+  // Note: mesocycle is typed loosely (phase as string) because coachState.ts
+  // (issue #65) returns a plain object. Once #65 lands, this can use
+  // MesocycleState directly.
+  mesocycle?: { phase?: string; isDeload?: boolean; [key: string]: unknown } | null
+  muscleGroups?: Record<string, MuscleGroupInfo | undefined>
+  exercises?: Record<string, ExerciseStateInfo | undefined>
+  warnings?: string[]
+  [key: string]: unknown
+}
+
+interface CoachMemoryForGenerator {
+  userId?: string | null
+  summary?: string
+  weeklyBalance?: {
+    plannedWorkoutsPerWeek?: number
+    completedWorkoutsLast7Days?: number
+    loadStatus?: string
+    muscleSetCounts?: Record<string, number>
+    focusAreas?: string[]
+  }
+  muscleGroupProfiles?: Record<string, { status?: string } | undefined>
+}
+
+interface CoachDecisionForGenerator {
+  type?: string
+  priorityMuscleGroups?: string[]
+  avoidMuscleGroups?: string[]
+  loadPolicy?: string
+  exercisePolicies?: Record<string, string>
+  reasons?: string[]
+  summary?: string
+  // Fields produced by buildCoachDecision (issue #65 will reconcile)
+  generatedAt?: string
+  scheduledDate?: string
+  nextWorkoutIntent?: {
+    type?: string
+    intensity?: string
+    avoidMuscleGroups?: string[]
+    priorityMuscleGroups?: string[]
+  }
+}
+
+interface UserTrainingPolicyForGenerator {
+  userId?: string
+  allowFailureSets?: boolean
+  maxIntensity?: string
+  progressionAggressiveness?: string
+  maxWeightJumpSteps?: number
+  safetyNotes?: string[]
+  ageRecoveryProfile?: {
+    phase?: string
+    baseRecoveryDays?: number
+    readinessPriorAdjustment?: number
+    sparseHistoryRecoveryBufferDays?: number
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Input / output interfaces
+// ---------------------------------------------------------------------------
+
+interface ProfileForGenerator {
+  userId?: string
+  age?: number | null
+  goal?: string
+  level?: string
+  workoutsPerWeek?: number
+  targetWorkoutMinutes?: number
+  bannedExercises?: string[]
+  preferredExercises?: string[]
+  preferences?: {
+    focusAreas?: string[]
+    exerciseStyle?: string
+    intensityTolerance?: string
+    sessionStyle?: string
+  } | null
+}
+
+interface LibraryExerciseInput {
+  id?: string
+  name?: string
+  muscleGroup?: string
+  muscle_group?: string
+  setsCount?: number
+  sets_count?: number
+  repMin?: number
+  rep_min?: number
+  repMax?: number
+  rep_max?: number
+  targetWeight?: number
+  target_weight?: number
+  weightStep?: number
+  weight_step?: number
+  restSeconds?: number
+  rest_seconds?: number
+}
+
+interface NormalizedLibraryExercise {
+  id: string
+  name: string
+  muscleGroup: string
+  muscleKey: string
+  setsCount: number
+  repMin: number
+  repMax: number
+  targetWeight: number
+  weightStep: number
+  restSeconds: number
+}
+
+interface PreviousGeneratedWorkout {
+  scheduledDate?: string
+  exercises?: Array<{
+    exerciseId?: string
+    exerciseName?: string
+    name?: string
+    muscleGroup?: string
+    muscle_group?: string
+  }>
+}
+
+interface BuildGeneratedPlannedWorkoutInput {
+  profile?: ProfileForGenerator
+  scheduledDate: string
+  coachState?: CoachStateForGenerator | null
+  coachMemory?: CoachMemoryForGenerator | null
+  coachDecision?: CoachDecisionForGenerator | null
+  exerciseLibrary?: LibraryExerciseInput[]
+  history?: WorkoutHistoryEntry[]
+  previousGeneratedWorkouts?: PreviousGeneratedWorkout[]
+}
+
+interface GeneratedExercise {
+  exerciseId: string
+  exerciseName: string
+  muscleGroup: string
+  setsCount: number
+  repMin: number
+  repMax: number
+  targetWeight: number
+  weightStep: number
+  restSeconds: number
+  intensityTarget: string
+  coachFocus: string
+  reason: string
+  sortOrder?: number
+}
+
+interface GeneratedPlannedWorkout {
+  scheduledDate: string
+  status: string
+  source: string
+  workoutDayId: null
+  workoutDayName: string
+  goal: string
+  coachReason: string
+  readinessSnapshot: Record<string, unknown>
+  exercises: GeneratedExercise[]
+}
+
+interface NormalizedPreferences {
+  focusAreas: string[]
+  focusMuscleKeys: string[]
+  bannedExerciseNames: string[]
+  preferredExerciseNames: string[]
+  exerciseStyle: string
+  intensityTolerance: string
+  sessionStyle: string
+}
+
+interface WeeklyContext {
+  previousExerciseIds: Set<string>
+  recentExerciseIds: Set<string>
+  previousMuscleCounts: Map<string, number>
+  recentMuscleCounts: Map<string, number>
+  recoveryRestrictedMuscleKeys: Set<string>
+  previousWorkoutCountLast7: number
+  plannedWorkoutsPerWeek: number
+  calendarWorkoutCountLast7: number
+  effectiveWorkoutsPerWeek: number
+  daysSincePreviousWorkout: number | null
+  calendarLoadStatus: string
+}
+
+interface ChooseBestExerciseParams {
+  muscleKey: string
+  library: NormalizedLibraryExercise[]
+  coachState: CoachStateForGenerator | null
+  coachMemory: CoachMemoryForGenerator | null
+  coachDecision: CoachDecisionForGenerator | null
+  history: WorkoutHistoryEntry[]
+  usedExerciseIds: Set<string>
+  lowReadiness: boolean
+  preferences: NormalizedPreferences
+  weeklyContext: WeeklyContext
+}
+
+interface ApplyPrescriptionParams {
+  exercise: NormalizedLibraryExercise
+  profile?: ProfileForGenerator
+  coachState: CoachStateForGenerator | null
+  coachDecision?: CoachDecisionForGenerator | null
+  history: WorkoutHistoryEntry[]
+  lowReadiness: boolean
+  preferences?: NormalizedPreferences
+  weeklyContext?: WeeklyContext
+  userTrainingPolicy?: UserTrainingPolicyForGenerator | null
+}
+
+interface EnsureCoreFinisherParams {
+  selected: GeneratedExercise[]
+  library: NormalizedLibraryExercise[]
+  coachState: CoachStateForGenerator | null
+  coachMemory: CoachMemoryForGenerator | null
+  decision: CoachDecisionForGenerator | null
+  history: WorkoutHistoryEntry[]
+  lowReadiness: boolean
+  preferences: NormalizedPreferences
+  weeklyContext: WeeklyContext
+  userTrainingPolicy: UserTrainingPolicyForGenerator | null
+  profile?: ProfileForGenerator
+  exerciseTarget: number
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function buildGeneratedPlannedWorkout({
+  profile = {},
+  scheduledDate,
+  coachState = null,
+  coachMemory = null,
+  coachDecision = null,
+  exerciseLibrary = [],
+  history = [],
+  previousGeneratedWorkouts = [],
+}: BuildGeneratedPlannedWorkoutInput): GeneratedPlannedWorkout {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
   const userTrainingPolicy = getUserTrainingPolicy(profile?.userId)
-  const weeklyContext = buildWeeklyContext([...buildCompletedWorkoutContext(history, scheduledDate), ...previousGeneratedWorkouts], { scheduledDate, profile })
-  const decision = coachDecision ?? buildCoachDecision({ profile, coachState, coachMemory, scheduledDate, previousGeneratedWorkouts })
+  const weeklyContext = buildWeeklyContext(
+    [...buildCompletedWorkoutContext(history, scheduledDate), ...previousGeneratedWorkouts],
+    { scheduledDate, profile },
+  )
+  const decision = (coachDecision ?? buildCoachDecision({ profile, coachState, coachMemory, scheduledDate, previousGeneratedWorkouts })) as CoachDecisionForGenerator
   const readinessScore = Number(coachState?.readinessScore ?? 70)
   const recoveryStatus = String(coachState?.recoveryStatus ?? 'ready')
-  const calendarRecoveryLimited = Number.isFinite(weeklyContext.daysSincePreviousWorkout) && weeklyContext.daysSincePreviousWorkout > 0 && weeklyContext.daysSincePreviousWorkout <= 1
+  const calendarRecoveryLimited = Number.isFinite(weeklyContext.daysSincePreviousWorkout) && weeklyContext.daysSincePreviousWorkout! > 0 && weeklyContext.daysSincePreviousWorkout! <= 1
   const calendarLoadLimited = weeklyContext.calendarLoadStatus === 'above_user_calendar'
   const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited
   const targetMinutes = Number(profile?.targetWorkoutMinutes ?? 60)
   const exerciseTarget = targetExerciseCount({ targetMinutes, preferences })
   const targetPattern = chooseTargetPattern(coachState, preferences, decision, lowReadiness)
 
-  const selected = []
-  const usedExerciseIds = new Set()
+  const selected: GeneratedExercise[] = []
+  const usedExerciseIds = new Set<string>()
   for (const muscleKey of targetPattern) {
     const candidate = chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision: decision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext })
     if (!candidate) continue
@@ -81,7 +358,7 @@ export function buildGeneratedPlannedWorkout({ profile = {}, scheduledDate, coac
   }
 }
 
-function targetExerciseCount({ targetMinutes, preferences = {} }: any) {
+function targetExerciseCount({ targetMinutes, preferences = { focusAreas: [], focusMuscleKeys: [], bannedExerciseNames: [], preferredExerciseNames: [], exerciseStyle: 'mixed', intensityTolerance: 'normal', sessionStyle: 'moderate_stable' } }: { targetMinutes: number | null | undefined; preferences?: NormalizedPreferences }): number {
   const minutes = Number(targetMinutes)
   const base = !Number.isFinite(minutes)
     ? 5
@@ -91,7 +368,7 @@ function targetExerciseCount({ targetMinutes, preferences = {} }: any) {
   return base
 }
 
-function orderExercisesForWorkout(exercises: any) {
+function orderExercisesForWorkout(exercises: GeneratedExercise[]): GeneratedExercise[] {
   return [...(exercises ?? [])]
     .map((exercise, index) => ({ exercise, index }))
     .sort((left, right) => {
@@ -101,7 +378,7 @@ function orderExercisesForWorkout(exercises: any) {
     .map(({ exercise }) => exercise)
 }
 
-function ensureCoreFinisher({ selected, library, coachState, coachMemory, decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, profile, exerciseTarget }: any) {
+function ensureCoreFinisher({ selected, library, coachState, coachMemory, decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, profile, exerciseTarget }: EnsureCoreFinisherParams): GeneratedExercise[] {
   const current = [...(selected ?? [])]
   if (current.length === 0 || workoutIsCoreFocused(current) || current.some((exercise) => normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`) === 'core')) return current
   if (decision?.avoidMuscleGroups?.includes('core') || isRecoveryRestricted('core', weeklyContext) || isCoachMemoryRestricted('core', coachMemory)) return current
@@ -141,12 +418,12 @@ function ensureCoreFinisher({ selected, library, coachState, coachMemory, decisi
   return next
 }
 
-function workoutIsCoreFocused(exercises: any) {
+function workoutIsCoreFocused(exercises: GeneratedExercise[]): boolean {
   const coreCount = (exercises ?? []).filter((exercise) => normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`) === 'core').length
   return coreCount > 0 && coreCount / Math.max(1, exercises.length) >= 0.6
 }
 
-function findCoreFinisherReplacementIndex(exercises: any) {
+function findCoreFinisherReplacementIndex(exercises: GeneratedExercise[]): number {
   for (let index = exercises.length - 1; index >= 0; index -= 1) {
     const exercise = exercises[index]
     const muscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
@@ -157,8 +434,8 @@ function findCoreFinisherReplacementIndex(exercises: any) {
   return exercises.length - 1
 }
 
-function exerciseOrderPriority(exercise: any) {
-  const text = normalizeText(`${exercise?.exerciseName ?? exercise?.name ?? ''} ${exercise?.muscleGroup ?? ''}`)
+function exerciseOrderPriority(exercise: GeneratedExercise | null | undefined): number {
+  const text = normalizeText(`${exercise?.exerciseName ?? ''} ${exercise?.muscleGroup ?? ''}`)
   const muscleKey = normalizeMuscleGroup(text)
   if (muscleKey === 'core') return 70
   if (isLowerBackAccessory(text)) return 55
@@ -170,7 +447,7 @@ function exerciseOrderPriority(exercise: any) {
   return 60
 }
 
-function compoundMuscleOrder(muscleKey: any) {
+function compoundMuscleOrder(muscleKey: string): number {
   if (muscleKey === 'legs') return 1
   if (muscleKey === 'chest') return 2
   if (muscleKey === 'back') return 3
@@ -178,36 +455,41 @@ function compoundMuscleOrder(muscleKey: any) {
   return 5
 }
 
-function isPrimaryCompound(text: any, muscleKey: any) {
+function isPrimaryCompound(text: string, muscleKey: string): boolean {
   if (muscleKey === 'legs' && /(присед|squat|станов|deadlift|румын|romanian|выпад|lunge)/u.test(text)) return true
   if (muscleKey === 'chest' && /(жим|bench|press|отжим)/u.test(text)) return true
   if (muscleKey === 'back' && /(тяга|row|pulldown|pull-up|подтяг)/u.test(text) && !isLowerBackAccessory(text)) return true
   return false
 }
 
-function isSecondaryCompound(text: any, muscleKey: any) {
+function isSecondaryCompound(text: string, muscleKey: string): boolean {
   if (muscleKey === 'shoulders' && /(жим|press)/u.test(text)) return true
   if (muscleKey === 'legs' && /(leg press|жим ногами|step-up|болгар)/u.test(text)) return true
   return false
 }
 
-function isIsolationOrAccessory(text: any, muscleKey: any) {
+function isIsolationOrAccessory(text: string, muscleKey: string): boolean {
   if (muscleKey === 'arms') return true
   if (muscleKey === 'legs' && /(сгиб|разгиб|curl|extension|икр|calf)/u.test(text)) return true
   if (muscleKey === 'shoulders' && /(развед|raise|face pull|мах)/u.test(text)) return true
   return false
 }
 
-function isLowerBackAccessory(text: any) {
+function isLowerBackAccessory(text: string): boolean {
   return /(гиперэкстенз|hyperextension|back extension|разгибание спины)/u.test(text)
 }
 
-function chooseTargetPattern(coachState, preferences = {}, coachDecision = null, lowReadiness = false) {
-  const all = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core']
+function chooseTargetPattern(
+  coachState: CoachStateForGenerator | null,
+  preferences: NormalizedPreferences = emptyPreferences(),
+  coachDecision: CoachDecisionForGenerator | null = null,
+  lowReadiness = false,
+): string[] {
+  const all = CANONICAL_MUSCLE_KEYS
   const avoid = new Set(coachDecision?.avoidMuscleGroups ?? [])
   const fresh = all.filter((muscleKey) => !avoid.has(muscleKey) && !isHighFatigue(muscleKey, coachState))
-  const hasFresh = (muscleKey) => fresh.includes(muscleKey)
-  const pattern = []
+  const hasFresh = (muscleKey: string) => fresh.includes(muscleKey)
+  const pattern: string[] = []
   for (const priority of coachDecision?.priorityMuscleGroups ?? []) {
     if (hasFresh(priority) && !pattern.includes(priority)) pattern.push(priority)
   }
@@ -227,7 +509,7 @@ function chooseTargetPattern(coachState, preferences = {}, coachDecision = null,
   return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
 }
 
-function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext }: any) {
+function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext }: ChooseBestExerciseParams): NormalizedLibraryExercise | null {
   if (isRecoveryRestricted(muscleKey, weeklyContext) || isCoachMemoryRestricted(muscleKey, coachMemory) || coachDecision?.avoidMuscleGroups?.includes(muscleKey)) return null
   const candidates = library
     .filter((exercise) => exercise.muscleKey === muscleKey)
@@ -239,7 +521,7 @@ function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemo
   return candidates[0] ?? null
 }
 
-function applyPrescription({ exercise, profile, coachState, coachDecision = null, history, lowReadiness, preferences = {}, weeklyContext = {}, userTrainingPolicy = null }: any) {
+function applyPrescription({ exercise, profile, coachState, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null }: ApplyPrescriptionParams): GeneratedExercise {
   const recent = latestExerciseHistory(history, exercise.id)
   const recentWeight = Number(recent?.nextRecommendedWeight ?? NaN)
   const baseWeight = Number.isFinite(recentWeight) && recentWeight >= 0 ? recentWeight : exercise.targetWeight
@@ -269,9 +551,6 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
       : 'рабочая нагрузка под цель, 1–2 повтора в запасе'
 
   // Issue #35: apply intra-cycle periodization (loading/accumulation/intensification).
-  // Adjusts weight/reps based on the current mesocycle phase. Small deltas
-  // (±1 rep, ±1 weightStep) — gives each week a distinct character.
-  // Applied BEFORE deload check (deload overrides everything).
   const mesocyclePhase = coachState?.mesocycle?.phase
   if (mesocyclePhase && mesocyclePhase !== 'idle' && mesocyclePhase !== 'deload') {
     const periodized = applyPeriodization({
@@ -294,12 +573,9 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
 
   // Mesocycle deload: if the user's mesocycle is in a deload week, override
   // the prescription with reduced sets/weight/reps and 'easy' intensity.
-  // This was previously a dead import (commit 4a802e6 added the import but
-  // no usage) — planned workouts in the calendar did NOT reflect deload,
-  // only live coach updates did. Now both paths apply deload consistently.
   const mesocycleState = coachState?.mesocycle
-  let deloadNote = null
-  if (isDeloadWeek(mesocycleState)) {
+  let deloadNote: string | null = null
+  if (isDeloadWeek(mesocycleState as Parameters<typeof isDeloadWeek>[0])) {
     const deload = applyDeloadReduction({
       setsCount,
       targetWeight,
@@ -332,8 +608,21 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
   }
 }
 
-function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext = {}, policy = null }: any) {
-  const fatigue = coachState?.muscleGroups?.[exercise.muscleKey]?.fatigue ?? 'unknown'
+interface ReasonForExerciseParams {
+  exercise: NormalizedLibraryExercise
+  coachState: CoachStateForGenerator | null
+  recent: CompletedExerciseHistoryEntry | null
+  lowReadiness: boolean
+  weeklyContext: WeeklyContext
+  policy: string | undefined
+}
+
+interface CompletedExerciseHistoryEntry {
+  nextRecommendedWeight?: number
+}
+
+function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext = emptyWeeklyContext(), policy = null }: ReasonForExerciseParams): string {
+  const fatigue = coachState?.muscleGroups?.[exercise.muscleKey as keyof typeof coachState.muscleGroups]?.fatigue ?? 'unknown'
   const historyText = recent ? 'учтён последний рабочий вес' : 'стартовый вес взят из библиотеки'
   const loadText = lowReadiness ? 'нагрузка снижена из-за восстановления' : 'группа мышц доступна для работы'
   const diversityText = weeklyContext.previousExerciseIds?.size && !weeklyContext.previousExerciseIds.has(exercise.id)
@@ -343,14 +632,24 @@ function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyC
   return `${loadText}; ${exercise.muscleGroup}: усталость ${fatigue}; ${historyText}${diversityText ? `; ${diversityText}` : ''}${policyText ? `; ${policyText}` : ''}.`
 }
 
-function buildCoachReason({ coachState, coachMemory, coachDecision, lowReadiness, scheduledDate, preferences = {}, weeklyContext = {} }: any) {
+interface BuildCoachReasonParams {
+  coachState: CoachStateForGenerator | null
+  coachMemory: CoachMemoryForGenerator | null
+  coachDecision: CoachDecisionForGenerator | null
+  lowReadiness: boolean
+  scheduledDate: string
+  preferences?: NormalizedPreferences
+  weeklyContext?: WeeklyContext
+}
+
+function buildCoachReason({ coachState, coachMemory, coachDecision, lowReadiness, scheduledDate, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext() }: BuildCoachReasonParams): string {
   const readiness = Number(coachState?.readinessScore ?? 70)
   const recovery = coachState?.recoveryStatus ?? 'unknown'
   const weekly = coachState?.weeklyLoadStatus ?? 'unknown'
   const focusText = preferences.focusAreas?.length ? `, фокус: ${preferences.focusAreas.join(', ')}` : ''
   const diversityText = weeklyContext.previousExerciseIds?.size ? ' Учитывается разнообразие недели: соседние тренировки не должны быть одинаковыми.' : ''
   const calendarText = weeklyContext.calendarWorkoutCountLast7 > 1
-    ? ` Прогноз календаря: пользовательский календарь даёт ${weeklyContext.calendarWorkoutCountLast7}/${weeklyContext.effectiveWorkoutsPerWeek} тренировок за 7 дней${Number.isFinite(weeklyContext.daysSincePreviousWorkout) ? `, предыдущая за ${weeklyContext.daysSincePreviousWorkout} дн` : ''}.`
+    ? ` Прогноз календаря: пользовательский календарь даёт ${weeklyContext.calendarWorkoutCountLast7}/${weeklyContext.effectiveWorkoutsPerWeek} тренировок за 7 дней${Number.isFinite(weeklyContext.daysSincePreviousWorkout ?? NaN) ? `, предыдущая за ${weeklyContext.daysSincePreviousWorkout} дн` : ''}.`
     : ''
   const recoveryGuardText = weeklyContext.recoveryRestrictedMuscleKeys?.has('legs') ? ' Для профиля «возвращение после перерыва» ноги не повторяются через один день отдыха.' : ''
   const decisionText = coachDecision?.summary ? ` Решение тренера: ${coachDecision.summary}` : ''
@@ -361,12 +660,21 @@ function buildCoachReason({ coachState, coachMemory, coachDecision, lowReadiness
     : `${COACH_PERSONA} Coach State на ${scheduledDate}: readiness ${readiness}, восстановление ${recovery}${focusText}. Тренировка собрана по решению тренера, а не как случайный набор упражнений.${diversityText}${calendarText}${recoveryGuardText}${decisionText}${reasonText}${memoryText}`
 }
 
-function exerciseScore(exercise, coachState, history, lowReadiness, preferences = {}, weeklyContext = {}, coachMemory = null, coachDecision = null) {
+function exerciseScore(
+  exercise: NormalizedLibraryExercise,
+  coachState: CoachStateForGenerator | null,
+  history: WorkoutHistoryEntry[],
+  lowReadiness: boolean,
+  preferences: NormalizedPreferences = emptyPreferences(),
+  weeklyContext: WeeklyContext = emptyWeeklyContext(),
+  coachMemory: CoachMemoryForGenerator | null = null,
+  coachDecision: CoachDecisionForGenerator | null = null,
+): number {
   let score = 0
   if (isBannedExercise(exercise, preferences)) return -10000
   if (isCoachDecisionRestricted(exercise, coachDecision)) return -9800
   if (isCoachMemoryRestricted(exercise.muscleKey, coachMemory)) return -9500
-  const fatigue = coachState?.muscleGroups?.[exercise.muscleKey]?.fatigue ?? 'low'
+  const fatigue = coachState?.muscleGroups?.[exercise.muscleKey as keyof typeof coachState.muscleGroups]?.fatigue ?? 'low'
   if (fatigue === 'low') score += 30
   if (fatigue === 'medium') score += lowReadiness ? 0 : 12
   if (fatigue === 'high') score -= 100
@@ -394,18 +702,21 @@ function exerciseScore(exercise, coachState, history, lowReadiness, preferences 
   return score
 }
 
-function buildWeeklyContext(previousGeneratedWorkouts = [], { scheduledDate, profile } = {}) {
-  const previousExerciseIds = new Set()
-  const recentExerciseIds = new Set()
-  const previousMuscleCounts = new Map()
-  const recentMuscleCounts = new Map()
-  const recoveryRestrictedMuscleKeys = new Set()
+function buildWeeklyContext(
+  previousGeneratedWorkouts: Array<PreviousGeneratedWorkout | { scheduledDate: string; exercises: PreviousGeneratedWorkout['exercises'] }> = [],
+  { scheduledDate = '', profile }: { scheduledDate?: string; profile?: ProfileForGenerator } = {},
+): WeeklyContext {
+  const previousExerciseIds = new Set<string>()
+  const recentExerciseIds = new Set<string>()
+  const previousMuscleCounts = new Map<string, number>()
+  const recentMuscleCounts = new Map<string, number>()
+  const recoveryRestrictedMuscleKeys = new Set<string>()
   const returningAfterBreak = isReturningAfterBreak(profile)
   const plannedWorkoutsPerWeek = Math.max(1, Math.min(7, Math.round(Number(profile?.workoutsPerWeek ?? 3) || 3)))
   let previousWorkoutCountLast7 = 0
   let calendarWorkoutCountLast7 = 1
-  let daysSincePreviousWorkout = null
-  const seenWorkoutDates = new Set([String(scheduledDate ?? '').slice(0, 10)])
+  let daysSincePreviousWorkout: number | null = null
+  const seenWorkoutDates = new Set<string>([String(scheduledDate ?? '').slice(0, 10)])
   for (const workout of previousGeneratedWorkouts ?? []) {
     const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
     const workoutDateKey = String(workout?.scheduledDate ?? '').slice(0, 10)
@@ -453,38 +764,41 @@ function buildWeeklyContext(previousGeneratedWorkouts = [], { scheduledDate, pro
   }
 }
 
-function buildCompletedWorkoutContext(history = [], scheduledDate) {
+function buildCompletedWorkoutContext(
+  history: WorkoutHistoryEntry[] = [],
+  scheduledDate: string,
+): Array<{ scheduledDate: string; exercises: WorkoutHistoryEntry['exercises'] }> {
   return (history ?? [])
     .filter((workout) => {
-      const daysSinceWorkout = daysBetweenDates(workout?.completedAt ?? workout?.completed_at, scheduledDate)
+      const daysSinceWorkout = daysBetweenDates(workout?.completedAt, scheduledDate)
       return Number.isFinite(daysSinceWorkout) && daysSinceWorkout > 0 && daysSinceWorkout <= 7
     })
     .map((workout) => ({
-      scheduledDate: String(workout.completedAt ?? workout.completed_at).slice(0, 10),
+      scheduledDate: String(workout.completedAt).slice(0, 10),
       exercises: workout.exercises ?? [],
     }))
 }
 
-function isRecoveryRestricted(muscleKey, weeklyContext = {}) {
+function isRecoveryRestricted(muscleKey: string, weeklyContext: WeeklyContext = emptyWeeklyContext()): boolean {
   return weeklyContext.recoveryRestrictedMuscleKeys?.has(muscleKey) ?? false
 }
 
-function isCoachMemoryRestricted(muscleKey, coachMemory = null) {
+function isCoachMemoryRestricted(muscleKey: string, coachMemory: CoachMemoryForGenerator | null = null): boolean {
   return coachMemory?.muscleGroupProfiles?.[muscleKey]?.status === 'avoid'
 }
 
-function isCoachDecisionRestricted(exercise, coachDecision = null) {
+function isCoachDecisionRestricted(exercise: NormalizedLibraryExercise, coachDecision: CoachDecisionForGenerator | null = null): boolean {
   if (!coachDecision) return false
   if (coachDecision.avoidMuscleGroups?.includes(exercise.muscleKey)) return true
   return coachDecision.exercisePolicies?.[exercise.id] === 'avoid_today'
 }
 
-function isReturningAfterBreak(profile: any = {}) {
+function isReturningAfterBreak(profile: ProfileForGenerator = {}): boolean {
   const level = normalizeText(profile?.level)
   return level.includes('перерыв') || level.includes('возвращ') || level.includes('return') || level.includes('beginner') || level.includes('нович')
 }
 
-function daysBetweenDates(fromDate: any, toDate: any) {
+function daysBetweenDates(fromDate: unknown, toDate: unknown): number {
   if (!fromDate || !toDate) return Number.NaN
   const from = new Date(`${String(fromDate).slice(0, 10)}T00:00:00.000Z`)
   const to = new Date(`${String(toDate).slice(0, 10)}T00:00:00.000Z`)
@@ -492,10 +806,10 @@ function daysBetweenDates(fromDate: any, toDate: any) {
   return Math.round((to.getTime() - from.getTime()) / 86_400_000)
 }
 
-function normalizeExerciseLibrary(exerciseLibrary: any) {
+function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): NormalizedLibraryExercise[] {
   return (exerciseLibrary ?? []).map((exercise) => ({
-    id: canonicalExerciseId(exercise),
-    name: exercise.name,
+    id: canonicalExerciseId(exercise) ?? '',
+    name: String(exercise.name ?? ''),
     muscleGroup: exercise.muscleGroup ?? exercise.muscle_group ?? '',
     muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`),
     setsCount: Number(exercise.setsCount ?? exercise.sets_count ?? 2),
@@ -507,7 +821,7 @@ function normalizeExerciseLibrary(exerciseLibrary: any) {
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
-function normalizePreferences(profile: any = {}) {
+function normalizePreferences(profile: ProfileForGenerator = {}): NormalizedPreferences {
   const preferences = profile.preferences ?? {}
   const focusAreas = Array.isArray(preferences.focusAreas) ? preferences.focusAreas.map(String).filter(Boolean) : []
   const bannedExerciseNames = Array.isArray(profile.bannedExercises) ? profile.bannedExercises.map(normalizeText).filter(Boolean) : []
@@ -523,49 +837,77 @@ function normalizePreferences(profile: any = {}) {
   }
 }
 
-function normalizeText(value: any) {
+function emptyPreferences(): NormalizedPreferences {
+  return {
+    focusAreas: [],
+    focusMuscleKeys: [],
+    bannedExerciseNames: [],
+    preferredExerciseNames: [],
+    exerciseStyle: 'mixed',
+    intensityTolerance: 'normal',
+    sessionStyle: 'moderate_stable',
+  }
+}
+
+function emptyWeeklyContext(): WeeklyContext {
+  return {
+    previousExerciseIds: new Set(),
+    recentExerciseIds: new Set(),
+    previousMuscleCounts: new Map(),
+    recentMuscleCounts: new Map(),
+    recoveryRestrictedMuscleKeys: new Set(),
+    previousWorkoutCountLast7: 0,
+    plannedWorkoutsPerWeek: 3,
+    calendarWorkoutCountLast7: 0,
+    effectiveWorkoutsPerWeek: 3,
+    daysSincePreviousWorkout: null,
+    calendarLoadStatus: 'below_plan',
+  }
+}
+
+function normalizeText(value: unknown): string {
   return String(value ?? '').trim().toLowerCase()
 }
 
-function matchesExercisePreference(exercise: any, preference: any) {
+function matchesExercisePreference(exercise: NormalizedLibraryExercise, preference: string): boolean {
   const normalized = normalizeText(preference)
   if (!normalized) return false
   return normalizeText(exercise.id).includes(normalized) || normalizeText(exercise.name).includes(normalized)
 }
 
-function isBannedExercise(exercise: any, preferences: any) {
+function isBannedExercise(exercise: NormalizedLibraryExercise, preferences: NormalizedPreferences): boolean {
   return preferences?.bannedExerciseNames?.some((name) => matchesExercisePreference(exercise, name)) ?? false
 }
 
-function isMachineLike(exercise: any) {
+function isMachineLike(exercise: NormalizedLibraryExercise): boolean {
   const text = normalizeText(`${exercise.name} ${exercise.muscleGroup}`)
   return text.includes('тренаж') || text.includes('блок') || text.includes('машин') || text.includes('machine') || text.includes('cable')
 }
 
-function isFreeWeightLike(exercise: any) {
+function isFreeWeightLike(exercise: NormalizedLibraryExercise): boolean {
   const text = normalizeText(`${exercise.name} ${exercise.muscleGroup}`)
   return text.includes('штанг') || text.includes('гантел') || text.includes('barbell') || text.includes('dumbbell')
 }
 
-function latestExerciseHistory(history: any, exerciseId: any) {
+function latestExerciseHistory(history: WorkoutHistoryEntry[], exerciseId: string): CompletedExerciseHistoryEntry | null {
   return [...(history ?? [])]
     .sort((a, b) => String(b.completedAt).localeCompare(String(a.completedAt)))
     .flatMap((workout) => workout.exercises ?? [])
-    .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId))
+    .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId)) ?? null
 }
 
-function intensityForGoal(goal: any) {
+function intensityForGoal(goal: string | undefined): string {
   const text = String(goal ?? '').toLowerCase()
   if (text.includes('сил')) return 'strength_quality'
   if (text.includes('масс') || text.includes('рост')) return 'hypertrophy'
   return 'normal'
 }
 
-function isHighFatigue(muscleKey: any, coachState: any) {
-  return coachState?.muscleGroups?.[muscleKey]?.fatigue === 'high'
+function isHighFatigue(muscleKey: string, coachState: CoachStateForGenerator | null): boolean {
+  return coachState?.muscleGroups?.[muscleKey as keyof typeof coachState.muscleGroups]?.fatigue === 'high'
 }
 
-function clamp(value: any, min: any, max: any) {
+function clamp(value: unknown, min: number, max: number): number {
   const number = Number(value)
   if (!Number.isFinite(number)) return min
   return Math.max(min, Math.min(max, Math.round(number)))
