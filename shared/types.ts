@@ -114,6 +114,7 @@ export interface MesocycleState {
 
 export interface CoachState {
   userId: string | null
+  generatedAt: string
   recoveryStatus: string
   readinessScore: number
   weeklyLoadStatus: string
@@ -124,6 +125,89 @@ export interface CoachState {
   volumeLandmarkOverrides?: Record<string, { mev: number; mav: number; mrv: number }>
   volumeAdjustmentLog?: VolumeAdjustmentDecision[]
   volumeSnapshots?: Record<string, MuscleVolumeSnapshot>
+  // Issue #65: muscle group + exercise state (computed by coachState.ts)
+  muscleGroups?: Record<string, MuscleGroupInfo | undefined>
+  exercises?: Record<string, ExerciseStateInfo | undefined>
+  // Additional computed fields produced by coachState.ts
+  lastWorkoutId?: string | null
+  lastWorkoutDayId?: string | null
+  actualWorkoutsLast7Days?: number
+  plannedWorkoutsPerWeek?: number
+  personalization?: { trainingDataConfidence: number }
+}
+
+/** Per-muscle-group fatigue/volume state (issue #65). */
+export interface MuscleGroupInfo {
+  fatigue: 'low' | 'medium' | 'high' | 'unknown'
+  recentHardSets: number
+  recentMaxEffortSets: number
+  recentVolume: number
+  lastTrainedDaysAgo: number | null
+}
+
+/** Per-exercise state (issue #65). */
+export interface ExerciseStateInfo {
+  name: string
+  muscleGroup: string
+  status: MuscleGroupStatus
+  lastWeight: number
+  lastReps: number | null
+  maxEffortSets: number
+  hardSets: number
+  pain: boolean
+  target: string
+}
+
+/** Per-exercise profile (issue #65, used by coachMemory). */
+export interface ExerciseProfile {
+  id: string
+  name: string
+  muscleGroup: string
+  muscleKey: string
+  status: MuscleGroupStatus
+  currentWorkingWeight: number
+  lastReps: number | null
+  lastTrainedAt: string | null
+  recentSessions: number
+  hardSets: number
+  maxEffortSets: number
+  pain: boolean
+  recommendation: string
+}
+
+/** Extended MuscleGroupProfile used by coachMemory (issue #65). */
+export interface MuscleGroupProfileExtended extends MuscleGroupProfile {
+  maxEffortSetsLast7Days: number
+  recentVolume: number
+  pain: boolean
+}
+
+/** Live workout session context (issue #65, used by coachEngine/coachBrain). */
+export interface CoachSessionContext {
+  availableMinutes?: number
+  nextExercise?: ExerciseRef | null
+  workoutExercises?: ExerciseRef[]
+  exerciseLibrary?: unknown[]
+  readinessCheckIn?: ReadinessCheckIn | null
+}
+
+/** Minimal exercise reference used inside CoachSessionContext. */
+export interface ExerciseRef {
+  id?: string
+  name?: string
+  muscleGroup?: string
+  exerciseName?: string
+  targetWeight?: number
+  weightStep?: number
+  repMin?: number
+  repMax?: number
+  restSeconds?: number
+}
+
+/** Context bag passed into coachEngine.recommendNextSet (issue #65). */
+export interface CoachEngineContext {
+  session?: CoachSessionContext
+  coachState?: CoachState | null
 }
 
 export interface VolumeAdjustmentDecision {
@@ -143,7 +227,17 @@ export interface MuscleVolumeSnapshot {
   lastAdjustmentIso: string | null
 }
 
-export type MuscleGroupStatus = 'no_data' | 'hold' | 'consolidate' | 'progress_possible' | 'pain'
+export type MuscleGroupStatus =
+  | 'no_data'
+  | 'hold'
+  | 'consolidate'
+  | 'progress_possible'
+  | 'pain'
+  // Issue #65: extended statuses used by coachMemory.muscleGroupProfiles
+  | 'avoid'
+  | 'fatigued'
+  | 'medium'
+  | 'ready'
 
 export interface MuscleGroupProfile {
   key: string

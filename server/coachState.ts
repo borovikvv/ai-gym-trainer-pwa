@@ -1,5 +1,13 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
-import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+// Issue #65 (#36 decomposition): all `any` replaced with concrete types.
+// Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
+import type {
+  CoachState,
+  ExerciseStateInfo,
+  MesocycleState,
+  MuscleGroupInfo,
+  WorkoutHistoryEntry,
+} from '../shared/types.js'
+import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup, isAssistedExerciseName } from './lib/muscleGroups.js'
 import { computeMesocycleState } from './mesocycle.js'
@@ -8,10 +16,129 @@ import { computeAllAdjustments } from './adaptiveVolumeLandmarks.js'
 import { buildAllMuscleVolumeSnapshots } from './buildVolumeSnapshot.js'
 import { extractLastAdjustments, mergeLandmarkOverrides } from './volumeLandmarkOverrides.js'
 
-export function computeCoachState({ profile = {}, workoutDays = [], history = [], now = new Date(), lastWorkoutQualityScore = null, coachMemory = null, volumeLandmarkOverrides = null, e1rmHistories = null }) {
+// ---------------------------------------------------------------------------
+// Input / output interfaces
+// ---------------------------------------------------------------------------
+
+interface ProfileForCoachState {
+  userId?: string
+  user_id?: string
+  age?: number | null
+  level?: string
+  workoutsPerWeek?: number
+  preferences?: { focusAreas?: string[] } | null
+}
+
+interface WorkoutDayInput {
+  id?: string
+  name?: string
+  exercises?: Array<{
+    id?: string
+    name?: string
+    muscleGroup?: string
+    targetWeight?: number
+    repMin?: number
+    repMax?: number
+  }>
+}
+
+interface E1rmHistoryInput {
+  muscleGroup?: string | null
+  exerciseName?: string | null
+  dataPoints?: { date?: string; e1rm?: number }[] | null
+  trend?: { direction?: 'up' | 'down' | 'flat' | 'insufficient_data' } | null
+}
+
+interface VolumeLandmarkOverridesInput {
+  [muscleKey: string]: {
+    mev?: number
+    mav?: number
+    mrv?: number
+    lastAdjustmentIso?: string | null
+    [key: string]: unknown
+  } | undefined
+}
+
+interface ComputeCoachStateInput {
+  profile?: ProfileForCoachState
+  workoutDays?: WorkoutDayInput[]
+  history?: WorkoutHistoryEntryInput[]
+  now?: Date
+  lastWorkoutQualityScore?: number | null
+  coachMemory?: { muscleGroupProfiles?: Record<string, unknown> } | null
+  volumeLandmarkOverrides?: VolumeLandmarkOverridesInput | null
+  e1rmHistories?: E1rmHistoryInput[] | null
+}
+
+interface WorkoutHistoryEntryInput extends Omit<WorkoutHistoryEntry, 'workoutDayId'> {
+  workoutDayId?: string
+  workout_day_id?: string
+}
+
+interface CatalogItem {
+  id: string
+  name: string
+  muscleGroup: string
+  muscleKey: string
+  targetWeight?: number
+  repMin?: number
+  repMax?: number
+}
+
+interface MuscleGroupState extends MuscleGroupInfo {
+  fatigue: 'low' | 'medium' | 'high' | 'unknown'
+}
+
+interface ComputeRecoveryStatusInput {
+  daysSinceLastWorkout: number | null
+  highFatigueGroups: number
+  recentMaxEffortSets: number
+  painFlagsLast14Days: number
+  userTrainingPolicy?: UserTrainingPolicy | null
+  trainingDataConfidence?: number
+}
+
+interface ComputeReadinessScoreInput extends ComputeRecoveryStatusInput {
+  weeklyLoadRatio: number
+  lastWorkoutQualityScore?: number | null
+}
+
+interface BuildWarningsInput {
+  recoveryStatus: string
+  weeklyLoadStatus: string
+  painFlagsLast14Days: number
+  highFatigueGroups: number
+  mesocycle: MesocycleState | null
+}
+
+interface BuildMuscleGroupStateInput {
+  history: WorkoutHistoryEntryInput[]
+  exerciseCatalog: Map<string, CatalogItem>
+  now: Date
+}
+
+interface BuildExerciseStateInput {
+  history: WorkoutHistoryEntryInput[]
+  exerciseCatalog: Map<string, CatalogItem>
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function computeCoachState({
+  profile = {},
+  workoutDays = [],
+  history = [],
+  now = new Date(),
+  lastWorkoutQualityScore = null,
+  coachMemory = null,
+  volumeLandmarkOverrides = null,
+  e1rmHistories = null,
+}: ComputeCoachStateInput = {}): CoachState {
   const nowDate = new Date(now)
   const normalizedHistory = [...(history ?? [])]
-    .filter((session) => session?.completedAt)
+    .filter((session): session is WorkoutHistoryEntryInput => Boolean(session?.completedAt))
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
 
   const lastWorkout = normalizedHistory[0] ?? null
@@ -26,8 +153,8 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
   const exerciseCatalog = buildExerciseCatalog(workoutDays)
   const muscleGroups = buildMuscleGroupState({ history: normalizedHistory, exerciseCatalog, now: nowDate })
   const exercises = buildExerciseState({ history: normalizedHistory, exerciseCatalog })
-  const highFatigueGroups = Object.values(muscleGroups).filter((group) => group.fatigue === 'high').length
-  const recentMaxEffortSets = Object.values(muscleGroups).reduce((sum, group) => sum + group.recentMaxEffortSets, 0)
+  const highFatigueGroups = Object.values(muscleGroups).filter((group) => group?.fatigue === 'high').length
+  const recentMaxEffortSets = Object.values(muscleGroups).reduce((sum, group) => sum + (group?.recentMaxEffortSets ?? 0), 0)
   const painFlagsLast14Days = normalizedHistory
     .filter((session) => daysBetween(new Date(session.completedAt), nowDate) <= 14)
     .flatMap((session) => session.exercises ?? [])
@@ -52,23 +179,28 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
     lastWorkoutQualityScore,
   })
 
-  const mesocycle = computeMesocycleState({ profile, history, coachMemory, now: nowDate })
+  const mesocycle = computeMesocycleState({
+    profile: profile as Parameters<typeof computeMesocycleState>[0]['profile'],
+    history: normalizedHistory as unknown as WorkoutHistoryEntry[],
+    coachMemory: coachMemory as Parameters<typeof computeMesocycleState>[0]['coachMemory'],
+    now: nowDate,
+  })
 
   // --- Adaptive volume landmark adjustments (Phase 3 issue #6) ---
-  // Build snapshots from history + e1RM trends, compute adjustments, and
-  // merge with existing overrides to produce the effective landmark table.
-  // The caller (loadCoachMemoryForUser) is responsible for persisting any
-  // non-hold decisions via saveVolumeLandmarkAdjustments().
   const phase = userTrainingPolicy?.ageRecoveryProfile?.phase ?? 'adult'
   const lastAdjustments = extractLastAdjustments(volumeLandmarkOverrides ?? {})
   const snapshots = buildAllMuscleVolumeSnapshots(
-    normalizedHistory,
+    normalizedHistory as unknown as Parameters<typeof buildAllMuscleVolumeSnapshots>[0],
     e1rmHistories ?? [],
     phase,
     nowDate,
     lastAdjustments,
   )
-  const adjustmentDecisions = computeAllAdjustments(snapshots, phase, nowDate)
+  const adjustmentDecisions = computeAllAdjustments(
+    snapshots as Parameters<typeof computeAllAdjustments>[0],
+    phase,
+    nowDate,
+  )
   const volumeAdjustmentLog = adjustmentDecisions.filter((a) => a.action !== 'hold')
   const effectiveVolumeLandmarks = mergeLandmarkOverrides(
     phase,
@@ -101,8 +233,8 @@ export function computeCoachState({ profile = {}, workoutDays = [], history = []
   }
 }
 
-function buildExerciseCatalog(workoutDays: any) {
-  const catalog = new Map()
+function buildExerciseCatalog(workoutDays: WorkoutDayInput[]): Map<string, CatalogItem> {
+  const catalog = new Map<string, CatalogItem>()
   for (const day of workoutDays ?? []) {
     for (const exercise of day.exercises ?? []) {
       const id = canonicalExerciseId(exercise)
@@ -112,14 +244,14 @@ function buildExerciseCatalog(workoutDays: any) {
         id,
         canonicalExerciseId: id,
         muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`),
-      })
+      } as CatalogItem)
     }
   }
   return catalog
 }
 
-function buildMuscleGroupState({ history, exerciseCatalog, now }: any) {
-  const groups = new Map()
+function buildMuscleGroupState({ history, exerciseCatalog, now }: BuildMuscleGroupStateInput): Record<string, MuscleGroupState> {
+  const groups = new Map<string, MuscleGroupState>()
   for (const session of history ?? []) {
     const completedAt = new Date(session.completedAt)
     const ageDays = daysBetween(completedAt, now)
@@ -128,7 +260,7 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }: any) {
       const exerciseId = canonicalExerciseId(exercise)
       const catalogItem = exerciseCatalog.get(exerciseId)
       const muscleKey = catalogItem?.muscleKey ?? normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
-      const current = groups.get(muscleKey) ?? {
+      const current: MuscleGroupState = groups.get(muscleKey) ?? {
         fatigue: 'low',
         recentHardSets: 0,
         recentMaxEffortSets: 0,
@@ -147,7 +279,7 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }: any) {
     }
   }
 
-  const result = {}
+  const result: Record<string, MuscleGroupState> = {}
   for (const [key, group] of groups.entries()) {
     result[key] = {
       ...group,
@@ -157,10 +289,10 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }: any) {
   return result
 }
 
-function buildExerciseState({ history, exerciseCatalog }: any) {
-  const result = {}
+function buildExerciseState({ history, exerciseCatalog }: BuildExerciseStateInput): Record<string, ExerciseStateInfo> {
+  const result: Record<string, ExerciseStateInfo> = {}
   for (const [exerciseId, catalogItem] of exerciseCatalog.entries()) {
-    const sessions = []
+    const sessions: Array<{ session: WorkoutHistoryEntryInput; exercise: WorkoutHistoryEntryInput['exercises'][number] }> = []
     for (const session of history ?? []) {
       const exercise = (session.exercises ?? []).find((item) => canonicalExerciseId(item) === exerciseId)
       if (exercise) sessions.push({ session, exercise })
@@ -203,7 +335,7 @@ function buildExerciseState({ history, exerciseCatalog }: any) {
   return result
 }
 
-function computeRecoveryStatus({ daysSinceLastWorkout, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0 }: any) {
+function computeRecoveryStatus({ daysSinceLastWorkout, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0 }: ComputeRecoveryStatusInput): string {
   if (daysSinceLastWorkout === null) return 'unknown'
   if (painFlagsLast14Days > 0 || daysSinceLastWorkout < 1 || recentMaxEffortSets >= 2) return 'low'
   if (daysSinceLastWorkout < 2 || highFatigueGroups > 0 || recentMaxEffortSets >= 1) return 'partial'
@@ -213,7 +345,7 @@ function computeRecoveryStatus({ daysSinceLastWorkout, highFatigueGroups, recent
   return 'ready'
 }
 
-function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0, lastWorkoutQualityScore = null }: any) {
+function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0, lastWorkoutQualityScore = null }: ComputeReadinessScoreInput): number {
   let score = 75
   if (daysSinceLastWorkout === null) score -= 5
   else if (daysSinceLastWorkout < 1) score -= 35
@@ -236,19 +368,19 @@ function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFati
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
-function computeTrainingDataConfidence(history: any) {
+function computeTrainingDataConfidence(history: WorkoutHistoryEntryInput[]): number {
   return clampNumber((history ?? []).length / 8, 0, 1, 0)
 }
 
-function classifyMuscleFatigue(group: any) {
+function classifyMuscleFatigue(group: MuscleGroupInfo): 'low' | 'medium' | 'high' | 'unknown' {
   const recentlyTrained = group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1
   if (group.recentMaxEffortSets > 0 || (recentlyTrained && group.recentHardSets >= 2)) return 'high'
   if (recentlyTrained || group.recentHardSets > 0) return 'medium'
   return 'low'
 }
 
-function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups, mesocycle }: any) {
-  const warnings = []
+function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, highFatigueGroups, mesocycle }: BuildWarningsInput): string[] {
+  const warnings: string[] = []
   if (recoveryStatus === 'low') warnings.push('восстановление низкое — следующую нагрузку стоит облегчить')
   if (weeklyLoadStatus === 'above_plan') warnings.push('фактическая частота выше анкеты — нужен контроль объёма')
   if (painFlagsLast14Days > 0) warnings.push('были отметки боли — упражнения с дискомфортом не прогрессировать')
@@ -262,11 +394,11 @@ function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, 
   return warnings
 }
 
-function completedSetsOf(exercise: any) {
+function completedSetsOf(exercise: WorkoutHistoryEntryInput['exercises'][number]): Array<{ weight?: number; reps?: number; rpe?: number; completed?: boolean }> {
   return (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
 }
 
-function targetTextForStatus(status, exerciseName = '') {
+function targetTextForStatus(status: string, exerciseName = ''): string {
   if (status === 'progress_possible') {
     // For assisted exercises (gravitron, assisted dips) progression means
     // decreasing the counterweight, not increasing weight.
@@ -279,20 +411,20 @@ function targetTextForStatus(status, exerciseName = '') {
   return 'держать качество и добрать план'
 }
 
-function daysBetween(from: any, to: any) {
+function daysBetween(from: Date, to: Date): number {
   return Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
 }
 
-function wholeDaysBetween(from: any, to: any) {
+function wholeDaysBetween(from: Date, to: Date): number {
   return Math.floor(daysBetween(from, to))
 }
 
-function clampNumber(value: any, min: any, max: any, fallback: any) {
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const number = Number(value)
   if (!Number.isFinite(number)) return fallback
   return Math.max(min, Math.min(max, number))
 }
 
-function roundNumber(value: any) {
+function roundNumber(value: unknown): number {
   return Number(Number(value).toFixed(1))
 }

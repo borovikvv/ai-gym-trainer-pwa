@@ -10,6 +10,7 @@
 // shared interfaces.
 
 import type {
+  CoachState,
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { buildCoachDecision } from './coachDecision.js'
@@ -23,38 +24,9 @@ import { applyPeriodization } from './periodization.js'
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
 // ---------------------------------------------------------------------------
-// Local type aliases — issue #65 (coach core) will move these to shared/types.ts.
-// Until then, these minimal interfaces match the actual runtime shapes
-// consumed by this module. They are structurally compatible with the objects
-// produced by coachState.ts, coachMemory.ts, coachDecision.ts.
+// Local type aliases — issue #65 reconciled CoachState with shared/types.ts.
+// CoachMemory and CoachDecision will be reconciled in #66 (coach runtime).
 // ---------------------------------------------------------------------------
-
-interface MuscleGroupInfo {
-  fatigue?: 'low' | 'medium' | 'high' | 'unknown'
-  status?: string
-  lastTrainedDaysAgo?: number | null
-  workingSetsLast7Days?: number
-  heavySetsLast7Days?: number
-}
-
-interface ExerciseStateInfo {
-  status?: string
-}
-
-interface CoachStateForGenerator {
-  userId?: string | null
-  readinessScore?: number
-  recoveryStatus?: string
-  weeklyLoadStatus?: string
-  // Note: mesocycle is typed loosely (phase as string) because coachState.ts
-  // (issue #65) returns a plain object. Once #65 lands, this can use
-  // MesocycleState directly.
-  mesocycle?: { phase?: string; isDeload?: boolean; [key: string]: unknown } | null
-  muscleGroups?: Record<string, MuscleGroupInfo | undefined>
-  exercises?: Record<string, ExerciseStateInfo | undefined>
-  warnings?: string[]
-  [key: string]: unknown
-}
 
 interface CoachMemoryForGenerator {
   userId?: string | null
@@ -77,7 +49,7 @@ interface CoachDecisionForGenerator {
   exercisePolicies?: Record<string, string>
   reasons?: string[]
   summary?: string
-  // Fields produced by buildCoachDecision (issue #65 will reconcile)
+  // Fields produced by buildCoachDecision (issue #66 will reconcile)
   generatedAt?: string
   scheduledDate?: string
   nextWorkoutIntent?: {
@@ -170,7 +142,7 @@ interface PreviousGeneratedWorkout {
 interface BuildGeneratedPlannedWorkoutInput {
   profile?: ProfileForGenerator
   scheduledDate: string
-  coachState?: CoachStateForGenerator | null
+  coachState?: CoachState | null
   coachMemory?: CoachMemoryForGenerator | null
   coachDecision?: CoachDecisionForGenerator | null
   exerciseLibrary?: LibraryExerciseInput[]
@@ -233,7 +205,7 @@ interface WeeklyContext {
 interface ChooseBestExerciseParams {
   muscleKey: string
   library: NormalizedLibraryExercise[]
-  coachState: CoachStateForGenerator | null
+  coachState: CoachState | null
   coachMemory: CoachMemoryForGenerator | null
   coachDecision: CoachDecisionForGenerator | null
   history: WorkoutHistoryEntry[]
@@ -246,7 +218,7 @@ interface ChooseBestExerciseParams {
 interface ApplyPrescriptionParams {
   exercise: NormalizedLibraryExercise
   profile?: ProfileForGenerator
-  coachState: CoachStateForGenerator | null
+  coachState: CoachState | null
   coachDecision?: CoachDecisionForGenerator | null
   history: WorkoutHistoryEntry[]
   lowReadiness: boolean
@@ -258,7 +230,7 @@ interface ApplyPrescriptionParams {
 interface EnsureCoreFinisherParams {
   selected: GeneratedExercise[]
   library: NormalizedLibraryExercise[]
-  coachState: CoachStateForGenerator | null
+  coachState: CoachState | null
   coachMemory: CoachMemoryForGenerator | null
   decision: CoachDecisionForGenerator | null
   history: WorkoutHistoryEntry[]
@@ -480,7 +452,7 @@ function isLowerBackAccessory(text: string): boolean {
 }
 
 function chooseTargetPattern(
-  coachState: CoachStateForGenerator | null,
+  coachState: CoachState | null,
   preferences: NormalizedPreferences = emptyPreferences(),
   coachDecision: CoachDecisionForGenerator | null = null,
   lowReadiness = false,
@@ -610,7 +582,7 @@ function applyPrescription({ exercise, profile, coachState, coachDecision = null
 
 interface ReasonForExerciseParams {
   exercise: NormalizedLibraryExercise
-  coachState: CoachStateForGenerator | null
+  coachState: CoachState | null
   recent: CompletedExerciseHistoryEntry | null
   lowReadiness: boolean
   weeklyContext: WeeklyContext
@@ -633,7 +605,7 @@ function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyC
 }
 
 interface BuildCoachReasonParams {
-  coachState: CoachStateForGenerator | null
+  coachState: CoachState | null
   coachMemory: CoachMemoryForGenerator | null
   coachDecision: CoachDecisionForGenerator | null
   lowReadiness: boolean
@@ -662,7 +634,7 @@ function buildCoachReason({ coachState, coachMemory, coachDecision, lowReadiness
 
 function exerciseScore(
   exercise: NormalizedLibraryExercise,
-  coachState: CoachStateForGenerator | null,
+  coachState: CoachState | null,
   history: WorkoutHistoryEntry[],
   lowReadiness: boolean,
   preferences: NormalizedPreferences = emptyPreferences(),
@@ -903,7 +875,7 @@ function intensityForGoal(goal: string | undefined): string {
   return 'normal'
 }
 
-function isHighFatigue(muscleKey: string, coachState: CoachStateForGenerator | null): boolean {
+function isHighFatigue(muscleKey: string, coachState: CoachState | null): boolean {
   return coachState?.muscleGroups?.[muscleKey as keyof typeof coachState.muscleGroups]?.fatigue === 'high'
 }
 
