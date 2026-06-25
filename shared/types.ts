@@ -18,6 +18,31 @@ export type MuscleKey = 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core
 export type MesocyclePhase = 'idle' | 'loading' | 'accumulation' | 'intensification' | 'deload'
 
 // ---------------------------------------------------------------------------
+// Volume landmarks (issue #62 / #36 decomposition)
+//
+// MEV = Minimum Effective Volume — below this, no adaptation stimulus
+// MAV = Maximum Adaptive Volume — optimal range for growth
+// MRV = Maximum Recoverable Volume — above this, recovery risk
+//
+// All values are working sets per 7-day rolling window for a single muscle
+// group.
+// ---------------------------------------------------------------------------
+
+export interface VolumeLandmark {
+  mev: number
+  mav: number
+  mrv: number
+}
+
+export type VolumeStatus = 'below_mev' | 'in_mev_mav' | 'above_mav' | 'at_mrv' | 'above_mrv'
+
+export interface VolumeRecommendation {
+  action: string
+  reason: string
+  priority: number
+}
+
+// ---------------------------------------------------------------------------
 // Workout / Exercise / Set
 // ---------------------------------------------------------------------------
 

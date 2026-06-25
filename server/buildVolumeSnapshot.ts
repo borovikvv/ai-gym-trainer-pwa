@@ -2,7 +2,7 @@
  * Volume Landmark Snapshot Builder
  *
  * Phase 3 issue #6 step 2 of 5: builds MuscleVolumeSnapshot objects
- * from workout history, which adaptiveVolumeLandmarks.js consumes to
+ * from workout history, which adaptiveVolumeLandmarks consumes to
  * decide whether to adjust MEV/MRV per muscle group.
  *
  * Snapshot fields:
@@ -17,27 +17,43 @@
  *                          caller; this module is DB-free)
  */
 
+import type {
+  AgeRecoveryPhase,
+  CompletedExerciseHistory,
+  MuscleVolumeSnapshot,
+  WorkoutHistoryEntry,
+} from '../shared/types.js'
 import { normalizeMuscleGroup, CANONICAL_MUSCLE_KEYS } from './lib/muscleGroups.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 
 const MS_PER_DAY = 86_400_000
 const MS_PER_WEEK = 7 * MS_PER_DAY
 
+/** Minimal shape of an E1RM history entry (defined fully elsewhere). */
+interface E1RMHistoryForMuscle {
+  muscleGroup?: string | null
+  exerciseName?: string | null
+  dataPoints?: { date?: string; e1rm?: number }[] | null
+  trend?: { direction?: 'up' | 'down' | 'flat' | 'insufficient_data' } | null
+}
+
+/** A weekly bucket produced by bucketHistoryByIsoWeek. */
+interface WeekBucket {
+  weekStart: number
+  sets: number
+}
+
 /**
  * Build a snapshot for a single muscle group from workout history.
- *
- * @param {string} muscleKey
- * @param {Array} history — WorkoutHistoryEntry[] (most recent first or
- *                          unsorted; we sort internally)
- * @param {Array} e1rmHistories — ExerciseE1RMHistory[] for this muscle
- *                                group (precomputed by caller to avoid
- *                                duplicating e1RM logic here)
- * @param {string} phase — 'teen' | 'adult' | 'mature_adult'
- * @param {Date} now
- * @param {string|null} lastAdjustmentIso — from overrides table
- * @returns {object} MuscleVolumeSnapshot
  */
-export function buildMuscleVolumeSnapshot(muscleKey: any, history, e1rmHistories, phase = 'adult', now = new Date(), lastAdjustmentIso = null) {
+export function buildMuscleVolumeSnapshot(
+  muscleKey: string,
+  history: WorkoutHistoryEntry[],
+  e1rmHistories: E1RMHistoryForMuscle[],
+  phase: AgeRecoveryPhase = 'adult',
+  now: Date = new Date(),
+  lastAdjustmentIso: string | null = null,
+): MuscleVolumeSnapshot {
   const landmarks = getVolumeLandmarks(muscleKey, phase)
 
   // --- weeklySets: count completed sets in last 7 days ---
@@ -50,7 +66,7 @@ export function buildMuscleVolumeSnapshot(muscleKey: any, history, e1rmHistories
     for (const exercise of session.exercises ?? []) {
       const emk = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
       if (emk === muscleKey) {
-        weeklySets += (exercise.sets ?? []).filter((s) => s?.completed !== false && Number(s?.reps) > 0).length
+        weeklySets += countCompletedSets(exercise)
       }
     }
   }
@@ -80,7 +96,7 @@ export function buildMuscleVolumeSnapshot(muscleKey: any, history, e1rmHistories
   }
 
   // --- e1rmTrend: pick the exercise with most data points in this group ---
-  let e1rmTrend = 'insufficient_data'
+  let e1rmTrend: MuscleVolumeSnapshot['e1rmTrend'] = 'insufficient_data'
   if (e1rmHistories && e1rmHistories.length > 0) {
     const best = [...e1rmHistories]
       .filter((h) => h && h.dataPoints && h.dataPoints.length > 0)
@@ -101,18 +117,15 @@ export function buildMuscleVolumeSnapshot(muscleKey: any, history, e1rmHistories
 
 /**
  * Build snapshots for all 6 canonical muscle groups at once.
- *
- * @param {Array} history — workout history (any order)
- * @param {Array} allE1rmHistories — ExerciseE1RMHistory[] for all exercises
- *                                   (will be filtered by muscle group)
- * @param {string} phase
- * @param {Date} now
- * @param {Record<string, string|null>} lastAdjustments — map muscleKey →
- *                                                        ISO date or null
- * @returns {Record<string, MuscleVolumeSnapshot>}
  */
-export function buildAllMuscleVolumeSnapshots(history: any, allE1rmHistories, phase = 'adult', now = new Date(), lastAdjustments = {}) {
-  const result = {}
+export function buildAllMuscleVolumeSnapshots(
+  history: WorkoutHistoryEntry[],
+  allE1rmHistories: E1RMHistoryForMuscle[],
+  phase: AgeRecoveryPhase = 'adult',
+  now: Date = new Date(),
+  lastAdjustments: Record<string, string | null> = {},
+): Record<string, MuscleVolumeSnapshot> {
+  const result: Record<string, MuscleVolumeSnapshot> = {}
   for (const key of CANONICAL_MUSCLE_KEYS) {
     const e1rmsForMuscle = (allE1rmHistories ?? []).filter((h) =>
       normalizeMuscleGroup(`${h.muscleGroup ?? ''} ${h.exerciseName ?? ''}`) === key,
@@ -133,6 +146,12 @@ export function buildAllMuscleVolumeSnapshots(history: any, allE1rmHistories, ph
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+function countCompletedSets(exercise: CompletedExerciseHistory): number {
+  return (exercise.sets ?? [])
+    .filter((s) => s?.completed !== false && Number(s?.reps) > 0)
+    .length
+}
+
 /**
  * Bucket completed workout sets by ISO week, most-recent first.
  * Returns array of { weekStart, sets } for weeks that HAVE at least one
@@ -141,9 +160,13 @@ export function buildAllMuscleVolumeSnapshots(history: any, allE1rmHistories, ph
  *
  * Cap at 12 weeks backward from nowMs.
  */
-function bucketHistoryByIsoWeek(history: any, muscleKey: any, nowMs: any) {
+function bucketHistoryByIsoWeek(
+  history: WorkoutHistoryEntry[],
+  muscleKey: string,
+  nowMs: number,
+): WeekBucket[] {
   // Group sessions into week buckets keyed by week-start timestamp.
-  const bucketsByStart = new Map()
+  const bucketsByStart = new Map<number, number>()
   for (const session of history ?? []) {
     const sessionMs = new Date(session.completedAt).getTime()
     if (!Number.isFinite(sessionMs)) continue
@@ -152,17 +175,14 @@ function bucketHistoryByIsoWeek(history: any, muscleKey: any, nowMs: any) {
 
     // Compute week start (Monday-based, MS_PER_WEEK boundary).
     const weekStart = sessionMs - (sessionMs % MS_PER_WEEK)
-    if (!bucketsByStart.has(weekStart)) {
-      bucketsByStart.set(weekStart, 0)
-    }
     let sets = 0
     for (const exercise of session.exercises ?? []) {
       const emk = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
       if (emk === muscleKey) {
-        sets += (exercise.sets ?? []).filter((s) => s?.completed !== false && Number(s?.reps) > 0).length
+        sets += countCompletedSets(exercise)
       }
     }
-    bucketsByStart.set(weekStart, bucketsByStart.get(weekStart) + sets)
+    bucketsByStart.set(weekStart, (bucketsByStart.get(weekStart) ?? 0) + sets)
   }
 
   // Sort most-recent-first.
