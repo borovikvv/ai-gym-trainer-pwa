@@ -34,3 +34,16 @@ export function pluralRu(count: number, one: string, few: string, many: string):
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
   return many
 }
+
+/** Format an ISO date string as "DD.MM, HH:MM" (Russian locale). */
+export function formatDateTime(isoDate: string): string {
+  const date = new Date(isoDate)
+  if (Number.isNaN(date.getTime())) return "дата неизвестна"
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date).replace(" г.,", ",")
+}
+

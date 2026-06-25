@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 import type { WorkoutDay } from '../data/mockProgram'
 import { isProgramApiConfigured, requestCoachWorkoutTodayFromApi } from '../data/programApi'
 import { createInitialLogs } from './useWorkoutSession'
@@ -14,6 +14,14 @@ interface UseExtraWorkoutTodayOptions {
   setActiveExerciseIndex: (index: number) => void
   setLogs: (logs: Record<string, ExerciseLog>) => void
   notify: (message: string) => void
+  // Issue #69: lifted state — allows App to share coachTodayWorkoutDay
+  // with useActiveWorkoutContext while the hook lives in CoachHomePage.
+  coachTodayWorkoutDay?: WorkoutDay | null
+  setCoachTodayWorkoutDay?: (day: WorkoutDay | null) => void
+  coachTodaySummary?: string
+  setCoachTodaySummary?: (summary: string) => void
+  extraWorkoutDayIds?: string[]
+  setExtraWorkoutDayIds?: Dispatch<SetStateAction<string[]>>
 }
 
 export function useExtraWorkoutToday({
@@ -26,11 +34,25 @@ export function useExtraWorkoutToday({
   setActiveExerciseIndex,
   setLogs,
   notify,
+  coachTodayWorkoutDay: liftedCoachTodayWorkoutDay,
+  setCoachTodayWorkoutDay: liftedSetCoachTodayWorkoutDay,
+  coachTodaySummary: liftedCoachTodaySummary,
+  setCoachTodaySummary: liftedSetCoachTodaySummary,
+  extraWorkoutDayIds: liftedExtraWorkoutDayIds,
+  setExtraWorkoutDayIds: liftedSetExtraWorkoutDayIds,
 }: UseExtraWorkoutTodayOptions) {
-  const [extraWorkoutDayIds, setExtraWorkoutDayIds] = useState<string[]>([])
-  const [coachTodayWorkoutDay, setCoachTodayWorkoutDay] = useState<WorkoutDay | null>(null)
-  const [coachTodaySummary, setCoachTodaySummary] = useState('')
+  const [internalExtraWorkoutDayIds, setInternalExtraWorkoutDayIds] = useState<string[]>([])
+  const [internalCoachTodayWorkoutDay, setInternalCoachTodayWorkoutDay] = useState<WorkoutDay | null>(null)
+  const [internalCoachTodaySummary, setInternalCoachTodaySummary] = useState('')
   const [extraDayPickerOpen, setExtraDayPickerOpen] = useState(false)
+
+  // Use lifted state if provided, otherwise fall back to internal state.
+  const coachTodayWorkoutDay = liftedCoachTodayWorkoutDay ?? internalCoachTodayWorkoutDay
+  const setCoachTodayWorkoutDay = liftedSetCoachTodayWorkoutDay ?? setInternalCoachTodayWorkoutDay
+  const coachTodaySummary = liftedCoachTodaySummary ?? internalCoachTodaySummary
+  const setCoachTodaySummary = liftedSetCoachTodaySummary ?? setInternalCoachTodaySummary
+  const extraWorkoutDayIds = liftedExtraWorkoutDayIds ?? internalExtraWorkoutDayIds
+  const setExtraWorkoutDayIds = liftedSetExtraWorkoutDayIds ?? setInternalExtraWorkoutDayIds
 
   const extraWorkoutDays = extraWorkoutDayIds
     .map((dayId) => allUserWorkoutDays.find((day) => day.id === dayId))
@@ -74,6 +96,7 @@ export function useExtraWorkoutToday({
 
   return {
     extraWorkoutDays,
+    extraWorkoutDayIds: internalExtraWorkoutDayIds,
     coachTodayWorkoutDay,
     coachTodaySummary,
     extraDayPickerOpen,

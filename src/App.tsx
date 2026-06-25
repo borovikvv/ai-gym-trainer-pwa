@@ -8,7 +8,7 @@ import { ExercisePickerSheet } from './components/ExercisePickerSheet'
 import { ReplacementSheet } from './components/ReplacementSheet'
 import { PlanCalendar } from './components/PlanCalendar'
 import { UserProfileScreen } from './components/UserProfileScreen'
-import { CoachHome } from './components/CoachHome'
+import { CoachHomePage } from './pages/CoachHomePage'
 import { GymScreen } from './components/GymScreen'
 import { WorkoutReviewScreen } from './components/WorkoutReviewScreen'
 import { ExerciseLibraryScreen } from './components/ExerciseLibraryScreen'
@@ -22,16 +22,15 @@ import { loadHistory, useProgramData } from './hooks/useProgramData'
 import { loadActiveWorkoutDraft, useDraftAutosave } from './hooks/useDraftAutosave'
 import { useCoachRecommendations } from './hooks/useCoachRecommendations'
 import { createInitialLogs, useWorkoutNavigation, useWorkoutSession, useWorkoutSetActions } from './hooks/useWorkoutSession'
-import { formatWeight } from './lib/format'
+import { formatWeight, formatDateTime } from './lib/format'
 import { useWorkoutSave } from './hooks/useWorkoutSave'
-import { addDays, formatDateOnly, todayDateInputValue, usePlannedWorkouts } from './hooks/usePlannedWorkouts'
+import { formatDateOnly, todayDateInputValue, usePlannedWorkouts } from './hooks/usePlannedWorkouts'
 import { useProgramEditing } from './hooks/useProgramEditing'
 import { useQuestionnaire } from './hooks/useQuestionnaire'
-import { useExtraWorkoutToday } from './hooks/useExtraWorkoutToday'
 import { useActiveWorkoutContext } from './hooks/useActiveWorkoutContext'
 import { useUserSelection } from './hooks/useUserSelection'
 import { useRestTimer } from './hooks/useRestTimer'
-import { buildNextTargets, createWorkoutHistoryEntry } from './domain/workoutHistory'
+import { createWorkoutHistoryEntry } from './domain/workoutHistory'
 import { suggestExerciseToAdd } from './domain/exerciseSuggestion'
 import {
   adaptWorkoutDayForReadiness,
@@ -48,17 +47,6 @@ import {
 type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library' | 'onboarding'
 
 const ONBOARDING_STORAGE_KEY = 'ai-gym-trainer:v0.1:onboarding-completed'
-
-function formatDateTime(isoDate: string) {
-  const date = new Date(isoDate)
-  if (Number.isNaN(date.getTime())) return 'дата неизвестна'
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date).replace(' г.,', ',')
-}
 
 const fallbackFirstWorkoutDay = fallbackProgramData.workoutDays[0]
 const fallbackFirstUser = fallbackProgramData.users[0]
@@ -117,31 +105,22 @@ function App() {
   const [workoutReadinessMode, setWorkoutReadinessMode] = useState<ReadinessMode>('normal')
   const [readinessCheckIn, setReadinessCheckIn] = useState<ReadinessCheckIn>(defaultReadinessCheckIn)
   const [exercisePickerOpen, setExercisePickerOpen] = useState(false)
-  const preliminaryNextTargets = buildNextTargets(history.filter((workout) => workout.userId === activeUserId))
+  // Issue #69: lifted state for useExtraWorkoutToday (hook moved to CoachHomePage)
+  const [coachTodayWorkoutDay, setCoachTodayWorkoutDay] = useState<WorkoutDay | null>(null)
+  const [coachTodaySummary, setCoachTodaySummary] = useState('')
+  const [extraWorkoutDayIds, setExtraWorkoutDayIds] = useState<string[]>([])
   const preliminaryAllUserWorkoutDays = programData.workoutDaysByUser[activeUserId] ?? programData.workoutDays
   const preliminaryProfile = programData.profilesByUser?.[activeUserId]
   const preliminaryScheduledWorkoutDays = plannedWorkouts.length > 0
     ? plannedWorkouts.map((workout) => workout.workoutDay)
     : preliminaryAllUserWorkoutDays.slice(0, Math.min(preliminaryAllUserWorkoutDays.length, Math.max(1, preliminaryProfile?.workoutsPerWeek || 3)))
-  const {
-    extraWorkoutDays,
-    coachTodayWorkoutDay,
-    coachTodaySummary,
-    extraDayPickerOpen,
-    addExtraWorkoutDay,
-    requestWorkoutToday,
-    resetCoachTodayWorkout,
-  } = useExtraWorkoutToday({
-    activeUserId,
-    allUserWorkoutDays: preliminaryAllUserWorkoutDays,
-    scheduledWorkoutDays: preliminaryScheduledWorkoutDays,
-    extraExercisesByDay,
-    nextTargets: preliminaryNextTargets,
-    setActiveWorkoutDayId,
-    setActiveExerciseIndex,
-    setLogs,
-    notify,
-  })
+  // Compute extraWorkoutDays from lifted state (was previously inside useExtraWorkoutToday)
+  const extraWorkoutDays = extraWorkoutDayIds
+    .map((dayId) => preliminaryAllUserWorkoutDays.find((day) => day.id === dayId))
+    .filter((day): day is WorkoutDay => {
+      if (!day) return false
+      return !preliminaryScheduledWorkoutDays.some((scheduledDay) => scheduledDay.id === day.id)
+    })
   const {
     users,
     allUserWorkoutDays,
@@ -393,7 +372,7 @@ function App() {
     setActiveWorkoutDayId,
     setActiveExerciseIndex,
     setLogs,
-    resetCoachTodayWorkout,
+    resetCoachTodayWorkout: () => { setCoachTodayWorkoutDay(null); setCoachTodaySummary("") },
     notify,
   })
 
@@ -498,35 +477,26 @@ function App() {
               {toast && <div className="toast show">{toast}</div>}
 
               {screen === 'home' && (
-                <CoachHome
-                  users={users}
-                  activeUser={activeUser}
-                  activeUserId={activeUserId}
+                <CoachHomePage
                   activeWorkoutDay={activeWorkoutDay}
                   manualWorkoutDaySelected={manualWorkoutDaySelected}
-                  workoutDays={workoutDays}
-                  plannedWorkouts={plannedWorkouts}
                   scheduledWorkoutDays={scheduledWorkoutDays}
                   allUserWorkoutDays={allUserWorkoutDays}
                   extraExercisesByDay={extraExercisesByDay}
-                  extraDayPickerOpen={extraDayPickerOpen}
+                  coachTodayWorkoutDay={coachTodayWorkoutDay}
+                  setCoachTodayWorkoutDay={setCoachTodayWorkoutDay}
                   coachTodaySummary={coachTodaySummary}
-                  userHistory={userHistory}
-                  nextTargets={nextTargets}
-                  coachMemory={coachMemory}
-                  coachState={coachState}
+                  setCoachTodaySummary={setCoachTodaySummary}
+                  extraWorkoutDayIds={extraWorkoutDayIds}
+                  setExtraWorkoutDayIds={setExtraWorkoutDayIds}
+                  setActiveWorkoutDayId={setActiveWorkoutDayId}
+                  setActiveExerciseIndex={setActiveExerciseIndex}
+                  setLogs={setLogs}
                   onSelectUser={selectUser}
-                  onOpenProfile={() => navigate('profile')}
-                  onOpenLibrary={() => navigate('library')}
+                  onNavigate={navigate}
                   onStartWorkout={startWorkout}
                   onSelectWorkoutDay={selectWorkoutDay}
-                  onRequestWorkoutToday={() => requestWorkoutToday(selectWorkoutDay)}
-                  onAddExtraWorkoutDay={addExtraWorkoutDay}
-                  formatWeight={formatWeight}
-                  formatDateOnly={formatDateOnly}
-                  formatDateTime={formatDateTime}
-                  addDays={addDays}
-                  todayDateInputValue={todayDateInputValue}
+                  notify={notify}
                 />
               )}
 
