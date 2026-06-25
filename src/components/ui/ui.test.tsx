@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { ActionMenu, HeroStatus, MetricPair, WorkoutRow } from './index'
+import { ActionMenu, HeroStatus, InfoHint, MetricPair, WorkoutRow } from './index'
 
 describe('ui primitives', () => {
   it('renders hero status with one primary action', () => {
@@ -73,5 +73,33 @@ describe('ui primitives', () => {
     await user.keyboard('{Escape}')
 
     expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  describe('InfoHint', () => {
+    it('renders the hint text in the DOM even when the popover is closed (a11y + tests)', () => {
+      render(<InfoHint hint="Выбери самочувствие — я подстрою вес, объём и отдых." />)
+      // The hint text is in the DOM (sr-only mirror + popover), so screen
+      // readers and tests can find it without opening the popover.
+      expect(screen.getAllByText('Выбери самочувствие — я подстрою вес, объём и отдых.').length).toBeGreaterThan(0)
+    })
+
+    it('renders dynamic status text when provided', () => {
+      render(
+        <InfoHint
+          hint="Выбери самочувствие — я подстрою вес, объём и отдых."
+          dynamicStatus="Мало спал, мало энергии. Снизим объём и оставим главное."
+        />,
+      )
+      expect(screen.getByText('Мало спал, мало энергии. Снизим объём и оставим главное.')).toBeInTheDocument()
+    })
+
+    it('toggles the popover open on click and exposes aria-expanded', async () => {
+      const user = userEvent.setup()
+      render(<InfoHint hint="Подсказка" />)
+      const button = screen.getByRole('button', { name: /подсказка: подсказка/i })
+      expect(button).toHaveAttribute('aria-expanded', 'false')
+      await user.click(button)
+      expect(button).toHaveAttribute('aria-expanded', 'true')
+    })
   })
 })

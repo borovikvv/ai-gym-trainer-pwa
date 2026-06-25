@@ -41,7 +41,6 @@ describe('Coach Timeline workout flow', () => {
 
     expect(screen.getByText('Перед тренировкой')).toBeInTheDocument()
     expect(screen.getByText('Как тренируемся сегодня?')).toBeInTheDocument()
-    expect(screen.getByText('Быстрая проверка готовности')).toBeInTheDocument()
     expect(screen.getByText('План тренировки')).toBeInTheDocument()
     expect(screen.getAllByText(/Жим лёжа/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/Тяга верхнего блока/i)).toBeInTheDocument()
