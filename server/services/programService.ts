@@ -282,12 +282,17 @@ export async function loadExerciseLibrary(client: DbClient): Promise<unknown[]> 
 }
 
 export async function loadRecentHistory(client: DbClient, userId: string) {
+  // Issue #74: limit was 8, which dropped the oldest workout in a 4-week
+  // mesocycle cycle when the user trained 3x/week (3*4=12 workouts per cycle).
+  // This caused computeMesocycleState to see fewer week buckets than actually
+  // exist, shifting weekInCycle back by 1 (e.g. 3/4 instead of 4/4).
+  // Increased to 16 to cover a full cycle + buffer.
   const sessions = await client.query(
     `select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume
      from public.workout_sessions
      where user_id = $1
      order by completed_at desc
-     limit 8`,
+     limit 16`,
     [userId],
   )
   const sessionIds = sessions.rows.map((row) => String(row.id))

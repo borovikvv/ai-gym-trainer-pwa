@@ -280,9 +280,18 @@ function findCyclePosition(
     // Check for gap between this (older) week and the previous (more recent) week
     if (i > 0) {
       const prevStart = weeks[i - 1].start
+      const currStart = weeks[i].start
       const currEnd = weeks[i].end
       const gapDays = (prevStart.getTime() - currEnd.getTime()) / 86_400_000
-      if (gapDays > 10) {
+      // Issue #74: phantom weeks — count ISO weeks between consecutive buckets
+      // that have no completed workouts. Uses real date difference (not ISO week
+      // numbers) to handle year boundaries correctly (W52 → W01).
+      const weekDiffMs = prevStart.getTime() - currStart.getTime()
+      const weekDiff = Math.round(weekDiffMs / (7 * 86_400_000))
+      const missingWeeks = Math.max(0, weekDiff - 1)
+      // Extended break: 4+ weeks gap (was 10 days, which incorrectly fired
+      // for normal deload weeks with no workouts).
+      if (gapDays > 21) {
         // Extended break — new cycle
         cycleStartWeekIndex = i
         weekInCycle = 1
@@ -290,24 +299,15 @@ function findCyclePosition(
         plannedThisCycle = workoutsPerWeek
         continue
       }
-      // ponytail: skip whole-cycle-gap insertion across year boundaries for now
-      const prevKey = weeks[i - 1].weekKey
-      const currKey = weeks[i].weekKey
-      const prevW = parseInt(prevKey.split('-W')[1], 10)
-      const currW = parseInt(currKey.split('-W')[1], 10)
-      const missingWeeks = prevKey.slice(0, 4) === currKey.slice(0, 4)
-        ? prevW - currW - 1
-        : 0 // same-year: safe; cross-year: skip
       if (missingWeeks > 0) {
         weekInCycle += missingWeeks
-        workoutsThisCycle += 0
         plannedThisCycle += missingWeeks * workoutsPerWeek
         // Check if phantom weeks push past cycle boundary
-        if (weekInCycle > cycleLength) {
+        if (weekInCycle >= cycleLength) {
           cycleStartWeekIndex = i
-          weekInCycle = 1
-          workoutsThisCycle = weeks[i].workouts.length
-          plannedThisCycle = workoutsPerWeek
+          weekInCycle = 0 // reset to 0; the weekInCycle++ below makes it 1
+          workoutsThisCycle = 0
+          plannedThisCycle = 0
         }
       }
     }
