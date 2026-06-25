@@ -33,7 +33,7 @@ export async function planAndApplyNextWorkout(client: any, completedEntry) {
   })
 
   const llmPlan = await requestLlmCoachPlan({ profile, workoutDays, completedWorkout: completedEntry, history, nextWorkoutDay, coachState, exerciseLibrary })
-  const safePlan = clampCoachPlanToNextWorkout(llmPlan ?? rulesPlan, nextWorkoutDay, exerciseLibrary)
+  const safePlan = clampCoachPlanToNextWorkout({ plan: llmPlan ?? rulesPlan, nextWorkoutDay, exerciseLibrary })
   if (safePlan.changes.length === 0) {
     safePlan.changes = rulesPlan.changes
     safePlan.source = rulesPlan.source

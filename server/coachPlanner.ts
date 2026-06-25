@@ -1,16 +1,166 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
+// Issue #66 (#36 decomposition): all `any` replaced with concrete types.
+// Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
+import type { CoachState, MesocycleState, VolumeLandmark, WorkoutHistoryEntry } from '../shared/types.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup, labelForLower } from './lib/muscleGroups.js'
 import { formatWeight, roundWeight } from './lib/format.js'
 import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
-import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
-import { findReplacementForFatigue } from './exerciseMatcher.js'
+import { findReplacementForFatigue, type LibraryExercise } from './exerciseMatcher.js'
 
 const russianWeekdayOrder = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 export const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер, спокойный и строгий по технике. Приоритеты: безопасность, постепенная прогрессия, восстановление, баланс недели, понятные короткие подсказки. Не гони пользователя в отказ без причины, не создавай две одинаковые ближайшие тренировки, не ставь запрещённые упражнения и не ломай цель анкеты.'
 
-export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, history = [], now = new Date(), coachState = null, exerciseLibrary = [], workoutQualityScore = null }) {
+// ---------------------------------------------------------------------------
+// Input / output interfaces
+// ---------------------------------------------------------------------------
+
+interface ProfileForPlanner {
+  userId?: string
+  age?: number | null
+  trainingDays?: string[]
+}
+
+interface ExerciseInput {
+  exerciseId?: string
+  id?: string
+  programExerciseId?: string
+  name?: string
+  muscleGroup?: string
+  muscle_group?: string
+  setsCount?: number
+  sets_count?: number
+  repMin?: number
+  rep_min?: number
+  repMax?: number
+  rep_max?: number
+  targetWeight?: number
+  target_weight?: number
+  weightStep?: number
+  weight_step?: number
+  restSeconds?: number
+  rest_seconds?: number
+  targetMuscles?: string[]
+  target_muscles?: string[]
+  movementPattern?: string | null
+  movement_pattern?: string | null
+  equipment?: string | null
+  exerciseType?: string | null
+  exercise_type?: string | null
+  difficultyLevel?: string | null
+  difficulty_level?: string | null
+}
+
+interface NormalizedLibraryExercise {
+  id: string
+  name: string
+  muscleGroup: string
+  muscleKey: string
+  setsCount: number
+  repMin: number
+  repMax: number
+  targetWeight: number
+  weightStep: number
+  restSeconds: number
+  targetMuscles: string[]
+  movementPattern: string | null
+  equipment: string | null
+  exerciseType: string | null
+  difficultyLevel: string | null
+}
+
+interface WorkoutDayInput {
+  id?: string
+  dayKey?: string
+  name?: string
+  label?: string
+  description?: string
+  sortOrder?: number
+  exercises?: ExerciseInput[]
+}
+
+interface CompletedWorkout {
+  workoutDayId?: string
+}
+
+interface BuildSafeCoachPlanInput {
+  profile?: ProfileForPlanner
+  workoutDays?: WorkoutDayInput[]
+  completedWorkout?: CompletedWorkout | null
+  history?: WorkoutHistoryEntry[]
+  now?: Date
+  coachState?: CoachState | Partial<CoachState> | null
+  exerciseLibrary?: ExerciseInput[]
+  workoutQualityScore?: number | null
+}
+
+interface CoachPlanChange {
+  programExerciseId?: string
+  exerciseId?: string
+  exerciseName?: string
+  targetWeight: number
+  setsCount: number
+  repMin: number
+  repMax: number
+  intensityTarget?: string
+  restSeconds?: number
+  todayGoal?: string
+  coachFocus?: string
+}
+
+interface SafeCoachPlan {
+  source: string
+  summary: string
+  nextWorkoutDayId: string | null
+  changes: CoachPlanChange[]
+  warnings: string[]
+}
+
+interface ClampCoachPlanInput {
+  plan?: Partial<SafeCoachPlan> | null
+  nextWorkoutDay: WorkoutDayInput | null
+  exerciseLibrary?: ExerciseInput[]
+}
+
+interface ChooseNextWorkoutDayInput {
+  workoutDays?: WorkoutDayInput[]
+  completedWorkout?: CompletedWorkout | null
+  now?: Date
+  profile?: ProfileForPlanner
+}
+
+interface BuildCoachPromptInput {
+  profile?: ProfileForPlanner
+  workoutDays?: WorkoutDayInput[]
+  completedWorkout?: CompletedWorkout | null
+  history?: WorkoutHistoryEntry[]
+  nextWorkoutDay?: WorkoutDayInput | null
+  coachState?: CoachState | Partial<CoachState> | null
+  exerciseLibrary?: ExerciseInput[]
+}
+
+interface ChooseLibraryReplacementParams {
+  exercise: ExerciseInput
+  library: NormalizedLibraryExercise[]
+  usedExerciseIds: Set<string>
+  coachState: CoachState | Partial<CoachState> | null
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function buildSafeCoachPlan({
+  profile,
+  workoutDays,
+  completedWorkout,
+  history = [],
+  now = new Date(),
+  coachState = null,
+  exerciseLibrary = [],
+  workoutQualityScore = null,
+}: BuildSafeCoachPlanInput = {}): SafeCoachPlan {
   const nextWorkoutDay = chooseNextWorkoutDay({ workoutDays, completedWorkout, now, profile })
   if (!nextWorkoutDay) {
     return {
@@ -22,21 +172,21 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
     }
   }
 
-  const daysUntilNext = daysUntilNextTrainingDay(profile?.trainingDays ?? [], nextWorkoutDay, workoutDays, now)
+  const daysUntilNext = daysUntilNextTrainingDay(profile?.trainingDays ?? [], nextWorkoutDay, workoutDays ?? [], now)
   const recoveryNote = daysUntilNext !== null && daysUntilNext <= 0
     ? 'следующая тренировка сегодня — держим объём умеренным и без отказа'
     : 'после текущей тренировки даём рабочую, но контролируемую нагрузку'
 
-  const mesocycleDeload = isDeloadWeek(coachState?.mesocycle)
+  const mesocycleDeload = isDeloadWeek((coachState as { mesocycle?: MesocycleState | null })?.mesocycle ?? null)
 
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const usedExerciseIds = new Set((workoutDays ?? []).flatMap((day) => (day.exercises ?? []).map((exercise) => canonicalExerciseId(exercise))))
-  const changes = nextWorkoutDay.exercises.map((exercise) => {
+  const changes: CoachPlanChange[] = nextWorkoutDay.exercises!.map((exercise) => {
     const recent = latestExerciseHistory(history, exercise.exerciseId)
-    let targetWeight = recent?.nextRecommendedWeight ?? exercise.targetWeight
+    let targetWeight = recent?.nextRecommendedWeight ?? Number(exercise.targetWeight ?? 0)
     const hadPain = Boolean(recent?.pain)
-    const hardRecent = (recent?.sets ?? []).some((set) => set.completed && set.rpe >= 9)
-    let setsCount = daysUntilNext !== null && daysUntilNext <= 0 ? Math.max(2, Math.min(exercise.setsCount, 2)) : exercise.setsCount
+    const hardRecent = (recent?.sets ?? []).some((set) => set.completed && Number(set.rpe) >= 9)
+    let setsCount = daysUntilNext !== null && daysUntilNext <= 0 ? Math.max(2, Math.min(Number(exercise.setsCount ?? 0), 2)) : Number(exercise.setsCount ?? 0)
     if (workoutQualityScore !== null && workoutQualityScore < 40) {
       setsCount = Math.min(setsCount, 2)
     } else if (workoutQualityScore !== null && workoutQualityScore < 60) {
@@ -46,27 +196,22 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       ? 'Качество прошлой тренировки низкое — снижаем объём и держим технику. '
       : ''
 
-    // Volume landmark awareness: clamp sets if weekly volume is approaching MRV.
-    // Uses the effective landmark table from coachState (which merges base
-    // landmarks with per-user overrides from volume_landmark_overrides table).
-    // Falls back to base landmarks if coachState or overrides are unavailable.
     let muscleGroupSetsLast7Days = 0
-    const ageProfile = getUserTrainingPolicy(profile?.userId ?? profile)
+    const ageProfile: UserTrainingPolicy | null = getUserTrainingPolicy(profile?.userId ?? profile)
     const phase = ageProfile?.ageRecoveryProfile?.phase ?? 'adult'
     const volumeMuscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
     const baseLandmarks = getVolumeLandmarks(volumeMuscleKey, phase)
-    const overrideLandmarks = coachState?.volumeLandmarkOverrides?.[volumeMuscleKey]
+    const overrideLandmarks = (coachState as { volumeLandmarkOverrides?: Record<string, VolumeLandmark | undefined> })?.volumeLandmarkOverrides?.[volumeMuscleKey]
     const landmarks = overrideLandmarks ?? baseLandmarks
 
     if (landmarks) {
-      // Count sets for this muscle group in the last 7 days from history
       const nowMs = new Date().getTime()
       const sevenDaysAgoMs = nowMs - 7 * 86_400_000
       for (const session of history ?? []) {
-        const sessionTime = new Date(session.completedAt ?? session.completed_at).getTime()
+        const sessionTime = new Date(session.completedAt ?? (session as { completed_at?: string }).completed_at ?? '').getTime()
         if (sessionTime < sevenDaysAgoMs) continue
         for (const loggedExercise of session.exercises ?? []) {
-          const emk = normalizeMuscleGroup(`${loggedExercise.muscleGroup ?? loggedExercise.muscle_group ?? ''} ${loggedExercise.exerciseName ?? loggedExercise.name ?? ''}`)
+          const emk = normalizeMuscleGroup(`${loggedExercise.muscleGroup ?? (loggedExercise as { muscle_group?: string }).muscle_group ?? ''} ${loggedExercise.exerciseName ?? (loggedExercise as { name?: string }).name ?? ''}`)
           if (emk === volumeMuscleKey) {
             muscleGroupSetsLast7Days += (loggedExercise.sets ?? []).filter((s) => s?.completed !== false && Number(s?.reps) > 0).length
           }
@@ -82,21 +227,16 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
     const volumeRec = landmarks ? getVolumeRecommendation(volumeMuscleKey, muscleGroupSetsLast7Days, phase) : null
     let volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
 
-    // Mesocycle deload: reduce sets, weight, and rep range. Unlike the
-    // previous implementation which only updated setsCount and put the rest
-    // of the reduction into a text note (resulting in mismatch: the coach
-    // said "разгрузка, вес -2.5 кг" but baseChange.targetWeight still had
-    // the full working weight), now we apply all fields consistently.
-    let deloadRepMin = exercise.repMin
-    let deloadRepMax = exercise.repMax
-    let deloadIntensityTarget
+    let deloadRepMin = Number(exercise.repMin ?? 0)
+    let deloadRepMax = Number(exercise.repMax ?? 0)
+    let deloadIntensityTarget: string | undefined
     if (mesocycleDeload) {
       const deload = applyDeloadReduction({
         setsCount,
         targetWeight,
-        repMin: exercise.repMin,
-        repMax: exercise.repMax,
-        weightStep: exercise.weightStep,
+        repMin: Number(exercise.repMin ?? 0),
+        repMax: Number(exercise.repMax ?? 0),
+        weightStep: Number(exercise.weightStep ?? 2.5),
       })
       setsCount = deload.setsCount
       targetWeight = deload.targetWeight
@@ -108,14 +248,14 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
       }
     }
 
-    const baseChange = {
+    const baseChange: CoachPlanChange = {
       programExerciseId: exercise.programExerciseId,
       targetWeight: roundWeight(targetWeight),
       setsCount,
       repMin: deloadRepMin,
       repMax: deloadRepMax,
       intensityTarget: deloadIntensityTarget,
-      restSeconds: exercise.restSeconds,
+      restSeconds: Number(exercise.restSeconds ?? 0),
       todayGoal: formatTodayGoal(targetWeight, setsCount, deloadRepMin),
       coachFocus: hadPain
         ? `${exercise.name}: была боль в истории — вес не повышаем, техника и амплитуда важнее.`
@@ -148,17 +288,21 @@ export function buildSafeCoachPlan({ profile, workoutDays, completedWorkout, his
   return {
     source: 'rules',
     summary: `Следующая реальная тренировка — ${nextWorkoutDay.name} · ${nextWorkoutDay.label}. ${recoveryNote}.${adaptiveNote}`,
-    nextWorkoutDayId: nextWorkoutDay.id,
+    nextWorkoutDayId: nextWorkoutDay.id ?? null,
     changes,
     warnings: [],
   }
 }
 
-export function clampCoachPlanToNextWorkout(plan: any, nextWorkoutDay, exerciseLibrary = []) {
+export function clampCoachPlanToNextWorkout({
+  plan,
+  nextWorkoutDay,
+  exerciseLibrary = [],
+}: ClampCoachPlanInput): SafeCoachPlan {
   const warnings = [...(Array.isArray(plan?.warnings) ? plan.warnings : [])]
   const allowedById = new Map((nextWorkoutDay?.exercises ?? []).map((exercise) => [exercise.programExerciseId, exercise]))
   const library = normalizeExerciseLibrary(exerciseLibrary)
-  const changes = []
+  const changes: CoachPlanChange[] = []
 
   for (const rawChange of Array.isArray(plan?.changes) ? plan.changes : []) {
     const base = allowedById.get(rawChange?.programExerciseId)
@@ -170,15 +314,15 @@ export function clampCoachPlanToNextWorkout(plan: any, nextWorkoutDay, exerciseL
     if (rawChange.exerciseId && !replacement) {
       warnings.push(`Замена ${rawChange.exerciseId} не найдено в библиотеке — оставлено текущее упражнение.`)
     }
-    const change = {
+    const change: CoachPlanChange = {
       programExerciseId: base.programExerciseId,
-      targetWeight: clampNumber(Number(rawChange.targetWeight), Math.max(0, base.targetWeight - base.weightStep * 2), base.targetWeight + base.weightStep * 2, base.targetWeight),
-      setsCount: Math.round(clampNumber(Number(rawChange.setsCount), 1, 4, base.setsCount)),
-      repMin: Math.round(clampNumber(Number(rawChange.repMin), 6, 15, base.repMin)),
-      repMax: Math.round(clampNumber(Number(rawChange.repMax), 6, 15, base.repMax)),
-      restSeconds: Math.round(clampNumber(Number(rawChange.restSeconds), 45, 240, base.restSeconds)),
-      todayGoal: String(rawChange.todayGoal || formatTodayGoal(base.targetWeight, base.setsCount, base.repMin)).slice(0, 140),
-      coachFocus: String(rawChange.coachFocus || `${base.name}: держим технику и не работаем в отказ.`).slice(0, 500),
+      targetWeight: clampNumber(Number(rawChange?.targetWeight), Math.max(0, Number(base.targetWeight ?? 0) - Number(base.weightStep ?? 0) * 2), Number(base.targetWeight ?? 0) + Number(base.weightStep ?? 0) * 2, Number(base.targetWeight ?? 0)),
+      setsCount: Math.round(clampNumber(Number(rawChange?.setsCount), 1, 4, Number(base.setsCount ?? 0))),
+      repMin: Math.round(clampNumber(Number(rawChange?.repMin), 6, 15, Number(base.repMin ?? 0))),
+      repMax: Math.round(clampNumber(Number(rawChange?.repMax), 6, 15, Number(base.repMax ?? 0))),
+      restSeconds: Math.round(clampNumber(Number(rawChange?.restSeconds), 45, 240, Number(base.restSeconds ?? 0))),
+      todayGoal: String(rawChange?.todayGoal || formatTodayGoal(Number(base.targetWeight ?? 0), Number(base.setsCount ?? 0), Number(base.repMin ?? 0))).slice(0, 140),
+      coachFocus: String(rawChange?.coachFocus || `${base.name}: держим технику и не работаем в отказ.`).slice(0, 500),
     }
     if (replacement) {
       change.exerciseId = replacement.id
@@ -200,7 +344,7 @@ export function clampCoachPlanToNextWorkout(plan: any, nextWorkoutDay, exerciseL
   }
 }
 
-export function chooseNextWorkoutDay({ workoutDays, completedWorkout }: any) {
+export function chooseNextWorkoutDay({ workoutDays, completedWorkout }: ChooseNextWorkoutDayInput): WorkoutDayInput | null {
   const activeDays = [...(workoutDays ?? [])].sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0))
   if (activeDays.length === 0) return null
   const completedId = String(completedWorkout?.workoutDayId ?? '')
@@ -209,23 +353,43 @@ export function chooseNextWorkoutDay({ workoutDays, completedWorkout }: any) {
   return activeDays[(completedIndex + 1) % activeDays.length]
 }
 
-export function buildCoachPrompt({ profile, workoutDays: _workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary = [] }: any) {
+export function buildCoachPrompt({
+  profile,
+  workoutDays: _workoutDays,
+  completedWorkout,
+  history,
+  nextWorkoutDay,
+  coachState,
+  exerciseLibrary = [],
+}: BuildCoachPromptInput): string {
   return `${COACH_PERSONA}\n\nПроанализируй завершённую тренировку и скорректируй ТОЛЬКО следующую календарную тренировку.\n\nАнкета: ${JSON.stringify(profile)}\n\nCoach State пользователя: ${JSON.stringify(coachState ?? null)}\n\nЗавершённая тренировка: ${JSON.stringify(completedWorkout)}\n\nПоследняя история: ${JSON.stringify((history ?? []).slice(0, 6))}\n\nСледующая тренировка, которую можно менять: ${JSON.stringify(nextWorkoutDay)}\n\nДоступная библиотека упражнений для замен: ${JSON.stringify((exerciseLibrary ?? []).map((exercise) => ({ id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup, setsCount: exercise.setsCount, repMin: exercise.repMin, repMax: exercise.repMax, targetWeight: exercise.targetWeight, weightStep: exercise.weightStep, restSeconds: exercise.restSeconds })))}\n\nВерни строго JSON без markdown в формате: {"summary":"...","changes":[{"programExerciseId":"...","exerciseId":"optional-library-exercise-id","targetWeight":50,"setsCount":3,"repMin":8,"repMax":10,"restSeconds":120,"todayGoal":"...","coachFocus":"..."}],"warnings":["..."]}. Учитывай восстановление, усталость мышечных групп, фактическую частоту тренировок, подходы на пределе, боль и цель пользователя. Если мышцы следующей тренировки не восстановились, можешь заменить упражнение на упражнение из библиотеки для другой, более свежей группы мышц, указав exerciseId. Не повышай вес при боли или низком восстановлении. Не меняй programExerciseId вне следующей тренировки.`
 }
 
-function chooseLibraryReplacementForFatigue({ exercise, library, usedExerciseIds, coachState }: any) {
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function chooseLibraryReplacementForFatigue({
+  exercise,
+  library,
+  usedExerciseIds,
+  coachState,
+}: ChooseLibraryReplacementParams): LibraryExercise | null {
   // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
   // movement_pattern, equipment, and exercise_type for smarter selection.
-  // Falls back gracefully when metadata is missing (all scores stay the same
-  // as before — based on muscle group + fatigue only).
-  return findReplacementForFatigue(exercise, library, usedExerciseIds, coachState)
+  return findReplacementForFatigue(
+    exercise as LibraryExercise,
+    library as unknown as LibraryExercise[],
+    usedExerciseIds,
+    coachState as Parameters<typeof findReplacementForFatigue>[3],
+  )
 }
 
-function normalizeExerciseLibrary(exerciseLibrary: any) {
+function normalizeExerciseLibrary(exerciseLibrary: ExerciseInput[]): NormalizedLibraryExercise[] {
   return (exerciseLibrary ?? []).map((exercise) => ({
-    id: canonicalExerciseId(exercise),
-    name: exercise.name,
-    muscleGroup: exercise.muscleGroup ?? exercise.muscle_group,
+    id: canonicalExerciseId(exercise) ?? '',
+    name: String(exercise.name ?? ''),
+    muscleGroup: exercise.muscleGroup ?? exercise.muscle_group ?? '',
     muscleKey: exerciseMuscleKey(exercise),
     setsCount: Number(exercise.setsCount ?? exercise.sets_count ?? 2),
     repMin: Number(exercise.repMin ?? exercise.rep_min ?? 10),
@@ -233,7 +397,6 @@ function normalizeExerciseLibrary(exerciseLibrary: any) {
     targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
     weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
     restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
-    // Phase 3 issue #13: metadata for smarter matching
     targetMuscles: exercise.targetMuscles ?? exercise.target_muscles ?? [],
     movementPattern: exercise.movementPattern ?? exercise.movement_pattern ?? null,
     equipment: exercise.equipment ?? null,
@@ -242,19 +405,23 @@ function normalizeExerciseLibrary(exerciseLibrary: any) {
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
-function exerciseMuscleKey(exercise: any) {
+function exerciseMuscleKey(exercise: ExerciseInput): string {
   return normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
 }
 
-
-function latestExerciseHistory(history: any, exerciseId: any) {
+function latestExerciseHistory(history: WorkoutHistoryEntry[], exerciseId: string | undefined): WorkoutHistoryEntry['exercises'][number] | null {
   return [...(history ?? [])]
     .sort((a, b) => String(b.completedAt).localeCompare(String(a.completedAt)))
     .flatMap((workout) => workout.exercises ?? [])
-    .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId))
+    .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId)) ?? null
 }
 
-function daysUntilNextTrainingDay(trainingDays: any, nextWorkoutDay: any, workoutDays: any, now: any) {
+function daysUntilNextTrainingDay(
+  trainingDays: string[],
+  nextWorkoutDay: WorkoutDayInput,
+  workoutDays: WorkoutDayInput[],
+  now: Date,
+): number | null {
   const activeDays = [...(workoutDays ?? [])].sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0))
   const dayIndex = activeDays.findIndex((day) => day.id === nextWorkoutDay?.id)
   const weekday = (trainingDays ?? [])[dayIndex]
@@ -265,11 +432,11 @@ function daysUntilNextTrainingDay(trainingDays: any, nextWorkoutDay: any, workou
   return (targetIndex - currentIndex + 7) % 7
 }
 
-function formatTodayGoal(weight: any, setsCount: any, reps: any) {
+function formatTodayGoal(weight: number, setsCount: number, reps: number): string {
   return Array.from({ length: setsCount }, () => `${formatWeight(weight)}×${reps}`).join('/')
 }
 
-function clampNumber(value: any, min: any, max: any, fallback: any) {
+function clampNumber(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback
   return Math.max(min, Math.min(max, value))
 }

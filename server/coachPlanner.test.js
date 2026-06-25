@@ -102,7 +102,7 @@ describe('post-workout coach planner', () => {
       warnings: [],
     }
 
-    const safe = clampCoachPlanToNextWorkout(llmPlan, workoutDays[1])
+    const safe = clampCoachPlanToNextWorkout({ plan: llmPlan, nextWorkoutDay: workoutDays[1] })
 
     expect(safe.changes).toHaveLength(1)
     expect(safe.changes[0].programExerciseId).toBe('pe-rdl')
@@ -181,7 +181,7 @@ describe('post-workout coach planner', () => {
       warnings: [],
     }
 
-    const safe = clampCoachPlanToNextWorkout(llmPlan, workoutDays[1], exerciseLibrary)
+    const safe = clampCoachPlanToNextWorkout({ plan: llmPlan, nextWorkoutDay: workoutDays[1], exerciseLibrary })
 
     expect(safe.changes).toHaveLength(2)
     expect(safe.changes.find((change) => change.programExerciseId === 'pe-incline')).toMatchObject({
