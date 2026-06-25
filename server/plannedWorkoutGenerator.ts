@@ -276,7 +276,7 @@ export function buildGeneratedPlannedWorkout({
   const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited
   const targetMinutes = Number(profile?.targetWorkoutMinutes ?? 60)
   const exerciseTarget = targetExerciseCount({ targetMinutes, preferences })
-  const targetPattern = chooseTargetPattern(coachState, preferences, decision, lowReadiness)
+  const targetPattern = chooseTargetPattern(coachState, preferences, decision, lowReadiness, scheduledDate)
 
   const selected: GeneratedExercise[] = []
   const usedExerciseIds = new Set<string>()
@@ -461,6 +461,7 @@ function chooseTargetPattern(
   preferences: NormalizedPreferences = emptyPreferences(),
   coachDecision: CoachDecisionForGenerator | null = null,
   lowReadiness = false,
+  scheduledDate = '',
 ): string[] {
   const all = CANONICAL_MUSCLE_KEYS
   const avoid = new Set(coachDecision?.avoidMuscleGroups ?? [])
@@ -477,7 +478,12 @@ function chooseTargetPattern(
     for (const key of ['back', 'shoulders', 'arms', 'core']) if (hasFresh(key) && !pattern.includes(key)) pattern.push(key)
     return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
   }
-  if (hasFresh('legs')) pattern.push('legs', 'legs')
+  // ponytail: alternate double-legs intensity by weekday parity so
+  //  consecutive workouts differ (e.g. Thu vs Sun).
+  const dayWeek = new Date(scheduledDate).getDay() // 0=Sun..6=Sat
+  const heavyLegs = dayWeek % 2 !== 0 // true on Mon/Wed/Fri/Sun, false on Tue/Thu/Sat
+  if (hasFresh('legs')) pattern.push('legs')
+  if (heavyLegs && hasFresh('legs')) pattern.push('legs')
   if (hasFresh('back')) pattern.push('back')
   if (hasFresh('chest')) pattern.push('chest')
   if (hasFresh('shoulders')) pattern.push('shoulders')

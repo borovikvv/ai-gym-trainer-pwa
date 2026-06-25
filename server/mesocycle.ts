@@ -290,6 +290,26 @@ function findCyclePosition(
         plannedThisCycle = workoutsPerWeek
         continue
       }
+      // ponytail: skip whole-cycle-gap insertion across year boundaries for now
+      const prevKey = weeks[i - 1].weekKey
+      const currKey = weeks[i].weekKey
+      const prevW = parseInt(prevKey.split('-W')[1], 10)
+      const currW = parseInt(currKey.split('-W')[1], 10)
+      const missingWeeks = prevKey.slice(0, 4) === currKey.slice(0, 4)
+        ? prevW - currW - 1
+        : 0 // same-year: safe; cross-year: skip
+      if (missingWeeks > 0) {
+        weekInCycle += missingWeeks
+        workoutsThisCycle += 0
+        plannedThisCycle += missingWeeks * workoutsPerWeek
+        // Check if phantom weeks push past cycle boundary
+        if (weekInCycle > cycleLength) {
+          cycleStartWeekIndex = i
+          weekInCycle = 1
+          workoutsThisCycle = weeks[i].workouts.length
+          plannedThisCycle = workoutsPerWeek
+        }
+      }
     }
 
     weekInCycle++
