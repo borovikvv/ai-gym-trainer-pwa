@@ -135,9 +135,19 @@ export function PlanCalendar({
         <div className="week-picker two-week-picker" role="group" aria-label="Дни недели для тренировок">
           {weekDateOptions.map((option) => {
             const selected = selectedWeekDates.includes(option.date)
+            const isToday = option.date === todayDateInputValue()
+            const hasPlannedWorkout = plannedWorkouts.some((w) => w.scheduledDate === option.date && w.status !== 'cancelled')
+            const isCompleted = plannedWorkouts.some((w) => w.scheduledDate === option.date && w.status === 'completed')
             const label = selected ? `Убрать тренировку ${option.formatted}` : `Запланировать тренировку ${option.formatted}`
+            const classes = [
+              'secondary', 'compact', 'week-day',
+              selected ? 'active' : '',
+              isToday ? 'today' : '',
+              hasPlannedWorkout ? 'has-workout' : '',
+              isCompleted ? 'completed' : '',
+            ].filter(Boolean).join(' ')
             return (
-              <button key={option.date} className={`secondary compact week-day ${selected ? 'active' : ''}`} type="button" onClick={() => onToggleWeekDate(option.date)} aria-pressed={selected} aria-label={label}>
+              <button key={option.date} className={classes} type="button" onClick={() => onToggleWeekDate(option.date)} aria-pressed={selected} aria-label={label}>
                 <span className="week-day__dot" aria-hidden="true" />
                 <b>{option.label}</b>
                 <span>{option.formatted.replace(/^..,\s*/, '')}</span>
