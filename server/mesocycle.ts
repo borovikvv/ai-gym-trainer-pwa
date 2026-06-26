@@ -126,7 +126,10 @@ export function computeMesocycleState({
   const phase: AgeRecoveryPhase = policy?.ageRecoveryProfile?.phase ?? 'adult'
   const config: MesocyclePhaseConfig = MESOCYCLE_CONFIG[phase] ?? MESOCYCLE_CONFIG.adult
   const cycleLength = config.loadingWeeks + config.deloadWeeks
-  const workoutsPerWeek = clampNumber(profile.workoutsPerWeek, 1, 7, 3)
+  // Issue #77: compute actual workout frequency from history, not from
+  // questionnaire. The questionnaire value is only a fallback for new users
+  // with insufficient history (< 4 workouts).
+  const workoutsPerWeek = computeEffectiveWorkoutsPerWeek(history, nowDate, profile.workoutsPerWeek)
 
   // --- 1. Build calendar-week buckets ---
   const weeks: WeekBucket[] = buildWeekBuckets(history, nowDate)
@@ -424,4 +427,46 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   const number = Number(value)
   if (!Number.isFinite(number)) return fallback
   return Math.max(min, Math.min(max, number))
+}
+
+/**
+ * Issue #77: Compute effective workouts-per-week from actual history.
+ *
+ * Uses the average frequency over the last 28 days (4 ISO weeks). If there
+ * are fewer than 4 workouts total, falls back to the questionnaire value
+ * (profile.workoutsPerWeek). This ensures the mesocycle and coachState
+ * reflect what the user ACTUALLY does, not what they INTENDED to do when
+ * filling out the questionnaire.
+ *
+ * Exported so coachState.ts can use the same computation for
+ * plannedWorkoutsPerWeek / weeklyLoadRatio.
+ */
+export function computeEffectiveWorkoutsPerWeek(
+  history: Array<{ completedAt: string }>,
+  now: Date,
+  profileWorkoutsPerWeek?: number,
+): number {
+  const nowMs = now.getTime()
+  const workoutsLast28Days = (history ?? []).filter((s) => {
+    const sessionMs = new Date(s.completedAt).getTime()
+    return Number.isFinite(sessionMs) && nowMs - sessionMs <= 28 * 86_400_000
+  }).length
+
+  // Need at least 4 workouts in 28 days to compute a reliable average
+  if (workoutsLast28Days >= 4) {
+    return Math.max(1, Math.min(7, Math.round(workoutsLast28Days / 4)))
+  }
+
+  // Fallback: check last 14 days (2 workouts minimum)
+  const workoutsLast14Days = (history ?? []).filter((s) => {
+    const sessionMs = new Date(s.completedAt).getTime()
+    return Number.isFinite(sessionMs) && nowMs - sessionMs <= 14 * 86_400_000
+  }).length
+
+  if (workoutsLast14Days >= 2) {
+    return Math.max(1, Math.min(7, Math.round(workoutsLast14Days / 2)))
+  }
+
+  // Final fallback: questionnaire value
+  return clampNumber(profileWorkoutsPerWeek, 1, 7, 3)
 }

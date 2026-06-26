@@ -10,7 +10,7 @@ import type {
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from './exerciseIdentity.js'
 import { normalizeMuscleGroup, isAssistedExerciseName } from './lib/muscleGroups.js'
-import { computeMesocycleState } from './mesocycle.js'
+import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { computeAllAdjustments } from './adaptiveVolumeLandmarks.js'
 import { buildAllMuscleVolumeSnapshots } from './buildVolumeSnapshot.js'
@@ -146,7 +146,8 @@ export function computeCoachState({
   const trainingDataConfidence = computeTrainingDataConfidence(normalizedHistory)
   const daysSinceLastWorkout = lastWorkout ? wholeDaysBetween(new Date(lastWorkout.completedAt), nowDate) : null
   const workoutsLast7Days = normalizedHistory.filter((session) => daysBetween(new Date(session.completedAt), nowDate) <= 7).length
-  const plannedWorkoutsPerWeek = clampNumber(profile.workoutsPerWeek, 1, 7, 3)
+  // Issue #77: use actual workout frequency from history, not questionnaire.
+  const plannedWorkoutsPerWeek = computeEffectiveWorkoutsPerWeek(normalizedHistory, nowDate, profile.workoutsPerWeek)
   const weeklyLoadRatio = plannedWorkoutsPerWeek > 0 ? workoutsLast7Days / plannedWorkoutsPerWeek : 0
   const weeklyLoadStatus = weeklyLoadRatio >= 1.35 ? 'above_plan' : weeklyLoadRatio >= 0.75 ? 'on_plan' : 'below_plan'
 
