@@ -160,17 +160,21 @@ describe('computeMesocycleState — phase names', () => {
 
 describe('computeMesocycleState — deload delay', () => {
   it('delays deload when completion ratio is below 50%', () => {
-    // 5 weeks, but only 1 session per week with 3/week planned = 33% → delay
-    const history = generateWeeklySessions('2026-06-15T12:00:00Z', 5, 1)
+    // Issue #77: with actual-frequency computation, we need the workouts to
+    // fall OUTSIDE the 28-day window so the profile value (3/week) is used
+    // as fallback. Then 1 workout/week × 5 weeks = 5 done vs 15 planned = 33%.
+    // Sessions: 5 weekly, oldest = ~63 days ago, newest = ~35 days ago.
+    // now = 35 days after the last session → all outside 28-day window.
+    const history = generateWeeklySessions('2026-05-20T12:00:00Z', 5, 1)
     const result = computeMesocycleState({
       profile: { workoutsPerWeek: 3, age: 25 },
       history,
-      now: '2026-06-15T18:00:00Z',
+      now: '2026-06-25T18:00:00Z', // 36 days after last session
     })
 
-    // Completion ratio should be low (1/3 per week = 33%)
+    // Completion ratio should be low (1/3 per week = 33%) — profile fallback
     expect(result.completionRatio).toBeLessThan(0.5)
-    // weekInCycle = 5 > loadingWeeks 4 → deload position, but delay should kick in
+    // weekInCycle = 5 > loadingWeeks 4 → deload position, but delay kicks in
     expect(result.weekInCycle).toBe(5)
     expect(result.isDeload).toBe(false)
     expect(result.triggerReason).toContain('продлена')
@@ -203,9 +207,12 @@ describe('computeMesocycleState — deload delay', () => {
       now: '2026-06-17T18:00:00Z',
     })
 
-    expect(result.plannedWorkoutsThisCycle).toBe(3)
+    // Issue #77: effective frequency = round(3 workouts in 14 days / 2) = 2
+    // (3 workouts in 14 days → >= 2 → round(3/2) = 2)
+    // plannedThisCycle = 1 week × 2 = 2, workoutsThisCycle = 3
+    expect(result.plannedWorkoutsThisCycle).toBe(2)
     expect(result.workoutsThisCycle).toBe(3)
-    expect(result.completionRatio).toBeCloseTo(1.0, 1)
+    expect(result.completionRatio).toBeCloseTo(1.5, 1)
   })
 
   it('reports correct completionRatio across multiple weeks', () => {
@@ -717,5 +724,77 @@ describe('issue #74: mesocycle with 3 workouts per week', () => {
     // NOT be deload (new cycle just started).
     expect(state.phase).not.toBe('deload')
     expect(state.isDeload).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #77 regression: effective workouts per week from actual history
+// ---------------------------------------------------------------------------
+
+describe('issue #77: effective workouts per week from actual history', () => {
+  it('3 workouts/week with profile=2 → effective=3 (not 2)', () => {
+    // 12 workouts over 4 weeks (3 per week) — profile says 2, actual is 3
+    const history = generateWeeklySessions('2026-06-15T12:00:00Z', 4, 3)
+    const result = computeMesocycleState({
+      profile: { workoutsPerWeek: 2, age: 25 },
+      history,
+      now: '2026-06-15T18:00:00Z',
+    })
+    // 12 workouts in 28 days → round(12/4) = 3
+    // plannedThisCycle = 4 weeks × 3 = 12, workoutsThisCycle = 12
+    expect(result.plannedWorkoutsThisCycle).toBe(12)
+    expect(result.completionRatio).toBeCloseTo(1.0, 1)
+  })
+
+  it('2 workouts/week with profile=3 → effective=2 (not 3)', () => {
+    // 8 workouts over 4 weeks (2 per week) — profile says 3, actual is 2
+    const history = generateWeeklySessions('2026-06-15T12:00:00Z', 4, 2)
+    const result = computeMesocycleState({
+      profile: { workoutsPerWeek: 3, age: 25 },
+      history,
+      now: '2026-06-15T18:00:00Z',
+    })
+    // 8 workouts in 28 days → round(8/4) = 2
+    // plannedThisCycle = 4 weeks × 2 = 8, workoutsThisCycle = 8
+    expect(result.plannedWorkoutsThisCycle).toBe(8)
+    expect(result.completionRatio).toBeCloseTo(1.0, 1)
+  })
+
+  it('no history → fallback to profile value', () => {
+    const result = computeMesocycleState({
+      profile: { workoutsPerWeek: 3, age: 25 },
+      history: [],
+      now: '2026-06-15T18:00:00Z',
+    })
+    // No workouts → fallback to profile = 3
+    expect(result.plannedWorkoutsThisCycle).toBe(0)
+    expect(result.workoutsThisCycle).toBe(0)
+  })
+
+  it('changing profile.workoutsPerWeek does NOT change mesocycle when history is sufficient', () => {
+    // 12 workouts over 4 weeks (3 per week)
+    const history = generateWeeklySessions('2026-06-15T12:00:00Z', 4, 3)
+
+    const withProfile2 = computeMesocycleState({
+      profile: { workoutsPerWeek: 2, age: 25 },
+      history,
+      now: '2026-06-15T18:00:00Z',
+    })
+    const withProfile3 = computeMesocycleState({
+      profile: { workoutsPerWeek: 3, age: 25 },
+      history,
+      now: '2026-06-15T18:00:00Z',
+    })
+    const withProfile5 = computeMesocycleState({
+      profile: { workoutsPerWeek: 5, age: 25 },
+      history,
+      now: '2026-06-15T18:00:00Z',
+    })
+
+    // All three should produce the same plannedWorkoutsThisCycle
+    // because effective frequency = 3 (from history), regardless of profile
+    expect(withProfile2.plannedWorkoutsThisCycle).toBe(withProfile3.plannedWorkoutsThisCycle)
+    expect(withProfile3.plannedWorkoutsThisCycle).toBe(withProfile5.plannedWorkoutsThisCycle)
+    expect(withProfile2.completionRatio).toBeCloseTo(1.0, 1)
   })
 })
