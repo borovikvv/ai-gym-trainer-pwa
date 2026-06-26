@@ -538,6 +538,7 @@ function App() {
             onGoToNextExercise={goToNextExercise}
             onSaveAndExit={saveWorkoutAndExit}
             estimateWorkoutMinutes={estimateWorkoutMinutes}
+            logs={logs}
             sheetOpen={sheetOpen}
             setSheetOpen={setSheetOpen}
             exerciseGuideOpen={exerciseGuideOpen}
