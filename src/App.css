@@ -58,6 +58,10 @@ h2,
 h3,
 p {
   overflow-wrap: anywhere;
+  /* Issue #80: prevent letter-by-letter breaking. Allow word breaks only
+     at natural boundaries; titles use line-clamp in their components. */
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .row {
@@ -458,12 +462,21 @@ select:disabled {
 
 .hero-status__actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-2);
   margin-top: var(--space-4);
 }
 
-.hero-status__actions .primary,
+/* Issue #79: primary action full-width, secondary compact below */
+.hero-status__actions .primary {
+  margin-top: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
 .hero-status__actions .secondary {
   margin-top: 0;
 }
@@ -538,6 +551,23 @@ select:disabled {
 .set,
 .next-card,
 .plan-workout-row,
+/* Issue #81: micro-animations on interactive cards */
+.workout-row,
+.day-card,
+.exercise,
+.library-entry-card,
+.preview-exercise {
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.workout-row:active,
+.day-card:active,
+.exercise:active,
+.library-entry-card:active,
+.preview-exercise:active {
+  transform: scale(0.98);
+}
+
 .workout-row {
   padding: var(--space-4);
   border: 0.5px solid var(--separator);
@@ -1892,6 +1922,33 @@ select:disabled {
 .week-day.active .week-day__dot {
   background: currentColor;
   opacity: 1;
+}
+
+/* Issue #78: calendar visual markers */
+.week-day.today {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+.week-day.has-workout:not(.active):not(.completed) .week-day__dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+.week-day.completed:not(.active) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.week-day.completed:not(.active) .week-day__dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+.week-day.completed:not(.active) b,
+.week-day.completed:not(.active) span {
+  opacity: 0.6;
 }
 
 .week-day b {
