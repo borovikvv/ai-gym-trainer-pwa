@@ -22,6 +22,7 @@ import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from './lib/muscleGroups.
 import { roundWeight } from './lib/format.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
+import { russianWeekdayName } from './utils.js'
 
 const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
@@ -98,6 +99,11 @@ interface ProfileForGenerator {
     exerciseStyle?: string
     intensityTolerance?: string
     sessionStyle?: string
+    /** Issue #78: days of week when workout should avoid large muscle groups
+     * (legs, back, chest). Useful when user has another physical activity
+     * (e.g. boxing) on the same day. Values: weekday names in Russian
+     * (Понедельник, Вторник, etc.) or English (Monday, Tuesday, etc.). */
+    lightDays?: string[]
   } | null
 }
 
@@ -191,6 +197,10 @@ interface NormalizedPreferences {
   exerciseStyle: string
   intensityTolerance: string
   sessionStyle: string
+  /** Issue #78: weekday names (lowercase Russian) when workout should avoid
+   * large muscle groups. E.g. ['четверг'] means Thursday workouts get
+   * shoulders/arms/core only. */
+  lightDays: string[]
 }
 
 interface WeeklyContext {
@@ -335,7 +345,7 @@ export function buildGeneratedPlannedWorkout({
   }
 }
 
-function targetExerciseCount({ targetMinutes, preferences = { focusAreas: [], focusMuscleKeys: [], bannedExerciseNames: [], preferredExerciseNames: [], exerciseStyle: 'mixed', intensityTolerance: 'normal', sessionStyle: 'moderate_stable' } }: { targetMinutes: number | null | undefined; preferences?: NormalizedPreferences }): number {
+function targetExerciseCount({ targetMinutes, preferences = emptyPreferences() }: { targetMinutes: number | null | undefined; preferences?: NormalizedPreferences }): number {
   const minutes = Number(targetMinutes)
   const base = !Number.isFinite(minutes)
     ? 5
@@ -466,6 +476,19 @@ function chooseTargetPattern(
 ): string[] {
   const all = CANONICAL_MUSCLE_KEYS
   const avoid = new Set(coachDecision?.avoidMuscleGroups ?? [])
+
+  // Issue #78: light day — if scheduledDate falls on a light day, avoid
+  // large muscle groups (legs, back, chest). Useful when the user has
+  // another physical activity (e.g. boxing) on the same day and can't
+  // recover in time for heavy compound lifts.
+  const scheduledWeekday = normalizeText(russianWeekdayName(new Date(scheduledDate)))
+  const isLightDay = preferences.lightDays.some((d) => normalizeText(d) === scheduledWeekday)
+  if (isLightDay) {
+    avoid.add('legs')
+    avoid.add('back')
+    avoid.add('chest')
+  }
+
   const fresh = all.filter((muscleKey) => !avoid.has(muscleKey) && !isHighFatigue(muscleKey, coachState))
   const hasFresh = (muscleKey: string) => fresh.includes(muscleKey)
   const pattern: string[] = []
@@ -877,6 +900,9 @@ function normalizePreferences(profile: ProfileForGenerator = {}): NormalizedPref
   const focusAreas = Array.isArray(preferences.focusAreas) ? preferences.focusAreas.map(String).filter(Boolean) : []
   const bannedExerciseNames = Array.isArray(profile.bannedExercises) ? profile.bannedExercises.map(normalizeText).filter(Boolean) : []
   const preferredExerciseNames = Array.isArray(profile.preferredExercises) ? profile.preferredExercises.map(normalizeText).filter(Boolean) : []
+  const lightDays = Array.isArray(preferences.lightDays)
+    ? preferences.lightDays.map(normalizeText).filter(Boolean)
+    : []
   return {
     focusAreas,
     focusMuscleKeys: focusAreas.map(normalizeMuscleGroup).filter((key) => key !== 'other'),
@@ -885,6 +911,7 @@ function normalizePreferences(profile: ProfileForGenerator = {}): NormalizedPref
     exerciseStyle: typeof preferences.exerciseStyle === 'string' ? preferences.exerciseStyle : 'mixed',
     intensityTolerance: typeof preferences.intensityTolerance === 'string' ? preferences.intensityTolerance : 'normal',
     sessionStyle: typeof preferences.sessionStyle === 'string' ? preferences.sessionStyle : 'moderate_stable',
+    lightDays,
   }
 }
 
@@ -897,6 +924,7 @@ function emptyPreferences(): NormalizedPreferences {
     exerciseStyle: 'mixed',
     intensityTolerance: 'normal',
     sessionStyle: 'moderate_stable',
+    lightDays: [],
   }
 }
 

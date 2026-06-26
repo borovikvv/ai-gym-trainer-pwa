@@ -1091,3 +1091,97 @@ describe('issue #75: pattern rotation', () => {
     expect(plan.exercises.length).toBeGreaterThanOrEqual(4)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #78: light days — avoid large muscle groups on specific weekdays
+// ---------------------------------------------------------------------------
+
+describe('issue #78: light days', () => {
+  it('Thursday with lightDays=[Четверг] → no legs, back, or chest', () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    // 2026-06-25 is Thursday
+    const plan = buildGeneratedPlannedWorkout({
+      profile: { ...profile, preferences: { lightDays: ['Четверг'] } },
+      scheduledDate: '2026-06-25',
+      coachState,
+      exerciseLibrary,
+      history: [],
+    })
+    const muscleGroups = plan.exercises.map((e) => e.muscleGroup)
+    expect(muscleGroups).not.toContain('Ноги')
+    expect(muscleGroups).not.toContain('Спина')
+    expect(muscleGroups).not.toContain('Грудь')
+    // Should still have shoulders, arms, core
+    expect(plan.exercises.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('Sunday without lightDays → legs, back, chest are allowed', () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    // 2026-06-28 is Sunday — no lightDays restriction
+    const plan = buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-06-28',
+      coachState,
+      exerciseLibrary,
+      history: [],
+    })
+    const muscleGroups = plan.exercises.map((e) => e.muscleGroup)
+    // At least one large muscle group should be present
+    const hasLarge = muscleGroups.some((g) => ['Ноги', 'Спина', 'Грудь'].includes(g))
+    expect(hasLarge).toBe(true)
+  })
+
+  it('Thursday with lightDays=[Вторник] → Thursday is NOT a light day (no restriction)', () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    // 2026-06-25 is Thursday, but lightDays=[Вторник] — Thursday is not restricted
+    const plan = buildGeneratedPlannedWorkout({
+      profile: { ...profile, preferences: { lightDays: ['Вторник'] } },
+      scheduledDate: '2026-06-25',
+      coachState,
+      exerciseLibrary,
+      history: [],
+    })
+    const muscleGroups = plan.exercises.map((e) => e.muscleGroup)
+    const hasLarge = muscleGroups.some((g) => ['Ноги', 'Спина', 'Грудь'].includes(g))
+    expect(hasLarge).toBe(true)
+  })
+})
