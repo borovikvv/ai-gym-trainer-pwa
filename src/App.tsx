@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { ProgressScreen } from './components/ProgressScreen'
 import { ProgramExerciseEditor } from './components/ProgramExerciseEditor'
-import { PlanCalendar } from './components/PlanCalendar'
 import { UserProfileScreen } from './components/UserProfileScreen'
 import { CoachHomePage } from './pages/CoachHomePage'
 import { GymPage } from './pages/GymPage'
+import { PlanPage } from './pages/PlanPage'
 import { ExerciseLibraryScreen } from './components/ExerciseLibraryScreen'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { NavigationProvider, CoachProvider, ProgramProvider } from './contexts'
@@ -17,9 +17,9 @@ import { loadHistory, useProgramData } from './hooks/useProgramData'
 import { loadActiveWorkoutDraft, useDraftAutosave } from './hooks/useDraftAutosave'
 import { useCoachRecommendations } from './hooks/useCoachRecommendations'
 import { createInitialLogs, useWorkoutNavigation, useWorkoutSession, useWorkoutSetActions } from './hooks/useWorkoutSession'
-import { formatWeight, formatDateTime } from './lib/format'
+import { formatDateTime } from './lib/format'
 import { useWorkoutSave } from './hooks/useWorkoutSave'
-import { formatDateOnly, todayDateInputValue, usePlannedWorkouts } from './hooks/usePlannedWorkouts'
+import { usePlannedWorkouts } from './hooks/usePlannedWorkouts'
 import { useProgramEditing } from './hooks/useProgramEditing'
 import { useQuestionnaire } from './hooks/useQuestionnaire'
 import { useActiveWorkoutContext } from './hooks/useActiveWorkoutContext'
@@ -568,32 +568,25 @@ function App() {
         )}
 
         {screen === 'plan' && (
-          <PlanCalendar
+          <PlanPage
             activeProfile={activeProfile}
+            activeWorkoutDay={activeWorkoutDay}
+            trainingCalendar={trainingCalendar}
             selectedWeekDates={selectedWeekDates}
             weekDateOptions={weekDateOptions}
-            plannedWorkouts={plannedWorkouts}
-            userHistory={userHistory}
-            trainingCalendar={trainingCalendar}
-            activeUserId={activeUserId}
-            activeWorkoutDay={activeWorkoutDay}
             editingPlannedWorkoutId={editingPlannedWorkoutId}
             editingPlannedDate={editingPlannedDate}
             onShiftPlanningWeek={shiftPlanningWeek}
             onResetPlanningStart={resetPlanningStart}
             onToggleWeekDate={toggleWeekDate}
-            onSelectWorkoutDay={selectWorkoutDay}
-            onStartWorkout={startWorkout}
-            onBeginEditPlannedDate={(workoutId, date) => { setEditingPlannedWorkoutId(workoutId); setEditingPlannedDate(date) }}
-            onSetEditingPlannedDate={setEditingPlannedDate}
-            onCancelEditPlannedDate={() => setEditingPlannedWorkoutId(null)}
+            setEditingPlannedWorkoutId={setEditingPlannedWorkoutId}
+            setEditingPlannedDate={setEditingPlannedDate}
             onSavePlannedWorkoutDate={savePlannedWorkoutDate}
             onRegeneratePlannedWorkout={regeneratePlannedWorkout}
             onCancelPlannedWorkout={cancelPlannedWorkout}
+            onSelectWorkoutDay={selectWorkoutDay}
+            onStartWorkout={startWorkout}
             onStartEditExercise={startEditExercise}
-            formatDateOnly={formatDateOnly}
-            formatWeight={formatWeight}
-            todayDateInputValue={todayDateInputValue}
           />
         )}
 
