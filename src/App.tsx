@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
-import { ProgressScreen } from './components/ProgressScreen'
 import { ProgramExerciseEditor } from './components/ProgramExerciseEditor'
-import { UserProfileScreen } from './components/UserProfileScreen'
 import { CoachHomePage } from './pages/CoachHomePage'
 import { GymPage } from './pages/GymPage'
 import { PlanPage } from './pages/PlanPage'
-import { ExerciseLibraryScreen } from './components/ExerciseLibraryScreen'
-import { OnboardingScreen } from './components/OnboardingScreen'
+import { ProgressPage, ProfilePage, LibraryPage, OnboardingPage } from './pages/SimplePages'
 import { NavigationProvider, CoachProvider, ProgramProvider } from './contexts'
 import { AppShell } from './components/ui'
 import './App.css'
@@ -551,16 +548,13 @@ function App() {
         )}
 
         {screen === 'progress' && (
-          <ProgressScreen progressDashboard={progressDashboard} />
+          <ProgressPage progressDashboard={progressDashboard} />
         )}
 
         {screen === 'profile' && (
-          <UserProfileScreen
-            users={users}
-            activeUserId={activeUserId}
-            activeUser={activeUser}
+          <ProfilePage
             activeProfile={activeProfile}
-            exerciseLibrary={programData.exerciseLibrary}
+            activeUser={activeUser}
             onSelectUser={selectUser}
             onUpdateQuestionnaire={updateQuestionnaire}
             onSaveQuestionnaire={saveQuestionnaire}
@@ -591,24 +585,11 @@ function App() {
         )}
 
         {screen === 'library' && (
-          <ExerciseLibraryScreen exerciseLibrary={programData.exerciseLibrary} />
+          <LibraryPage />
         )}
 
         {screen === 'onboarding' && (
-          <OnboardingScreen
-            onFinish={() => {
-              if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(ONBOARDING_STORAGE_KEY, '1')
-              }
-              setScreen('home')
-            }}
-            onSkip={() => {
-              if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(ONBOARDING_STORAGE_KEY, '1')
-              }
-              setScreen('home')
-            }}
-          />
+          <OnboardingPage onComplete={() => setScreen('home')} />
         )}
       </AppShell>
 
