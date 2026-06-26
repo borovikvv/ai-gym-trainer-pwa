@@ -5,6 +5,7 @@ import { groupBy, normalizeProgression, normalizeSet } from '../utils.js'
 import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
+import { regeneratePlannedWorkout } from './plannedWorkoutService.js'
 
 interface WorkoutSetInput {
   weight?: number
@@ -171,6 +172,36 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   await saveWorkoutDebriefRecommendation(client, sanitizedEntry as unknown as Parameters<typeof saveWorkoutDebriefRecommendation>[1], debrief)
   await markPlannedWorkoutCompleted(client, sanitizedEntry)
   const coachPlan = await planAndApplyNextWorkout(client, { ...sanitizedEntry, debrief } as unknown as Parameters<typeof planAndApplyNextWorkout>[1])
+
+  // Issue #76: regenerate the NEXT planned workout after saving — the
+  // mesocycle phase may have changed (e.g. entered deload), and the
+  // existing planned_workout was generated with the old phase.
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const nextPlanned = await client.query(
+      `select id, scheduled_date from public.planned_workouts
+       where user_id = $1
+         and status in ('planned', 'generated')
+         and scheduled_date >= $2::date
+       order by scheduled_date asc
+       limit 1`,
+      [sanitizedEntry.userId, today],
+    )
+    if (nextPlanned.rows.length > 0) {
+      const row = nextPlanned.rows[0]
+      const scheduledDate = (row.scheduled_date as Date)?.toISOString?.()?.slice(0, 10) ?? String(row.scheduled_date).slice(0, 10)
+      await regeneratePlannedWorkout(client, {
+        plannedWorkoutId: String(row.id),
+        userId: sanitizedEntry.userId!,
+        scheduledDate,
+      })
+    }
+  } catch (err) {
+    // Non-fatal — the workout is already saved, planned workout regen
+    // can happen on next app open or manual "Обновить".
+    console.error('regeneratePlannedWorkout after save (non-fatal):', (err as Error).message)
+  }
+
   return { coachPlan, debrief }
 }
 
