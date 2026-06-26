@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
-import { ExerciseGuideModal } from './components/ExerciseGuideModal'
-import { PreWorkoutPreview } from './components/PreWorkoutPreview'
 import { ProgressScreen } from './components/ProgressScreen'
 import { ProgramExerciseEditor } from './components/ProgramExerciseEditor'
-import { ExercisePickerSheet } from './components/ExercisePickerSheet'
-import { ReplacementSheet } from './components/ReplacementSheet'
 import { PlanCalendar } from './components/PlanCalendar'
 import { UserProfileScreen } from './components/UserProfileScreen'
 import { CoachHomePage } from './pages/CoachHomePage'
-import { GymScreen } from './components/GymScreen'
-import { WorkoutReviewScreen } from './components/WorkoutReviewScreen'
+import { GymPage } from './pages/GymPage'
 import { ExerciseLibraryScreen } from './components/ExerciseLibraryScreen'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { NavigationProvider, CoachProvider, ProgramProvider } from './contexts'
@@ -500,24 +495,11 @@ function App() {
                 />
               )}
 
-        {screen === 'preview' && (
-          <PreWorkoutPreview
-            workoutDay={previewWorkoutDay}
-            readinessMode={workoutReadinessMode}
-            readinessOptions={readinessOptions}
-            readinessCheckIn={readinessCheckIn}
-            onReadinessModeChange={setWorkoutReadinessMode}
-            onReadinessCheckInChange={updateReadinessCheckIn}
-            onBack={() => navigate('home')}
-            onBegin={beginPreparedWorkout}
-            estimateWorkoutMinutes={estimateWorkoutMinutes}
-            formatWeight={formatWeight}
-          />
-        )}
-
-        {screen === 'session' && (
-          <GymScreen
+        {(screen === 'preview' || screen === 'session' || screen === 'review') && (
+          <GymPage
+            screen={screen}
             activeWorkoutDay={activeWorkoutDay}
+            previewWorkoutDay={previewWorkoutDay}
             activeExercise={activeExercise}
             activeExerciseIndex={activeExerciseIndex}
             activeLog={activeLog}
@@ -529,47 +511,42 @@ function App() {
             draftStatus={draftStatus}
             nextExercise={nextExercise}
             exerciseAddSuggestion={exerciseAddSuggestion}
-            formatWeight={formatWeight}
-            navigate={(nextScreen) => navigate(nextScreen)}
-            openExerciseGuide={() => setExerciseGuideOpen(true)}
-            openReplacementSheet={() => setSheetOpen(true)}
-            openExercisePicker={() => setExercisePickerOpen(true)}
-            copyPrevious={copyPrevious}
-            adjustWeight={adjustWeight}
-            markPain={markPain}
-            clearRestTimer={clearRestTimer}
-            editCompletedSet={editCompletedSet}
-            removeSet={removeSet}
-            updateSetWeight={updateSetWeight}
-            updateSetReps={updateSetReps}
-                    updateSet={updateSet}
-                    markSetDone={markSetDone}
-                    addSet={addSet}
-                    removeCurrentExercise={removeCurrentExerciseFromWorkout}
-                    addSuggestedExercise={() => {
-              if (exerciseAddSuggestion) addExerciseToCurrentWorkout(exerciseAddSuggestion.exercise)
-            }}
-            applyCoachExerciseSuggestion={(recommendation) => {
-              if (!recommendation.suggestedExercise) return
-              if (recommendation.action === 'replace_next_exercise') {
-                replaceNextExerciseInCurrentWorkout(recommendation.suggestedExercise)
-                return
-              }
-              addExerciseToCurrentWorkout(recommendation.suggestedExercise)
-            }}
-            acceptCoachDecision={acceptCoachDecision}
-            goToNextExercise={goToNextExercise}
-          />
-        )}
-
-        {screen === 'review' && (
-                  <WorkoutReviewScreen
-                    progressionSummary={progressionSummary}
-                    totalVolume={totalVolume}
-                    debrief={reviewDebrief}
-                    isSaving={isSavingWorkout}
-                    onBackToWorkout={() => navigate('session')}
+            progressionSummary={progressionSummary}
+            totalVolume={totalVolume}
+            reviewDebrief={reviewDebrief}
+            isSavingWorkout={isSavingWorkout}
+            workoutReadinessMode={workoutReadinessMode}
+            readinessOptions={readinessOptions}
+            readinessCheckIn={readinessCheckIn}
+            onNavigate={navigate}
+            onReadinessModeChange={setWorkoutReadinessMode}
+            onReadinessCheckInChange={updateReadinessCheckIn}
+            onBeginPreparedWorkout={beginPreparedWorkout}
+            onCopyPrevious={copyPrevious}
+            onAdjustWeight={adjustWeight}
+            onMarkPain={markPain}
+            onClearRestTimer={clearRestTimer}
+            onEditCompletedSet={editCompletedSet}
+            onRemoveSet={removeSet}
+            onUpdateSetWeight={updateSetWeight}
+            onUpdateSetReps={updateSetReps}
+            onUpdateSet={updateSet}
+            onMarkSetDone={markSetDone}
+            onAddSet={addSet}
+            onRemoveCurrentExercise={removeCurrentExerciseFromWorkout}
+            onAddExerciseToCurrentWorkout={addExerciseToCurrentWorkout}
+            onReplaceCurrentExercise={replaceCurrentExerciseInCurrentWorkout}
+            onReplaceNextExercise={replaceNextExerciseInCurrentWorkout}
+            onAcceptCoachDecision={acceptCoachDecision}
+            onGoToNextExercise={goToNextExercise}
             onSaveAndExit={saveWorkoutAndExit}
+            estimateWorkoutMinutes={estimateWorkoutMinutes}
+            sheetOpen={sheetOpen}
+            setSheetOpen={setSheetOpen}
+            exerciseGuideOpen={exerciseGuideOpen}
+            setExerciseGuideOpen={setExerciseGuideOpen}
+            exercisePickerOpen={exercisePickerOpen}
+            setExercisePickerOpen={setExercisePickerOpen}
           />
         )}
 
@@ -656,30 +633,8 @@ function App() {
         />
       )}
 
-      {exercisePickerOpen && (
-        <ExercisePickerSheet
-          exerciseLibrary={programData.exerciseLibrary}
-          activeExercises={activeWorkoutDay.exercises}
-          onAddExercise={addExerciseToCurrentWorkout}
-          onClose={() => setExercisePickerOpen(false)}
-        />
-      )}
-
-      {exerciseGuideOpen && (
-        <ExerciseGuideModal exercise={activeExercise} onClose={() => setExerciseGuideOpen(false)} />
-      )}
-
-      {sheetOpen && (
-                <ReplacementSheet
-                  exercise={activeExercise}
-                  exerciseLibrary={programData.exerciseLibrary}
-                  onClose={() => setSheetOpen(false)}
-                  onChooseReplacement={(replacement) => {
-                    replaceCurrentExerciseInCurrentWorkout(replacement)
-                    setSheetOpen(false)
-                  }}
-                />
-      )}
+      {/* Issue #70: exercisePickerOpen, exerciseGuideOpen, sheetOpen modals
+          moved to GymPage — they only appear during session/preview/review */}
           </>
         </ProgramProvider>
       </CoachProvider>
