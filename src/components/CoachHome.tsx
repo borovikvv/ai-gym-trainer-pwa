@@ -3,6 +3,7 @@ import type { UserProfile, WorkoutDay } from '../data/mockProgram'
 import type { CoachMemory, CoachState, MesocycleState, PlannedWorkout } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { toHumanCoachText } from '../domain/coachCopy'
+import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
 
@@ -191,7 +192,7 @@ export function CoachHome({
   const firstExercise = heroWorkoutDay.exercises[0]
   const upcomingTimelineItems = timelineItems.slice(1, 3)
   const activeExerciseCount = heroWorkoutDay.exercises.length
-  const activeWorkoutMinutes = activeExerciseCount * 10
+  const activeWorkoutMinutes = estimateWorkoutMinutes(heroWorkoutDay)
   const firstExerciseWeight = firstExercise
     ? formatWeight(nextTargets[firstExercise.id] ?? firstExercise.targetWeight ?? 0)
     : null

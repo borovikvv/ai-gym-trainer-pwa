@@ -258,9 +258,28 @@ function buildWeekBuckets(history: WorkoutHistoryEntry[], now: Date): WeekBucket
 
   // Return most-recent-week-first, only weeks within last 90 days
   const cutoff = new Date(nowDate.getTime() - 90 * 86_400_000)
-  return [...weekMap.values()]
+  const buckets = [...weekMap.values()]
     .filter((w) => w.start >= cutoff)
     .sort((a, b) => b.start.getTime() - a.start.getTime())
+
+  // Issue: deload stuck — if the current ISO week has no workouts yet,
+  // add an empty bucket for it so findCyclePosition can see the new week
+  // and reset the cycle. Without this, the mesocycle stays at the last
+  // workout's week (e.g. week 4 = deload) even after the deload week ends.
+  const currentWeekKey = isoWeekKey(nowDate)
+  if (buckets.length > 0 && buckets[0].weekKey !== currentWeekKey) {
+    const currentWeekStart = startOfWeek(nowDate)
+    if (currentWeekStart >= cutoff) {
+      buckets.unshift({
+        weekKey: currentWeekKey,
+        start: currentWeekStart,
+        end: endOfWeek(nowDate),
+        workouts: [],
+      })
+    }
+  }
+
+  return buckets
 }
 
 /**
