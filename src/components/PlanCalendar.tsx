@@ -1,3 +1,4 @@
+import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
@@ -104,7 +105,7 @@ export function PlanCalendar({
           eyebrow={formatDateOnly(nextWorkout.scheduledDate)}
           title="Следующая тренировка"
           metadata={`${nextWorkout.workoutDayName} · ${nextWorkout.workoutDay.exercises.length} упр`}
-          metric={`~${nextWorkout.workoutDay.exercises.length * 10}`}
+          metric={`~${estimateWorkoutMinutes(nextWorkout.workoutDay)} мин`}
           reason={toHumanCoachText(nextWorkout.coachReason || nextWorkout.goal)}
           primaryAction={(
             <button className="primary compact-action" type="button" onClick={() => onStartWorkout(nextWorkout.workoutDay)}>
@@ -162,7 +163,7 @@ export function PlanCalendar({
           <WorkoutRow
             eyebrow={`Следующая тренировка · ${formatDateOnly(nextWorkout.scheduledDate)}`}
             title={nextWorkout.workoutDayName}
-            metadata={`${nextWorkout.workoutDay.exercises.length} упр · ~${nextWorkout.workoutDay.exercises.length * 10} мин`}
+            metadata={`${nextWorkout.workoutDay.exercises.length} упр · ~${estimateWorkoutMinutes(nextWorkout.workoutDay)} мин`}
             badge="активна"
             primaryAction={(
               <button className="primary compact-action" type="button" onClick={() => onStartWorkout(nextWorkout.workoutDay)}>
@@ -178,7 +179,7 @@ export function PlanCalendar({
             key={workout.id}
             eyebrow={`Потом · ${formatDateOnly(workout.scheduledDate)}`}
             title={workout.workoutDayName}
-            metadata={`${workout.workoutDay.exercises.length} упр · ~${workout.workoutDay.exercises.length * 10} мин`}
+            metadata={`${workout.workoutDay.exercises.length} упр · ~${estimateWorkoutMinutes(workout.workoutDay)} мин`}
             primaryAction={(
               <button className="secondary compact" type="button" onClick={() => onSelectWorkoutDay(workout.workoutDay)}>
                 Состав
@@ -219,7 +220,7 @@ export function PlanCalendar({
             </div>
             <div className="plan-composition-card">
               <span>Время</span>
-              <b>~{activeWorkoutDay.exercises.length * 10} мин</b>
+              <b>~{estimateWorkoutMinutes(activeWorkoutDay)} мин</b>
             </div>
           </div>
           {activeWorkoutDay.exercises.map((exercise) => (
@@ -250,7 +251,7 @@ export function PlanCalendar({
       >
         {selectedWorkout && (
           <p className="action-menu__summary">
-            {formatDateOnly(selectedWorkout.scheduledDate)} · {selectedWorkout.workoutDay.exercises.length} упр · ~{selectedWorkout.workoutDay.exercises.length * 10} мин
+            {formatDateOnly(selectedWorkout.scheduledDate)} · {selectedWorkout.workoutDay.exercises.length} упр · ~{estimateWorkoutMinutes(selectedWorkout.workoutDay)} мин
           </p>
         )}
       </ActionMenu>
