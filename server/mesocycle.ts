@@ -30,7 +30,7 @@ import type {
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
-import { CANONICAL_MUSCLE_KEYS, labelFor } from './lib/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, labelFor, isAssistedExerciseName } from './lib/muscleGroups.js'
 import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
 
 // ---------------------------------------------------------------------------
@@ -92,6 +92,7 @@ interface EarlyDeloadResult {
 
 /** Minimal exercise shape for applyDeloadReduction. */
 interface ExerciseForDeload {
+  name?: string
   setsCount: number
   targetWeight: number
   repMin: number
@@ -209,18 +210,31 @@ export function applyDeloadReduction(exercise: ExerciseForDeload): DeloadReducti
   const deloadSets = Math.max(2, Math.round(originalSets * 0.6))
   // Reduce weight by one step
   const step = Math.max(0, Number(exercise.weightStep ?? 2.5))
-  const deloadWeight = Math.max(0, Number(exercise.targetWeight ?? 0) - step)
-  // Keep rep range but shift down slightly
-  const deloadRepMin = Math.max(6, Number(exercise.repMin ?? 8))
-  const deloadRepMax = Math.max(deloadRepMin + 2, Number(exercise.repMax ?? 12))
+  // For assisted exercises (gravitron), weight = counterweight.
+  // Higher counterweight = easier. To make deload EASIER, we need to
+  // INCREASE the counterweight (add step, not subtract).
+  const exerciseName = String((exercise as { name?: string }).name ?? '')
+  const isAssisted = isAssistedExerciseName(exerciseName)
+  const deloadWeight = isAssisted
+    ? Math.max(0, Number(exercise.targetWeight ?? 0) + step)
+    : Math.max(0, Number(exercise.targetWeight ?? 0) - step)
+  // For timed exercises (plank), reps = seconds. Don't clamp to 6-8 reps.
+  const isTimed = isTimedExerciseName(exerciseName)
+  const deloadRepMin = isTimed
+    ? Math.max(10, Math.round(Number(exercise.repMin ?? 40) * 0.8))
+    : Math.max(6, Number(exercise.repMin ?? 8))
+  const deloadRepMax = isTimed
+    ? Math.max(deloadRepMin + 5, Math.round(Number(exercise.repMax ?? 60) * 0.8))
+    : Math.max(deloadRepMin + 2, Number(exercise.repMax ?? 12))
 
+  const weightNote = isAssisted ? `вес +${step} кг (контрвес)` : `вес -${step} кг`
   return {
     setsCount: deloadSets,
     targetWeight: deloadWeight,
     repMin: deloadRepMin,
     repMax: deloadRepMax,
     intensityTarget: 'easy',
-    deloadNote: `Разгрузка: ${deloadSets}×${deloadRepMin}–${deloadRepMax} вместо ${originalSets}×${exercise.repMin}–${exercise.repMax}, вес -${step} кг. RPE ≤ 7.`,
+    deloadNote: `Разгрузка: ${deloadSets}×${deloadRepMin}–${deloadRepMax} вместо ${originalSets}×${exercise.repMin}–${exercise.repMax}, ${weightNote}. RPE ≤ 7.`,
   }
 }
 
@@ -446,6 +460,12 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   const number = Number(value)
   if (!Number.isFinite(number)) return fallback
   return Math.max(min, Math.min(max, number))
+}
+
+/** Check if exercise is timed (plank, dead bug) — reps are seconds. */
+function isTimedExerciseName(name: string): boolean {
+  const lower = name.toLowerCase()
+  return lower.includes('планк') || lower.includes('plank') || lower.includes('dead bug') || lower.includes('дед баг')
 }
 
 /**
