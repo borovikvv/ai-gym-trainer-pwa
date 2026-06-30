@@ -3,6 +3,7 @@ import type { ExerciseAddSuggestion } from '../domain/exerciseSuggestion'
 import type { ExerciseLog } from '../domain/workoutHistory'
 import type { WorkoutSetInput } from '../domain/progression'
 import type { NextSetHint } from './gymTypes'
+import { useEffect, useRef } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { SessionActions, QuickActions } from './GymActions'
 import { NextSetCoachCard } from './NextSetCoachCard'
@@ -84,6 +85,40 @@ export function GymScreen({
   const currentWeight = formatWeight(activeLog.sets[0]?.weight ?? activeExercise.targetWeight)
   const timedExercise = isTimedExercise(activeExercise)
 
+  // Coach recommendation autofill: when the coach recommends a weight/reps
+  // for the next set, automatically fill the active set's input fields.
+  // Only applies to 'continue', 'hold_load', 'reduce_load' actions (not
+  // stop/replace/skip/finish — those need user interaction).
+  const lastAppliedRecKey = useRef<string | null>(null)
+  useEffect(() => {
+    if (!visibleNextSetRecommendation) return
+    const rec = visibleNextSetRecommendation
+    const isAutofillAction = ['continue', 'hold_load', 'reduce_load'].includes(rec.action)
+    if (!isAutofillAction) return
+    if (allSetsCompleted) return
+    if (activeSetIndex < 0) return
+
+    // Avoid re-applying the same recommendation (would override user edits)
+    const recKey = `${activeExercise.id}:${activeSetIndex}:${rec.weight}:${rec.reps}`
+    if (lastAppliedRecKey.current === recKey) return
+    lastAppliedRecKey.current = recKey
+
+    // Check if the set already has the recommended values (user may have
+    // already entered them manually)
+    const currentSet = activeLog.sets[activeSetIndex]
+    if (currentSet && currentSet.weight === rec.weight && currentSet.reps === rec.reps) return
+
+    // Apply recommendation
+    updateSetWeight(activeSetIndex, String(rec.weight))
+    updateSetReps(activeSetIndex, String(rec.reps))
+  }, [visibleNextSetRecommendation, activeSetIndex, activeExercise.id, allSetsCompleted, activeLog.sets, updateSetWeight, updateSetReps])
+
+  // Separate: is this a "continue/hold/reduce" recommendation (show inline)
+  // or a "stop/replace/skip/finish" (show as separate card)?
+  const rec = visibleNextSetRecommendation
+  const isInlineRec = rec && ['continue', 'hold_load', 'reduce_load'].includes(rec.action) && !allSetsCompleted
+  const isCardRec = rec && !['continue', 'hold_load', 'reduce_load'].includes(rec.action)
+
   return (
     <section className="screen active session-screen">
       <div className="session-header">
@@ -159,15 +194,30 @@ export function GymScreen({
         </div>
       )}
 
-      <NextSetCoachCard
-        recommendation={visibleNextSetRecommendation}
-        allSetsCompleted={allSetsCompleted}
-        formatWeight={formatWeight}
-        onApplySuggestedExercise={applyCoachExerciseSuggestion}
-        onAcceptCoachDecision={acceptCoachDecision}
-      />
+      {/* Coach card — only for stop/replace/skip/finish actions.
+          For continue/hold/reduce, the recommendation is shown inline
+          in the "Подходы" section + auto-filled into inputs. */}
+      {isCardRec && (
+        <NextSetCoachCard
+          recommendation={visibleNextSetRecommendation}
+          allSetsCompleted={allSetsCompleted}
+          formatWeight={formatWeight}
+          onApplySuggestedExercise={applyCoachExerciseSuggestion}
+          onAcceptCoachDecision={acceptCoachDecision}
+        />
+      )}
 
       <SectionList title="Подходы">
+        {/* Inline coach recommendation — shown right above the set inputs */}
+        {isInlineRec && rec && (
+          <div className="coach-inline-hint">
+            <span className="coach-inline-hint__label">
+              {rec.action === 'reduce_load' ? '↓ Снизить' : rec.action === 'hold_load' ? '→ Держать' : '▶ Тренер'}
+            </span>
+            <b>{formatWeight(rec.weight)} кг × {rec.reps}</b>
+            <span className="muted">{rec.reason}</span>
+          </div>
+        )}
         {!timedExercise && (
           <QuickActions
             weightStep={activeExercise.weightStep}
