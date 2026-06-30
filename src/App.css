@@ -1997,6 +1997,39 @@ select:disabled {
   white-space: nowrap;
 }
 
+/* Issue: coach recommendation inline in «Подходы» section */
+.coach-inline-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-left: 3px solid var(--accent);
+}
+
+.coach-inline-hint__label {
+  font-size: var(--text-caption);
+  font-weight: 780;
+  color: var(--accent-pressed);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.coach-inline-hint b {
+  font-size: var(--text-body);
+  font-weight: 800;
+}
+
+.coach-inline-hint .muted {
+  width: 100%;
+  font-size: var(--text-small);
+  line-height: 1.38;
+  color: var(--text-secondary);
+}
+
 /* screens: home */
 .home-screen,
 .home-top {
