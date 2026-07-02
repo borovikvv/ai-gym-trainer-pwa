@@ -549,7 +549,7 @@ function App() {
         )}
 
         {screen === 'progress' && (
-          <ProgressPage progressDashboard={progressDashboard} />
+          <ProgressPage progressDashboard={progressDashboard} activeUserId={activeUserId} />
         )}
 
         {screen === 'profile' && (

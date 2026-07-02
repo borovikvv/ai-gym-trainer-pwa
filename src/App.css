@@ -2522,3 +2522,43 @@ select:disabled {
 .onboarding-actions .secondary:only-child {
   margin-left: auto;
 }
+
+/* Issue #84: AI progress analysis card */
+.coach-analysis-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.coach-analysis-card p {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.42;
+}
+
+.coach-analysis-item {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--separator);
+}
+
+.coach-analysis-item--warning {
+  border-left-color: var(--warning, #bf5600);
+  background: color-mix(in srgb, var(--warning, #bf5600) 8%, transparent);
+}
+
+.coach-analysis-item--good {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.coach-analysis-item--danger {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.coach-analysis-item b {
+  display: block;
+  font-size: var(--text-small);
+  margin-bottom: 2px;
+}
