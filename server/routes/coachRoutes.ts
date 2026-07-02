@@ -97,10 +97,29 @@ coachRoutes.post('/coach/workout-today', async (req, res, next) => {
   }
 })
 
-// Issue #84: AI Level 2 — progress analysis
+// Issue #84: AI Level 2 — progress analysis (with daily caching)
 coachRoutes.get('/coach/progress-analysis/:userId', async (req, res, next) => {
   try {
     const userId = req.params.userId
+    const now = new Date()
+
+    // Check cache: progress_analysis from last 24 hours
+    const cacheCutoff = new Date(now.getTime() - 24 * 86_400_000)
+    const cached = await pool.query(
+      `select body from public.recommendations
+       where user_id = $1 and recommendation_type = 'progress_analysis'
+         and created_at >= $2
+       order by created_at desc limit 1`,
+      [userId, cacheCutoff],
+    )
+
+    if (cached.rows.length > 0) {
+      const analysis = JSON.parse(cached.rows[0].body)
+      res.json({ ok: true, analysis, cached: true })
+      return
+    }
+
+    // No cache → generate
     const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, userId)
     const history = await loadRecentHistory(pool, userId)
     const e1rmHistories = buildAllExerciseE1RMHistories(history).map((h) => ({
@@ -118,18 +137,53 @@ coachRoutes.get('/coach/progress-analysis/:userId', async (req, res, next) => {
       e1rmHistories,
       coachState,
       coachMemory,
-      now: new Date(),
+      now,
     })
+
+    // Save to DB (non-fatal)
+    try {
+      await pool.query(
+        `insert into public.recommendations (user_id, recommendation_type, title, body, source)
+         values ($1, 'progress_analysis', 'Анализ прогресса', $2, $3)`,
+        [userId, JSON.stringify(analysis), 'llm'],
+      )
+    } catch (saveErr) {
+      console.error('progress_analysis save failed (non-fatal):', saveErr instanceof Error ? saveErr.message : saveErr)
+    }
+
     res.json({ ok: true, analysis })
   } catch (error) {
     next(error)
   }
 })
 
-// Issue #85: AI Level 3 — program review
+// Issue #85: AI Level 3 — program review (with weekly caching)
 coachRoutes.get('/coach/program-review/:userId', async (req, res, next) => {
   try {
     const userId = req.params.userId
+    const now = new Date()
+
+    // Check cache: is there a program_review from this ISO week?
+    const weekStart = new Date(now)
+    const day = weekStart.getDay()
+    weekStart.setDate(weekStart.getDate() - (day === 0 ? 6 : day - 1))
+    weekStart.setHours(0, 0, 0, 0)
+
+    const cached = await pool.query(
+      `select body from public.recommendations
+       where user_id = $1 and recommendation_type = 'program_review'
+         and created_at >= $2
+       order by created_at desc limit 1`,
+      [userId, weekStart],
+    )
+
+    if (cached.rows.length > 0) {
+      const review = JSON.parse(cached.rows[0].body)
+      res.json({ ok: true, review, cached: true })
+      return
+    }
+
+    // No cache → generate new review
     const [profile, programDays, { coachMemory, coachState }] = await Promise.all([
       loadUserProfile(pool, userId),
       loadUserWorkoutDays(pool, userId),
@@ -152,6 +206,18 @@ coachRoutes.get('/coach/program-review/:userId', async (req, res, next) => {
       },
       now: new Date(),
     })
+
+    // Save to DB for weekly caching (non-fatal)
+    try {
+      await pool.query(
+        `insert into public.recommendations (user_id, recommendation_type, title, body, source)
+         values ($1, 'program_review', 'Недельный разбор', $2, $3)`,
+        [userId, JSON.stringify(review), review.changes.length > 0 ? 'llm' : 'rules'],
+      )
+    } catch (saveErr) {
+      console.error('program_review save failed (non-fatal):', saveErr instanceof Error ? saveErr.message : saveErr)
+    }
+
     res.json({ ok: true, review })
   } catch (error) {
     next(error)
