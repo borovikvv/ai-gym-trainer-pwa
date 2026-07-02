@@ -159,6 +159,13 @@ function buildLlmPrompt(input: ProgressAnalysisInput): string {
   // Workouts count
   const workoutsCount = input.history.filter((s) => new Date(s.completedAt) >= fourWeeksAgo).length
 
+  // Issue #90: explicitly flag deload context so the LLM does not interpret
+  // an expected temporary dip in e1RM as overtraining.
+  const isDeload = Boolean(cs?.mesocycle?.isDeload) || cs?.mesocycle?.phase === 'deload'
+  const deloadHint = isDeload
+    ? 'ВАЖНО: текущая неделя — разгрузочная (deload). Временное снижение e1RM и рост RPE — ожидаемая норма, НЕ признак перетренированности. Не флаги падение e1RM как тревожный сигнал в этой фазе.'
+    : ''
+
   return `Дата анализа: ${now.toISOString().slice(0, 10)}
 
 Тренировок за 4 недели: ${workoutsCount}
@@ -175,11 +182,12 @@ ${volumeText || 'нет данных'}
 Готовность: ${cs?.readinessScore ?? '?'}/100
 Восстановление: ${cs?.recoveryStatus ?? 'unknown'}
 Усталость: ${cs?.muscleGroups ? Object.entries(cs.muscleGroups).filter(([, g]) => g?.fatigue === 'high').map(([k]) => k).join(', ') || 'нет' : 'нет данных'}
+${deloadHint}
 
 Найди:
-1. Плато (e1RM не растёт 3+ недели или trend=flat/down при dataPointCount>=3)
+1. Плато (e1RM не растёт 3+ недели или trend=flat/down при dataPointCount>=3, и это НЕ deload-неделя)
 2. Улучшения (e1RM растёт, trend=up)
-3. Перетренированность (RPE высокий, e1RM падает)
+3. Перетренированность (RPE высокий, e1RM падает). ВАЖНО: если текущая или предыдущая неделя — разгрузочная (deload phase), временное снижение e1RM НОРМАЛЬНО и НЕ является признаком перетренированности. Учитывай фазу мезоцикла при интерпретации трендов.
 4. Дисбаланс (разница в объёме между группами > 40%)`
 }
 
@@ -194,6 +202,13 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
   const warnings: string[] = []
   const suggestions: string[] = []
 
+  // Issue #90: deload-aware e1RM interpretation. A temporary dip during a
+  // deload week (or the week right after) is expected and should NOT be
+  // flagged as overtraining. We only flag a downward trend as a warning
+  // when the user is NOT in a deload phase.
+  const isDeloadPhase = Boolean(input.coachState?.mesocycle?.isDeload)
+    || input.coachState?.mesocycle?.phase === 'deload'
+
   // Check e1RM trends
   for (const e of input.e1rmHistories) {
     if (e.dataPointCount < 3) continue
@@ -205,7 +220,12 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
         recommendation: `e1RM на ${e.exerciseName} не растёт. Рассмотри замену упражнения или изменение схемы подходов.`,
       })
     } else if (e.trendDirection === 'down') {
-      warnings.push(`${e.exerciseName}: e1RM падает (${e.slopePerWeek.toFixed(1)} кг/нед). Возможна перетренированность.`)
+      if (isDeloadPhase) {
+        // Expected during deload — surface as informational, not a warning.
+        suggestions.push(`${e.exerciseName}: e1RM ниже обычного (${e.slopePerWeek.toFixed(1)} кг/нед), но это разгрузочная неделя — снижение ожидаемо.`)
+      } else {
+        warnings.push(`${e.exerciseName}: e1RM падает (${e.slopePerWeek.toFixed(1)} кг/нед). Возможна перетренированность.`)
+      }
     } else if (e.trendDirection === 'up' && e.slopePerWeek > 0.5) {
       improvements.push({
         exerciseName: e.exerciseName,

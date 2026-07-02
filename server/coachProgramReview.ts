@@ -176,6 +176,13 @@ function buildLlmPrompt(input: ProgramReviewInput): string {
 
   const cs = input.coachState
 
+  // Issue #90: explicitly flag deload context so the LLM does not suggest
+  // add_deload or volume cuts when the user is already in a deload week.
+  const isDeload = Boolean(cs?.mesocycle?.isDeload) || cs?.mesocycle?.phase === 'deload'
+  const deloadHint = isDeload
+    ? 'ВАЖНО: текущая неделя — разгрузочная (deload). Не предлагай add_deload или снижение объёма — пользователь уже разгружается. Снижение e1RM и рост RPE на этой неделе ожидаемы.'
+    : ''
+
   return `Дата: ${now.toISOString().slice(0, 10)}
 
 Текущая программа:
@@ -190,9 +197,11 @@ ${programText}
 Готовность: ${cs?.readinessScore ?? '?'}/100
 Цель: ${input.profile.goal ?? 'общий прогресс'}
 Уровень: ${input.profile.level ?? 'intermediate'}
+${deloadHint}
 
 Предложи 1-3 изменения (не больше). Для каждого: тип, описание, обоснование.
-Не меняй больше 2 упражнений за раз.`
+Не меняй больше 2 упражнений за раз.
+Учитывай фазу мезоцикла: не предлагай разгрузку, если уже идёт deload-неделя.`
 }
 
 /**
@@ -202,6 +211,11 @@ function ruleBasedReview(input: ProgramReviewInput): ProgramReview {
   const now = input.now
   const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000)
   const changes: ProgramChange[] = []
+
+  // Issue #90: do not suggest add_deload when the user is already in a
+  // deload week. Surface a gentle informational note instead.
+  const isDeloadPhase = Boolean(input.coachState?.mesocycle?.isDeload)
+    || input.coachState?.mesocycle?.phase === 'deload'
 
   // Check pain
   const painExercises = input.history
@@ -220,7 +234,7 @@ function ruleBasedReview(input: ProgramReviewInput): ProgramReview {
     })
   }
 
-  // Check high RPE
+  // Check high RPE — but skip add_deload suggestion during a deload week
   const rpes: number[] = []
   input.history
     .filter((s) => new Date(s.completedAt) >= sevenDaysAgo)
@@ -230,7 +244,7 @@ function ruleBasedReview(input: ProgramReviewInput): ProgramReview {
 
   if (rpes.length > 0) {
     const avgRpe = rpes.reduce((a, b) => a + b, 0) / rpes.length
-    if (avgRpe > 8.5) {
+    if (avgRpe > 8.5 && !isDeloadPhase) {
       changes.push({
         type: 'add_deload',
         description: 'Рекомендую разгрузочную неделю',

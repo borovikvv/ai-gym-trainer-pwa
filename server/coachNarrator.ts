@@ -122,6 +122,12 @@ function buildLlmPrompt(input: NarrationInput): string {
 
   const daysSince = input.weeklyContext.daysSincePreviousWorkout
   const phase = m ? `${m.phase} (неделя ${m.weekInCycle}/${m.cycleLength})` : 'нет данных'
+  // Issue #90: make the LLM aware of deload context so it explains the lighter
+  // session as a planned recovery week, not as low readiness or fatigue.
+  const isDeload = Boolean(m?.isDeload) || m?.phase === 'deload'
+  const deloadHint = isDeload
+    ? 'Сейчас разгрузочная неделя (deload) — объём и интенсивность снижены намеренно, это часть плана. Объясни это пользователю.'
+    : ''
 
   return `Дата: ${input.scheduledDate}
 Готовность: ${cs?.readinessScore ?? 70}/100
@@ -137,6 +143,7 @@ function buildLlmPrompt(input: NarrationInput): string {
 Приоритет: ${input.decision?.priorityMuscleGroups?.join(', ') ?? 'нет'}
 Избегать: ${input.decision?.avoidMuscleGroups?.join(', ') ?? 'нет'}
 ${input.lowReadiness ? 'Внимание: сниженная готовность, тренировка облегчена.' : ''}
+${deloadHint}
 
 Объясни почему эта тренировка именно такая.`
 }
