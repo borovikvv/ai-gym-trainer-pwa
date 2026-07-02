@@ -2562,3 +2562,61 @@ select:disabled {
   font-size: var(--text-small);
   margin-bottom: 2px;
 }
+
+/* Issue #85: weekly program review card */
+.program-review-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.program-review-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.program-review-card__header p {
+  margin: 0;
+  font-size: var(--text-small);
+  line-height: 1.42;
+}
+
+.program-review-change {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--separator);
+}
+
+.program-review-change--high {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.program-review-change--medium {
+  border-left-color: var(--warning, #bf5600);
+  background: color-mix(in srgb, var(--warning, #bf5600) 8%, transparent);
+}
+
+.program-review-change--low {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.program-review-change b {
+  display: block;
+  font-size: var(--text-small);
+  margin-bottom: 2px;
+}
+
+.program-review-card__focus {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+
+.program-review-card__focus b {
+  display: block;
+  font-size: var(--text-body);
+}

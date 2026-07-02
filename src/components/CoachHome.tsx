@@ -1,4 +1,4 @@
-import { BookOpen, Dumbbell, RotateCcw } from 'lucide-react'
+import { BookOpen, Dumbbell, RotateCcw, ClipboardList } from 'lucide-react'
 import type { UserProfile, WorkoutDay } from '../data/mockProgram'
 import type { CoachMemory, CoachState, MesocycleState, PlannedWorkout } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
@@ -6,6 +6,8 @@ import { toHumanCoachText } from '../domain/coachCopy'
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
+import { useEffect, useState } from 'react'
+import { isProgramApiConfigured } from '../data/programApi'
 
 /**
  * Compute streak (consecutive weeks with at least 1 workout) from history.
@@ -197,6 +199,34 @@ export function CoachHome({
     ? formatWeight(nextTargets[firstExercise.id] ?? firstExercise.targetWeight ?? 0)
     : null
 
+  // Issue #85: AI program review
+  const [programReview, setProgramReview] = useState<{
+    summary: string
+    rating: string
+    changes: Array<{
+      type: string
+      description: string
+      rationale: string
+      priority: string
+    }>
+    nextWeekFocus: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (!activeUserId || !isProgramApiConfigured) return
+    const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
+    if (!apiBase) return
+    let cancelled = false
+    Promise.resolve().then(() => {
+      if (cancelled) return
+      fetch(`${apiBase}/api/coach/program-review/${encodeURIComponent(activeUserId)}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (!cancelled && data?.review) setProgramReview(data.review) })
+        .catch(() => {})
+    })
+    return () => { cancelled = true }
+  }, [activeUserId, userHistory.length])
+
   return (
     <section className="screen active home-screen">
       <ScreenHeader
@@ -266,6 +296,30 @@ export function CoachHome({
           { label: 'Тренировок', value: coachMemory ? `${coachMemory.weeklyBalance.completedWorkoutsLast7Days}/${coachMemory.weeklyBalance.plannedWorkoutsPerWeek}` : '—' },
         ]}
       />
+
+      {/* Issue #85: AI weekly program review */}
+      {programReview && programReview.changes.length > 0 && (
+        <SectionList title="Недельный разбор">
+          <div className="card program-review-card">
+            <div className="program-review-card__header">
+              <ClipboardList size={18} aria-hidden="true" />
+              <p>{programReview.summary}</p>
+            </div>
+            {programReview.changes.map((change, i) => (
+              <div key={i} className={`program-review-change program-review-change--${change.priority}`}>
+                <b>{change.description}</b>
+                <div className="muted">{change.rationale}</div>
+              </div>
+            ))}
+            {programReview.nextWeekFocus && (
+              <div className="program-review-card__focus">
+                <span className="label">Фокус следующей недели</span>
+                <b>{programReview.nextWeekFocus}</b>
+              </div>
+            )}
+          </div>
+        </SectionList>
+      )}
 
       {upcomingTimelineItems.length > 0 && (
         <SectionList title="Далее">
