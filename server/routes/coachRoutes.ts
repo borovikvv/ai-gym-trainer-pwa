@@ -8,6 +8,7 @@ import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecis
 import { loadCoachMemoryForUser, loadCoachStateForUser, loadExerciseLibrary, loadUserProfile, loadUserWorkoutDays, loadRecentHistory } from '../services/programService.js'
 import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../activityLog.js'
 import { analyzeProgress } from '../coachProgressAnalysis.js'
+import { reviewProgram } from '../coachProgramReview.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 
 export const coachRoutes = Router()
@@ -120,6 +121,38 @@ coachRoutes.get('/coach/progress-analysis/:userId', async (req, res, next) => {
       now: new Date(),
     })
     res.json({ ok: true, analysis })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// Issue #85: AI Level 3 — program review
+coachRoutes.get('/coach/program-review/:userId', async (req, res, next) => {
+  try {
+    const userId = req.params.userId
+    const [profile, programDays, { coachMemory, coachState }] = await Promise.all([
+      loadUserProfile(pool, userId),
+      loadUserWorkoutDays(pool, userId),
+      loadCoachMemoryForUser(pool, userId),
+    ])
+    const history = await loadRecentHistory(pool, userId)
+    const review = await reviewProgram({
+      userId,
+      history,
+      programDays,
+      coachState,
+      coachMemory,
+      profile: {
+        goal: profile.goal,
+        level: profile.level,
+        age: profile.age,
+        workoutsPerWeek: profile.workoutsPerWeek,
+        bannedExercises: profile.bannedExercises,
+        preferredExercises: profile.preferredExercises,
+      },
+      now: new Date(),
+    })
+    res.json({ ok: true, review })
   } catch (error) {
     next(error)
   }
