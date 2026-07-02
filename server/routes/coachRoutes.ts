@@ -5,8 +5,10 @@ import { buildLiveStrategyDecision, requestLlmLiveStrategy } from '../coachBrain
 import { buildWorkoutTodayPlan } from '../coachToday.js'
 import { recommendNextSet } from '../coachEngine.js'
 import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecisionLog.js'
-import { loadCoachMemoryForUser, loadCoachStateForUser, loadExerciseLibrary, loadUserProfile, loadUserWorkoutDays } from '../services/programService.js'
+import { loadCoachMemoryForUser, loadCoachStateForUser, loadExerciseLibrary, loadUserProfile, loadUserWorkoutDays, loadRecentHistory } from '../services/programService.js'
 import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../activityLog.js'
+import { analyzeProgress } from '../coachProgressAnalysis.js'
+import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 
 export const coachRoutes = Router()
 
@@ -89,6 +91,35 @@ coachRoutes.post('/coach/workout-today', async (req, res, next) => {
             const plan = buildWorkoutTodayPlan({ profile, workoutDays, exerciseLibrary, coachState, now: new Date() })
             logActivity('coach.workout_today', buildWorkoutTodayEvent({ userId, plan, coachState }))
             res.json({ ok: true, plan })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// Issue #84: AI Level 2 — progress analysis
+coachRoutes.get('/coach/progress-analysis/:userId', async (req, res, next) => {
+  try {
+    const userId = req.params.userId
+    const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, userId)
+    const history = await loadRecentHistory(pool, userId)
+    const e1rmHistories = buildAllExerciseE1RMHistories(history).map((h) => ({
+      exerciseId: h.exerciseId,
+      exerciseName: h.exerciseName,
+      muscleGroup: h.muscleGroup,
+      currentBest: h.currentBest,
+      trendDirection: h.trend.direction,
+      slopePerWeek: h.trend.slopePerWeek,
+      dataPointCount: h.trend.dataPointCount,
+    }))
+    const analysis = await analyzeProgress({
+      userId,
+      history,
+      e1rmHistories,
+      coachState,
+      coachMemory,
+      now: new Date(),
+    })
+    res.json({ ok: true, analysis })
   } catch (error) {
     next(error)
   }

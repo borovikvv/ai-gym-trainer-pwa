@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react'
 import type { ProgressDashboard } from '../domain/progressDashboard'
 import { HeroStatus, ScreenHeader, SectionList } from './ui'
+import { isProgramApiConfigured } from '../data/programApi'
 
 type ProgressScreenProps = {
   progressDashboard: ProgressDashboard
+  activeUserId?: string
 }
 
 function formatKg(value: number) {
@@ -96,7 +99,7 @@ function weeklyTargetText(workouts14d: number) {
   return `${Math.min(workouts14d, target)}/${target}`
 }
 
-export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
+export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScreenProps) {
   const volume14d = formatKg(progressDashboard.overview.totalVolume14d)
   const focusItems = progressDashboard.focus.slice(0, 3)
   const bestMovers = progressDashboard.exerciseStatuses
@@ -106,10 +109,90 @@ export function ProgressScreen({ progressDashboard }: ProgressScreenProps) {
   const coachDecisions = progressDashboard.coachDecisions.slice(0, 2)
   const painSignal = progressDashboard.overview.painMarks === 0 ? 'без боли' : `${progressDashboard.overview.painMarks} сигнал`
 
+  // Issue #84: AI progress analysis
+  const [analysis, setAnalysis] = useState<{
+    summary: string
+    plateaus: Array<{ exerciseName: string; weeksStagnant: number; recommendation: string }>
+    improvements: Array<{ exerciseName: string; e1rmChangePercent: number; note: string }>
+    warnings: string[]
+    suggestions: string[]
+  } | null>(null)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+
+  useEffect(() => {
+    if (!activeUserId || !isProgramApiConfigured) return
+    const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
+    if (!apiBase) return
+    let cancelled = false
+    // Use a microtask to avoid synchronous setState in effect (lint rule)
+    Promise.resolve().then(() => {
+      if (cancelled) return
+      setAnalysisLoading(true)
+      fetch(`${apiBase}/api/coach/progress-analysis/${encodeURIComponent(activeUserId)}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (!cancelled && data?.analysis) setAnalysis(data.analysis) })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setAnalysisLoading(false) })
+    })
+    return () => { cancelled = true }
+  }, [activeUserId])
+
   return (
     <section className="screen active progress-screen">
       <ScreenHeader eyebrow="Прогресс" title="Динамика" />
       <span className="sr-only">Панель динамики</span>
+
+      {/* Issue #84: AI progress analysis */}
+      {(analysis || analysisLoading) && (
+        <SectionList title="Анализ тренера">
+          {analysisLoading && <div className="muted">Анализирую прогресс...</div>}
+          {analysis && (
+            <div className="card coach-analysis-card">
+              <p>{analysis.summary}</p>
+              {analysis.plateaus.length > 0 && (
+                <div className="top-gap">
+                  {analysis.plateaus.map((p, i) => (
+                    <div key={i} className="coach-analysis-item coach-analysis-item--warning">
+                      <b>Плато: {p.exerciseName}</b>
+                      <div className="muted">{p.recommendation}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analysis.improvements.length > 0 && (
+                <div className="top-gap">
+                  {analysis.improvements.map((imp, i) => (
+                    <div key={i} className="coach-analysis-item coach-analysis-item--good">
+                      <b>Рост: {imp.exerciseName} (+{imp.e1rmChangePercent}%/нед)</b>
+                      <div className="muted">{imp.note}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analysis.warnings.length > 0 && (
+                <div className="top-gap">
+                  {analysis.warnings.map((w, i) => (
+                    <div key={i} className="coach-analysis-item coach-analysis-item--danger">
+                      <b>Внимание</b>
+                      <div className="muted">{w}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analysis.suggestions.length > 0 && (
+                <div className="top-gap">
+                  {analysis.suggestions.map((s, i) => (
+                    <div key={i} className="coach-analysis-item">
+                      <b>Совет</b>
+                      <div className="muted">{s}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </SectionList>
+      )}
 
       <HeroStatus
         eyebrow="14 дней"

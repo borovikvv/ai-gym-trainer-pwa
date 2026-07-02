@@ -10,10 +10,11 @@ const ONBOARDING_STORAGE_KEY = 'ai-gym-trainer:v0.1:onboarding-completed'
 
 interface ProgressPageProps {
   progressDashboard: unknown
+  activeUserId: string
 }
 
 export function ProgressPage(props: ProgressPageProps) {
-  return <ProgressScreen progressDashboard={props.progressDashboard as Parameters<typeof ProgressScreen>[0]['progressDashboard']} />
+  return <ProgressScreen progressDashboard={props.progressDashboard as Parameters<typeof ProgressScreen>[0]['progressDashboard']} activeUserId={props.activeUserId} />
 }
 
 interface ProfilePageProps {
