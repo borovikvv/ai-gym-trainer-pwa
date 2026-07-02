@@ -9,6 +9,7 @@ import { loadCoachMemoryForUser, loadCoachStateForUser, loadExerciseLibrary, loa
 import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../activityLog.js'
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
+import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 
 export const coachRoutes = Router()
@@ -219,6 +220,30 @@ coachRoutes.get('/coach/program-review/:userId', async (req, res, next) => {
     }
 
     res.json({ ok: true, review })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// Issue #86: AI Level 4 — training record status + export
+coachRoutes.get('/coach/training-records/:userId', async (req, res, next) => {
+  try {
+    const userId = req.params.userId
+    const count = await countTrainingRecords(pool, userId)
+    const ready = count >= 50
+    res.json({ ok: true, count, readyForFineTuning: ready, minRequired: 50 })
+  } catch (error) {
+    next(error)
+  }
+})
+
+coachRoutes.get('/coach/training-records/:userId/export', async (req, res, next) => {
+  try {
+    const userId = req.params.userId
+    const jsonl = await exportTrainingRecords(pool, userId)
+    res.setHeader('Content-Type', 'application/jsonl')
+    res.setHeader('Content-Disposition', `attachment; filename="training-records-${userId}.jsonl"`)
+    res.send(jsonl)
   } catch (error) {
     next(error)
   }

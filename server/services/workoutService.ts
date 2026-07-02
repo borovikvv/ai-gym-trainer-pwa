@@ -6,6 +6,7 @@ import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { regeneratePlannedWorkout } from './plannedWorkoutService.js'
+import { saveTrainingRecord } from '../coachTrainingRecord.js'
 
 interface WorkoutSetInput {
   weight?: number
@@ -200,6 +201,56 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     // Non-fatal — the workout is already saved, planned workout regen
     // can happen on next app open or manual "Обновить".
     console.error('regeneratePlannedWorkout after save (non-fatal):', (err as Error).message)
+  }
+
+  // Issue #86: Save training record for future fine-tuning (non-fatal)
+  try {
+    await saveTrainingRecord(
+      client,
+      {
+        userId: sanitizedEntry.userId!,
+        id: sanitizedEntry.id!,
+        completedAt: sanitizedEntry.completedAt!,
+        totalVolume: sanitizedEntry.totalVolume,
+        qualityScore: sanitizedEntry.qualityScore ?? null,
+        readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
+        exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
+          exerciseId: e.exerciseId ?? '',
+          exerciseName: e.exerciseName ?? '',
+          sets: e.sets ?? [],
+          pain: e.pain,
+          volume: e.volume,
+          nextRecommendedWeight: e.nextRecommendedWeight,
+          progressionType: e.progressionType ?? 'hold',
+          progressionReason: e.progressionReason ?? '',
+          muscleGroup: '',
+        })) as unknown as WorkoutHistoryEntry['exercises'],
+      },
+      // coachState from coachPlan (computed during planAndApplyNextWorkout)
+      null, // coachState is computed inside coachPlanningService, not available here
+      // Use the debrief exercises as the "decision" (what was prescribed)
+      {
+        exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
+          exerciseId: e.exerciseId ?? '',
+          exerciseName: e.exerciseName ?? '',
+          muscleGroup: '',
+          setsCount: (e.sets ?? []).length,
+          repMin: 0,
+          repMax: 0,
+          targetWeight: e.nextRecommendedWeight ?? 0,
+        })),
+        lowReadiness: false,
+        loadPolicy: 'unknown',
+      },
+      {
+        age: null,
+        goal: undefined,
+        level: undefined,
+        workoutsPerWeek: undefined,
+      },
+    )
+  } catch (err) {
+    console.error('saveTrainingRecord (non-fatal):', (err as Error).message)
   }
 
   return { coachPlan, debrief }
