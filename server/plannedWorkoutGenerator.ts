@@ -23,8 +23,8 @@ import { roundWeight } from './lib/format.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
 import { russianWeekdayName } from './utils.js'
+import { generateCoachNarration } from './coachNarrator.js'
 
-const COACH_PERSONA = 'Профиль тренера: персональный силовой тренер с приоритетом безопасной прогрессии, восстановления и недельного баланса нагрузки.'
 
 // ---------------------------------------------------------------------------
 // Local type aliases — issue #65 reconciled CoachState with shared/types.ts.
@@ -261,7 +261,7 @@ interface EnsureCoreFinisherParams {
 // Public API
 // ---------------------------------------------------------------------------
 
-export function buildGeneratedPlannedWorkout({
+export async function buildGeneratedPlannedWorkout({
   profile = {},
   scheduledDate,
   coachState = null,
@@ -270,7 +270,7 @@ export function buildGeneratedPlannedWorkout({
   exerciseLibrary = [],
   history = [],
   previousGeneratedWorkouts = [],
-}: BuildGeneratedPlannedWorkoutInput): GeneratedPlannedWorkout {
+}: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
   const userTrainingPolicy = getUserTrainingPolicy(profile?.userId)
@@ -339,7 +339,31 @@ export function buildGeneratedPlannedWorkout({
     goal: lowReadiness
       ? `восстановительная нагрузка под цель: ${profile?.goal ?? 'общий прогресс'}`
       : `эффективная ${workoutKind} под цель: ${profile?.goal ?? 'общий прогресс'}`,
-    coachReason: buildCoachReason({ coachState, coachMemory, coachDecision: decision, lowReadiness, scheduledDate, preferences, weeklyContext }),
+    coachReason: await generateCoachNarration({
+      scheduledDate,
+      coachState,
+      coachMemory: coachMemory as unknown,
+      decision,
+      lowReadiness,
+      weeklyContext,
+      selectedExercises: orderedSelected.map((e) => ({
+        exerciseName: e.exerciseName,
+        muscleGroup: e.muscleGroup,
+        targetWeight: e.targetWeight,
+        setsCount: e.setsCount,
+        repMin: e.repMin,
+        repMax: e.repMax,
+      })),
+      profile: {
+        goal: profile?.goal,
+        level: profile?.level,
+        age: profile?.age,
+        workoutsPerWeek: profile?.workoutsPerWeek,
+      },
+      preferences: {
+        focusAreas: preferences.focusAreas,
+      },
+    }),
     readinessSnapshot: { ...(coachState ?? {}), coachDecision: decision, userTrainingPolicy },
     exercises: orderedSelected.map((exercise, index) => ({ ...exercise, sortOrder: index + 1 })),
   }
@@ -685,33 +709,7 @@ function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyC
   return `${loadText}; ${exercise.muscleGroup}: усталость ${fatigue}; ${historyText}${diversityText ? `; ${diversityText}` : ''}${policyText ? `; ${policyText}` : ''}.`
 }
 
-interface BuildCoachReasonParams {
-  coachState: CoachState | null
-  coachMemory: CoachMemoryForGenerator | null
-  coachDecision: CoachDecisionForGenerator | null
-  lowReadiness: boolean
-  scheduledDate: string
-  preferences?: NormalizedPreferences
-  weeklyContext?: WeeklyContext
-}
 
-function buildCoachReason({ coachState, coachMemory, coachDecision, lowReadiness, scheduledDate, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext() }: BuildCoachReasonParams): string {
-  const readiness = Number(coachState?.readinessScore ?? 70)
-  const recovery = coachState?.recoveryStatus ?? 'unknown'
-  const weekly = coachState?.weeklyLoadStatus ?? 'unknown'
-  const focusText = preferences.focusAreas?.length ? `, фокус: ${preferences.focusAreas.join(', ')}` : ''
-  const diversityText = weeklyContext.previousExerciseIds?.size ? ' Учитывается разнообразие недели: соседние тренировки не должны быть одинаковыми.' : ''
-  const calendarText = weeklyContext.calendarWorkoutCountLast7 > 1
-    ? ` Прогноз календаря: пользовательский календарь даёт ${weeklyContext.calendarWorkoutCountLast7}/${weeklyContext.effectiveWorkoutsPerWeek} тренировок за 7 дней${Number.isFinite(weeklyContext.daysSincePreviousWorkout ?? NaN) ? `, предыдущая за ${weeklyContext.daysSincePreviousWorkout} дн` : ''}.`
-    : ''
-  const recoveryGuardText = weeklyContext.recoveryRestrictedMuscleKeys?.has('legs') ? ' Для профиля «возвращение после перерыва» ноги не повторяются через один день отдыха.' : ''
-  const decisionText = coachDecision?.summary ? ` Решение тренера: ${coachDecision.summary}` : ''
-  const reasonText = coachDecision?.reasons?.length ? ` Почему: ${coachDecision.reasons.slice(0, 3).join(' ')}` : ''
-  const memoryText = coachMemory?.summary && !coachDecision?.summary ? ` Память тренера: ${coachMemory.summary.replace(/^Память тренера:\s*/u, '')}` : ''
-  return lowReadiness
-    ? `${COACH_PERSONA} Coach State на ${scheduledDate}: readiness ${readiness}, восстановление ${recovery}, недельная нагрузка ${weekly}${focusText}. Собрана умеренная тренировка из наиболее свежих групп мышц.${diversityText}${calendarText}${recoveryGuardText}${decisionText}${reasonText}${memoryText}`
-    : `${COACH_PERSONA} Coach State на ${scheduledDate}: readiness ${readiness}, восстановление ${recovery}${focusText}. Тренировка собрана по решению тренера, а не как случайный набор упражнений.${diversityText}${calendarText}${recoveryGuardText}${decisionText}${reasonText}${memoryText}`
-}
 
 function exerciseScore(
   exercise: NormalizedLibraryExercise,
