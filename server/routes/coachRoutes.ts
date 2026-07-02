@@ -19,16 +19,46 @@ coachRoutes.post('/coach/next-set', async (req, res, next) => {
     const body = req.body ?? {}
     const context = body.context ?? {}
     const coachState = context.coachState || (body.userId ? await loadCoachStateForUser(pool, body.userId) : null)
-            const recommendation = recommendNextSet({
-              userId: body.userId,
-              exercise: body.exercise,
-              completedSets: body.completedSets,
-              remainingSets: body.remainingSets,
-              pain: Boolean(body.pain),
-              context: { ...context, coachState },
-            })
-            logActivity('coach.next_set', buildCoachNextSetEvent({ body, recommendation, coachState }))
-            res.json({ ok: true, recommendation, coachState })
+
+    // Issue #87: when the exercise has no explicit targetWeight (e.g. barbell
+    // movements like squat / bench / deadlift where the user picks the load)
+    // and the user has not completed any set yet, look up the last working
+    // weight from workout_sets so recommendNextSet can pre-fill it instead
+    // of returning 0.
+    const exercisePayload = body.exercise ?? {}
+    const completedSets = body.completedSets ?? []
+    const needsLastKnownWeight =
+      exercisePayload &&
+      exercisePayload.id &&
+      body.userId &&
+      !Number(exercisePayload.targetWeight) &&
+      Array.isArray(completedSets) &&
+      completedSets.filter((set) => set?.completed !== false && Number(set?.reps) > 0).length === 0
+
+    if (needsLastKnownWeight) {
+      const last = await pool.query(
+        `select weight
+         from public.workout_sets
+         where user_id = $1 and exercise_id = $2 and completed = true and weight > 0
+         order by created_at desc
+         limit 1`,
+        [body.userId, exercisePayload.id],
+      )
+      if (last.rows.length > 0) {
+        exercisePayload.lastKnownWeight = Number(last.rows[0].weight)
+      }
+    }
+
+    const recommendation = recommendNextSet({
+      userId: body.userId,
+      exercise: exercisePayload,
+      completedSets,
+      remainingSets: body.remainingSets,
+      pain: Boolean(body.pain),
+      context: { ...context, coachState },
+    })
+    logActivity('coach.next_set', buildCoachNextSetEvent({ body, recommendation, coachState }))
+    res.json({ ok: true, recommendation, coachState })
   } catch (error) {
     next(error)
   }

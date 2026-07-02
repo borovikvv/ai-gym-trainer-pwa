@@ -20,6 +20,12 @@ interface ExerciseInput {
   muscleGroup?: string
   exerciseName?: string
   targetWeight?: number
+  // Issue #87: last known working weight for this user + exercise, looked up
+  // from workout_sets history by the route handler. Used as a fallback when
+  // targetWeight is 0 (the default for barbell exercises like squats, bench
+  // press, deadlifts) so the user does not get recommendedWeight=0 on the
+  // first set of a familiar exercise.
+  lastKnownWeight?: number
   weightStep?: number
   repMin?: number
   repMax?: number
@@ -107,7 +113,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
     if (coachState?.recoveryStatus === 'low' || targetMuscleFatigue === 'high' || readinessConstraint === 'sore') {
       return withRemainingSetUpdates({
         action: 'reduce_load',
-        recommendedWeight: roundWeight(Math.max(0, safeNumber(exercise.targetWeight, 0) - step)),
+        recommendedWeight: roundWeight(Math.max(0, resolveStartingWeight(exercise) - step)),
         recommendedReps: repMin,
         recommendedRestSeconds: Math.max(baseRest, 180),
         reason: readinessConstraint === 'sore'
@@ -118,7 +124,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
 
     return withRemainingSetUpdates({
       action: 'continue',
-      recommendedWeight: roundWeight(safeNumber(exercise.targetWeight, 0)),
+      recommendedWeight: roundWeight(resolveStartingWeight(exercise)),
       recommendedReps: repMin,
       recommendedRestSeconds: baseRest,
       reason: 'начинаем с планового рабочего веса и нижней границы повторов',
@@ -136,7 +142,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
     }
   }
 
-  const lastWeight = safeNumber(lastSet.weight, safeNumber(exercise.targetWeight, 0))
+  const lastWeight = safeNumber(lastSet.weight, resolveStartingWeight(exercise))
   const lastReps = safeNumber(lastSet.reps, repMin)
   const lastRpe = safeNumber(lastSet.rpe, 7)
   const session: CoachSessionContext = input.context?.session ?? {}
@@ -263,6 +269,21 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
 function safeNumber(value: unknown, fallback: number): number {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
+}
+
+// Issue #87: pick the weight to start an exercise with. Prefer the explicit
+// targetWeight from the planned workout / exercise library. If it is 0 or
+// missing (the default for barbell exercises where the user chooses the
+// weight, e.g. squat / bench / deadlift), fall back to the last known
+// working weight from workout_sets history, which the route handler looks
+// up and passes in as exercise.lastKnownWeight. Returns 0 only when neither
+// source has a positive value (e.g. a brand-new exercise for this user).
+function resolveStartingWeight(exercise: ExerciseInput): number {
+  const target = safeNumber(exercise.targetWeight, 0)
+  if (target > 0) return target
+  const lastKnown = safeNumber(exercise.lastKnownWeight, 0)
+  if (lastKnown > 0) return lastKnown
+  return 0
 }
 
 function chooseSuggestedExercises({

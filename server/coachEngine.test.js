@@ -340,3 +340,79 @@ describe('Coach Engine v1 next-set recommendations', () => {
     })
   })
 })
+
+describe('Coach Engine issue #87 — lastKnownWeight fallback when targetWeight is 0', () => {
+  // Squat / bench / deadlift default to targetWeight=0 in exercise_library
+  // because the user picks the load. Without lastKnownWeight the engine
+  // returned 0 for the first set, ignoring the user's history.
+  const squat = {
+    id: 'barbell-squat',
+    name: 'Присед со штангой',
+    muscleGroup: 'Ноги',
+    repMin: 6,
+    repMax: 12,
+    targetWeight: 0,
+    weightStep: 2.5,
+    restSeconds: 150,
+  }
+
+  it('uses lastKnownWeight on the first set when targetWeight is 0', () => {
+    const result = recommendNextSet({
+      exercise: { ...squat, lastKnownWeight: 50 },
+      completedSets: [],
+      remainingSets: 3,
+    })
+
+    expect(result).toMatchObject({
+      action: 'continue',
+      recommendedWeight: 50,
+      recommendedReps: 6,
+    })
+    expect(result.reason).toContain('планового')
+  })
+
+  it('still returns 0 when neither targetWeight nor lastKnownWeight is set', () => {
+    const result = recommendNextSet({
+      exercise: squat,
+      completedSets: [],
+      remainingSets: 3,
+    })
+
+    expect(result).toMatchObject({
+      action: 'continue',
+      recommendedWeight: 0,
+      recommendedReps: 6,
+    })
+  })
+
+  it('prefers explicit targetWeight over lastKnownWeight', () => {
+    const result = recommendNextSet({
+      exercise: { ...squat, targetWeight: 60, lastKnownWeight: 50 },
+      completedSets: [],
+      remainingSets: 3,
+    })
+
+    expect(result).toMatchObject({
+      action: 'continue',
+      recommendedWeight: 60,
+    })
+  })
+
+  it('reduces from lastKnownWeight by one step when recovery is low', () => {
+    const result = recommendNextSet({
+      exercise: { ...squat, lastKnownWeight: 50 },
+      completedSets: [],
+      remainingSets: 3,
+      context: {
+        coachState: { recoveryStatus: 'low' },
+      },
+    })
+
+    expect(result).toMatchObject({
+      action: 'reduce_load',
+      recommendedWeight: 47.5,
+      recommendedReps: 6,
+      recommendedRestSeconds: 180,
+    })
+  })
+})
