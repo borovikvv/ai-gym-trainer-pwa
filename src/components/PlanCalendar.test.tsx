@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import type { PlannedWorkout, UserQuestionnaire } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { PlanCalendar } from './PlanCalendar'

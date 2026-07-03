@@ -1,6 +1,7 @@
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import { isTimedExercise } from '../domain/exerciseMetrics'
-import { users as fallbackUsers, workoutDays as fallbackWorkoutDays, type ExercisePlan, type UserProfile, type WorkoutDay } from './mockProgram'
+import { users as fallbackUsers, workoutDays as fallbackWorkoutDays } from './mockProgram'
+import type { ExercisePlan, UserProfile, WorkoutDay } from '../../shared/types'
 import { formatWeight } from '../lib/format'
 
 const apiBaseUrl = import.meta.env.MODE === 'test' ? undefined : (import.meta.env.VITE_API_BASE_URL as string | undefined)

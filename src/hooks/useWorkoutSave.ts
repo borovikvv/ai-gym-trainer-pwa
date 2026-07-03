@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import {
   createWorkoutHistoryEntry,

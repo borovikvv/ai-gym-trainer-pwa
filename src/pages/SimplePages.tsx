@@ -1,4 +1,4 @@
-import type { UserProfile } from '../data/mockProgram'
+import type { UserProfile  } from '../../shared/types'
 import type { UserQuestionnaire } from '../data/programApi'
 import { useProgram } from '../contexts/ProgramContext'
 import { ProgressScreen } from '../components/ProgressScreen'

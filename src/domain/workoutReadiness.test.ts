@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import { defaultReadinessCheckIn } from './readinessCheckIn'
 import { adaptWorkoutDayForReadiness } from './workoutReadiness'
 

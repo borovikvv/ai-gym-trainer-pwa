@@ -1,4 +1,4 @@
-import type { ExercisePlan } from '../data/mockProgram'
+import type { ExercisePlan  } from '../../shared/types'
 
 type ReplacementSheetProps = {
 	exercise: ExercisePlan

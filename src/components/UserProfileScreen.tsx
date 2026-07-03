@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { ExercisePlan } from '../data/mockProgram'
+import type { ExercisePlan  } from '../../shared/types'
 import type { UserQuestionnaire } from '../data/programApi'
 import { ScreenHeader } from './ui'
 

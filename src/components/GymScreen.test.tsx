@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { GymScreen } from './GymScreen'
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 
 function makeExercise(partial: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name'>): ExercisePlan {
   return {

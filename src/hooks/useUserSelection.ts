@@ -1,5 +1,5 @@
 import type { ProgramData } from '../data/programApi'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import { buildNextTargets, type WorkoutHistoryEntry, type ExerciseLog } from '../domain/workoutHistory'
 import { createInitialLogs } from './useWorkoutSession'
 

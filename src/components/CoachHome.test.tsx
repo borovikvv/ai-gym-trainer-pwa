@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { ExercisePlan, UserProfile, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, UserProfile, WorkoutDay  } from '../../shared/types'
 import type { CoachState, PlannedWorkout } from '../data/programApi'
 import { CoachHome } from './CoachHome'
 

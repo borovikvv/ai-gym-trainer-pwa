@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { ExercisePlan } from '../data/mockProgram'
+import type { ExercisePlan  } from '../../shared/types'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import {
   isProgramApiConfigured,

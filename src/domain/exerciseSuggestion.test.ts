@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { suggestExerciseToAdd } from './exerciseSuggestion'
 
 const baseExercise = {

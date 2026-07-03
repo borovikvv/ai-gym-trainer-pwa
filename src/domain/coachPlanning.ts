@@ -1,4 +1,4 @@
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import type { WorkoutSetInput } from './progression'
 import { roundWeight } from '../lib/format'
 

@@ -1,39 +1,10 @@
-export type UserProfile = {
-  id: string
-  name: string
-  initials: string
-  goal: string
-  streak: string
-}
+// Issue #98 PR1: types moved to shared/types.ts. Re-exported here so
+// existing imports (48 files) continue to work. New code should import
+// directly from '../../shared/types' (or appropriate relative path).
+export type { ExercisePlan, WorkoutDay, UserProfile } from '../../shared/types'
 
-export type ExercisePlan = {
-  id: string
-  canonicalExerciseId?: string
-  programExerciseId?: string
-  name: string
-  muscleGroup: string
-  prescription: string
-  setsCount: number
-  repMin: number
-  repMax: number
-  targetWeight: number
-  weightStep: number
-  restSeconds: number
-  previous: string
-  todayGoal: string
-  coachFocus: string
-  alternatives: { name: string; reason: string; badge?: string }[]
-  instruction: string
-  commonMistakes: string[]
-}
-
-export type WorkoutDay = {
-  id: string
-  name: string
-  label: string
-  description: string
-  exercises: ExercisePlan[]
-}
+// Re-import the types used in the mock data below.
+import type { WorkoutDay, UserProfile } from '../../shared/types'
 
 export const users: UserProfile[] = [
   { id: 'vyacheslav', name: 'Вячеслав', initials: 'В', goal: 'сила и мышечная масса', streak: '4 недели' },

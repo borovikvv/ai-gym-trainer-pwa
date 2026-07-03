@@ -1,4 +1,4 @@
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { formatWeight } from '../lib/format'
 import type { ReadinessCheckIn } from './readinessCheckIn'
 

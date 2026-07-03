@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { dropUnfinishedSets } from '../domain/liveCoachDecisionActions'
 import { applyLiveCoachSetUpdates } from '../domain/liveCoachSetUpdates'
 import type { WorkoutSetInput } from '../domain/progression'

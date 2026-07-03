@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import {
   fallbackProgramData,
   isProgramApiConfigured,

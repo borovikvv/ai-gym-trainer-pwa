@@ -1,4 +1,4 @@
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import { toHumanCoachText } from '../domain/coachCopy'
 import {
   summarizeReadinessCheckIn,

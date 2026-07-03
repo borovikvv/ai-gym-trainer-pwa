@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
 import type { PlannedWorkout } from '../data/programApi'
 

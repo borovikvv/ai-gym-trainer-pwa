@@ -8,7 +8,7 @@ import { ProgressPage, ProfilePage, LibraryPage, OnboardingPage } from './pages/
 import { NavigationProvider, CoachProvider, ProgramProvider } from './contexts'
 import { AppShell } from './components/ui'
 import './App.css'
-import type { ExercisePlan, WorkoutDay } from './data/mockProgram'
+import type { ExercisePlan, WorkoutDay } from '../shared/types'
 import { fallbackProgramData, loadCoachMemoryAndState, type CoachMemory, type CoachState } from './data/programApi'
 import { loadHistory, useProgramData } from './hooks/useProgramData'
 import { loadActiveWorkoutDraft, useDraftAutosave } from './hooks/useDraftAutosave'

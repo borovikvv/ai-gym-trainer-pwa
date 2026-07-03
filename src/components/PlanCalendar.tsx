@@ -1,7 +1,7 @@
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import type { PlannedWorkout, UserQuestionnaire } from '../data/programApi'
 import type { TrainingCalendarItem } from '../domain/coachPlanning'
 import { toHumanCoachText } from '../domain/coachCopy'

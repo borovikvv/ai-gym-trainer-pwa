@@ -1,5 +1,5 @@
 import { BookOpen, Dumbbell, RotateCcw, ClipboardList } from 'lucide-react'
-import type { UserProfile, WorkoutDay } from '../data/mockProgram'
+import type { UserProfile, WorkoutDay  } from '../../shared/types'
 import type { CoachMemory, CoachState, MesocycleState, PlannedWorkout } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { toHumanCoachText } from '../domain/coachCopy'

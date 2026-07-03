@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildNextTargets, createWorkoutHistoryEntry, summarizeExerciseHistory } from './workoutHistory'
-import type { ExercisePlan } from '../data/mockProgram'
+import type { ExercisePlan  } from '../../shared/types'
 
 const bench: ExercisePlan = {
   id: 'bench-press',

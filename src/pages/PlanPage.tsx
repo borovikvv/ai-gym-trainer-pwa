@@ -1,4 +1,4 @@
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import type { UserQuestionnaire } from '../data/programApi'
 import type { TrainingCalendarItem } from '../domain/coachPlanning'
 import { useProgram } from '../contexts/ProgramContext'

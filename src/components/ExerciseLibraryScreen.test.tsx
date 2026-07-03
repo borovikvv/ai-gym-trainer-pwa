@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ExerciseLibraryScreen } from './ExerciseLibraryScreen'
 import { exerciseGuideImageSrc } from './ExerciseGuideModal'
-import type { ExercisePlan } from '../data/mockProgram'
+import type { ExercisePlan  } from '../../shared/types'
 
 function makeExercise(partial: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name' | 'muscleGroup' | 'instruction'>): ExercisePlan {
   return {

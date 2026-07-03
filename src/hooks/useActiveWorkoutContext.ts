@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { ProgramData, PlannedWorkout } from '../data/programApi'
 import { fallbackProgramData } from '../data/programApi'
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { buildTrainingCalendar } from '../domain/coachPlanning'
 import { buildProgressDashboard } from '../domain/progressDashboard'
 import { calculateProgression, type WorkoutSetInput } from '../domain/progression'

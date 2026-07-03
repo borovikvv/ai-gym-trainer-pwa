@@ -1,4 +1,4 @@
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import type { CompletedExerciseHistory, WorkoutHistoryEntry } from './workoutHistory'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildAllExerciseE1RMHistories, sparklineData, trendDescription, type ExerciseE1RMHistory } from './estimatedOneRepMax'

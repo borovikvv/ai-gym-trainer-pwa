@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import type { Screen } from '../contexts/NavigationContext'
 import { useProgram } from '../contexts/ProgramContext'
 import { useCoach } from '../contexts/CoachContext'

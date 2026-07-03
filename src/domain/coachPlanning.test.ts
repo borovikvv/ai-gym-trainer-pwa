@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTrainingCalendar, recommendNextSet } from './coachPlanning'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 
 const dayA: WorkoutDay = {
   id: 'day-a',

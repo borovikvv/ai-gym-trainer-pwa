@@ -1,4 +1,4 @@
-import type { ExercisePlan, WorkoutDay } from '../data/mockProgram'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 
 export type ExerciseAddSuggestion = {
   exercise: ExercisePlan

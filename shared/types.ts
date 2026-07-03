@@ -292,3 +292,47 @@ export interface UserTrainingPolicy {
     intensityTolerance: 'avoid_max' | 'rare_max' | 'aggressive'
   }
 }
+
+// ---------------------------------------------------------------------------
+// Program / exercise plan types (Issue #98 PR1: moved from src/data/mockProgram.ts
+// so they can be shared between frontend and backend. mockProgram.ts now
+// re-exports them for backward compatibility, but new code should import
+// directly from shared/types.ts.)
+// ---------------------------------------------------------------------------
+
+export type UserProfile = {
+  id: string
+  name: string
+  initials: string
+  goal: string
+  streak: string
+}
+
+export type ExercisePlan = {
+  id: string
+  canonicalExerciseId?: string
+  programExerciseId?: string
+  name: string
+  muscleGroup: string
+  prescription: string
+  setsCount: number
+  repMin: number
+  repMax: number
+  targetWeight: number
+  weightStep: number
+  restSeconds: number
+  previous: string
+  todayGoal: string
+  coachFocus: string
+  alternatives: { name: string; reason: string; badge?: string }[]
+  instruction: string
+  commonMistakes: string[]
+}
+
+export type WorkoutDay = {
+  id: string
+  name: string
+  label: string
+  description: string
+  exercises: ExercisePlan[]
+}

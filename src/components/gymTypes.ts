@@ -1,5 +1,5 @@
 import type { WorkoutSetInput } from '../domain/progression'
-import type { ExercisePlan } from '../data/mockProgram'
+import type { ExercisePlan  } from '../../shared/types'
 
 export type SetDraft = WorkoutSetInput & { weightInput?: string; repsInput?: string }
 

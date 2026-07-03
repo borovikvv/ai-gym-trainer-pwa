@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import type { WorkoutHistoryEntry } from './workoutHistory'
 import { buildProgressDashboard } from './progressDashboard'
 

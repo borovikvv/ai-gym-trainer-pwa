@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { ExercisePlan } from '../data/mockProgram'
+import type { ExercisePlan  } from '../../shared/types'
 import { ExerciseGuideModal } from './ExerciseGuideModal'
 
 type ExerciseLibraryScreenProps = {

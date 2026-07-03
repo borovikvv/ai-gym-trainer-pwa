@@ -1,4 +1,4 @@
-import type { WorkoutDay, ExercisePlan } from '../data/mockProgram'
+import type { WorkoutDay, ExercisePlan  } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
 import type { NextSetHint } from '../components/gymTypes'
 import type { ExerciseAddSuggestion } from '../domain/exerciseSuggestion'

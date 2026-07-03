@@ -1,5 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
-import type { WorkoutDay } from '../data/mockProgram'
+import type { WorkoutDay  } from '../../shared/types'
 import { isProgramApiConfigured, requestCoachWorkoutTodayFromApi } from '../data/programApi'
 import { createInitialLogs } from './useWorkoutSession'
 import type { ExerciseLog } from '../domain/workoutHistory'
