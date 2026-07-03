@@ -29,7 +29,7 @@ export function ProfilePage(props: ProfilePageProps) {
   const program = useProgram()
   return (
     <UserProfileScreen
-      users={program.users as unknown as UserProfile[]}
+      users={program.users}
       activeUserId={program.activeUserId}
       activeUser={props.activeUser}
       activeProfile={props.activeProfile}

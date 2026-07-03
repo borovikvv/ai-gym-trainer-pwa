@@ -180,7 +180,7 @@ export function GymPage(props: GymPageProps) {
           removeSet={props.onRemoveSet}
           updateSetWeight={props.onUpdateSetWeight}
           updateSetReps={props.onUpdateSetReps}
-          updateSet={props.onUpdateSet as unknown as (setIndex: number, patch: Partial<{ weight: number; reps: number; rpe: number; completed: boolean }>) => void}
+          updateSet={props.onUpdateSet}
           markSetDone={props.onMarkSetDone}
           addSet={props.onAddSet}
           removeCurrentExercise={props.onRemoveCurrentExercise}
