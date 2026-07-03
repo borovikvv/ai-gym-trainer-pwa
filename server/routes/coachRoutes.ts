@@ -11,10 +11,25 @@ import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import { assertAllowedUserId } from '../privateUsers.js'
 
 export const coachRoutes = Router()
 
-coachRoutes.post('/coach/next-set', async (req, res, next) => {
+// Issue #97: middleware that checks userId against the private allowlist.
+// For GET endpoints with :userId param, checks req.params.userId.
+// For POST endpoints, checks req.body.userId.
+// Throws 400 if userId is missing, 403 if not in allowlist.
+function requireAllowedUserId(req, res, next) {
+  try {
+    const userId = req.params?.userId ?? req.body?.userId
+    assertAllowedUserId(userId)
+    next()
+  } catch (error) {
+    next(error)
+  }
+}
+
+coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res, next) => {
   try {
     const body = req.body ?? {}
     const context = body.context ?? {}
@@ -64,7 +79,7 @@ coachRoutes.post('/coach/next-set', async (req, res, next) => {
   }
 })
 
-coachRoutes.get('/coach/state/:userId', async (req, res, next) => {
+coachRoutes.get('/coach/state/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
     const coachState = await loadCoachStateForUser(pool, req.params.userId)
     res.json({ ok: true, coachState })
@@ -73,7 +88,7 @@ coachRoutes.get('/coach/state/:userId', async (req, res, next) => {
   }
 })
 
-coachRoutes.get('/coach/memory/:userId', async (req, res, next) => {
+coachRoutes.get('/coach/memory/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
     const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, req.params.userId)
     res.json({ ok: true, coachMemory, coachState })
@@ -82,7 +97,7 @@ coachRoutes.get('/coach/memory/:userId', async (req, res, next) => {
   }
 })
 
-coachRoutes.post('/coach/live-strategy', async (req, res, next) => {
+coachRoutes.post('/coach/live-strategy', requireAllowedUserId, async (req, res, next) => {
   try {
     const body = req.body ?? {}
     const context = body.context ?? {}
@@ -110,9 +125,11 @@ coachRoutes.post('/coach/live-strategy', async (req, res, next) => {
   }
 })
 
-coachRoutes.post('/coach/workout-today', async (req, res, next) => {
+coachRoutes.post('/coach/workout-today', requireAllowedUserId, async (req, res, next) => {
   try {
     const userId = String(req.body?.userId ?? '')
+    // Note: requireAllowedUserId already validated userId is present and allowed.
+    // The check below is kept as a defensive fallback.
     if (!userId) return res.status(400).json({ error: 'userId is required' })
     const [profile, workoutDays, exerciseLibrary, coachState] = await Promise.all([
       loadUserProfile(pool, userId),
@@ -129,7 +146,7 @@ coachRoutes.post('/coach/workout-today', async (req, res, next) => {
 })
 
 // Issue #84: AI Level 2 — progress analysis (with daily caching)
-coachRoutes.get('/coach/progress-analysis/:userId', async (req, res, next) => {
+coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
     const userId = req.params.userId
     const now = new Date()
@@ -189,7 +206,7 @@ coachRoutes.get('/coach/progress-analysis/:userId', async (req, res, next) => {
 })
 
 // Issue #85: AI Level 3 — program review (with weekly caching)
-coachRoutes.get('/coach/program-review/:userId', async (req, res, next) => {
+coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
     const userId = req.params.userId
     const now = new Date()
@@ -256,7 +273,7 @@ coachRoutes.get('/coach/program-review/:userId', async (req, res, next) => {
 })
 
 // Issue #86: AI Level 4 — training record status + export
-coachRoutes.get('/coach/training-records/:userId', async (req, res, next) => {
+coachRoutes.get('/coach/training-records/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
     const userId = req.params.userId
     const count = await countTrainingRecords(pool, userId)
@@ -267,7 +284,7 @@ coachRoutes.get('/coach/training-records/:userId', async (req, res, next) => {
   }
 })
 
-coachRoutes.get('/coach/training-records/:userId/export', async (req, res, next) => {
+coachRoutes.get('/coach/training-records/:userId/export', requireAllowedUserId, async (req, res, next) => {
   try {
     const userId = req.params.userId
     const jsonl = await exportTrainingRecords(pool, userId)
