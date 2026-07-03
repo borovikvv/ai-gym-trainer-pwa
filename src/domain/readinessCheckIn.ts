@@ -1,18 +1,10 @@
+// Issue #98 PR2: types moved to shared/types.ts. This file keeps the
+// runtime helpers (defaultReadinessCheckIn, resolveReadinessMode,
+// summarizeReadinessCheckIn) and re-exports the types for backward
+// compatibility.
+export type { CheckInLevel, SorenessLevel, ReadinessCheckIn } from '../../shared/types'
+import type { ReadinessCheckIn } from '../../shared/types'
 import type { ReadinessMode } from './workoutReadiness'
-
-export type CheckInLevel = 1 | 2 | 3 | 4 | 5
-export type SorenessLevel = 'none' | 'light' | 'medium' | 'high'
-
-export type ReadinessCheckIn = {
-  sleepQuality: CheckInLevel
-  energy: CheckInLevel
-  stress: CheckInLevel
-  soreness: SorenessLevel
-  soreMuscleGroups: string[]
-  painAreas: string[]
-  availableMinutes: number
-  notes: string
-}
 
 export const defaultReadinessCheckIn: ReadinessCheckIn = {
   sleepQuality: 3,

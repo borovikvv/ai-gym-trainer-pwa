@@ -164,22 +164,9 @@ export type CoachWorkoutTodayPlan = {
   workoutDay: WorkoutDay
 }
 
-export type MesocyclePhase = 'idle' | 'loading' | 'accumulation' | 'intensification' | 'deload'
-
-export type MesocycleState = {
-  phase: MesocyclePhase
-  phaseDescription: string
-  weekInCycle: number
-  cycleLength: number
-  loadingWeeks: number
-  deloadWeeks: number
-  isDeload: boolean
-  deloadScheduled: boolean
-  triggerReason: string | null
-  completionRatio: number
-  workoutsThisCycle: number
-  plannedWorkoutsThisCycle: number
-}
+// Issue #98 PR2: MesocyclePhase and MesocycleState unified in shared/types.ts
+export type { MesocyclePhase, MesocycleState } from '../../shared/types'
+import type { MesocycleState } from '../../shared/types'
 
 export type CoachState = {
   userId: string | null

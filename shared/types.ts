@@ -17,6 +17,12 @@ export type MuscleKey = 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core
 
 export type MesocyclePhase = 'idle' | 'loading' | 'accumulation' | 'intensification' | 'deload'
 
+// Issue #98 PR2: narrow helper types for ReadinessCheckIn. Frontend used
+// CheckInLevel (1-5) and SorenessLevel; backend used plain number/string.
+// The narrow types are more informative — adopt them in the shared contract.
+export type CheckInLevel = 1 | 2 | 3 | 4 | 5
+export type SorenessLevel = 'none' | 'light' | 'medium' | 'high'
+
 // ---------------------------------------------------------------------------
 // Volume landmarks (issue #62 / #36 decomposition)
 //
@@ -83,10 +89,10 @@ export interface WorkoutHistoryEntry {
 // ---------------------------------------------------------------------------
 
 export interface ReadinessCheckIn {
-  sleepQuality: number   // 1-5
-  energy: number          // 1-5
-  stress: number          // 1-5
-  soreness: 'none' | 'light' | 'medium' | 'high'
+  sleepQuality: CheckInLevel   // 1-5
+  energy: CheckInLevel          // 1-5
+  stress: CheckInLevel          // 1-5
+  soreness: SorenessLevel
   soreMuscleGroups: string[]
   painAreas: string[]
   availableMinutes: number

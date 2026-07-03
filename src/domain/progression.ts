@@ -1,4 +1,7 @@
 import { isAssistedExercise } from '../lib/muscleGroups'
+// Issue #98 PR2: ProgressionType unified in shared/types.ts
+export type { ProgressionType } from '../../shared/types'
+import type { ProgressionType } from '../../shared/types'
 
 export type WorkoutSetInput = {
   weight: number
@@ -20,7 +23,7 @@ export type ProgressionInput = {
 
 export type ProgressionResult = {
   recommendedWeight: number
-  type: 'increase' | 'hold' | 'deload' | 'pain' | 'skip'
+  type: ProgressionType
   reason: string
 }
 
