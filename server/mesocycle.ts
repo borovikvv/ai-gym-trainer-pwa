@@ -297,72 +297,88 @@ function buildWeekBuckets(history: WorkoutHistoryEntry[], now: Date): WeekBucket
 }
 
 /**
- * Walk weeks from most recent to find the current cycle position.
- * A new cycle starts after:
- *   - A gap of 10+ days between week buckets (extended break)
- *   - Reaching the configured cycle length
+ * Walk weeks from oldest to most recent, tracking cycle position.
+ *
+ * Issue #96: the old algorithm walked newest-to-oldest and returned the
+ * position inside the OLDEST cycle encountered (because it kept resetting
+ * and continuing past cycle boundaries). The correct behavior is to return
+ * the position inside the CURRENT (most recent) cycle.
+ *
+ * New approach: walk oldest-to-newest, maintaining running weekInCycle.
+ * When a cycle boundary is crossed (gap > 21d OR weekInCycle > cycleLength),
+ * reset to week 1. After processing ALL weeks, the final weekInCycle is
+ * the position in the current cycle — which is what we want.
+ *
+ * Workouts/planned counters are computed only for the current (final) cycle:
+ * we track cycleStartWeekIndex and accumulate from there to the end.
  */
 function findCyclePosition(
   weeks: WeekBucket[],
   cycleLength: number,
   workoutsPerWeek: number,
 ): CyclePosition {
+  if (weeks.length === 0) {
+    return { weekInCycle: 0, cycleStartWeekIndex: 0, workoutsThisCycle: 0, plannedThisCycle: 0 }
+  }
+
+  // weeks is most-recent-first; reverse to oldest-first for forward walk
+  const sorted = [...weeks].reverse() // oldest first
+
   let weekInCycle = 0
-  let cycleStartWeekIndex = 0
+  let cycleStartIndex = 0
   let workoutsThisCycle = 0
   let plannedThisCycle = 0
 
-  for (let i = 0; i < weeks.length; i++) {
-    // Check for gap between this (older) week and the previous (more recent) week
-    if (i > 0) {
-      const prevStart = weeks[i - 1].start
-      const currStart = weeks[i].start
-      const currEnd = weeks[i].end
-      const gapDays = (prevStart.getTime() - currEnd.getTime()) / 86_400_000
-      // Issue #74: phantom weeks — count ISO weeks between consecutive buckets
-      // that have no completed workouts. Uses real date difference (not ISO week
-      // numbers) to handle year boundaries correctly (W52 → W01).
-      const weekDiffMs = prevStart.getTime() - currStart.getTime()
-      const weekDiff = Math.round(weekDiffMs / (7 * 86_400_000))
-      const missingWeeks = Math.max(0, weekDiff - 1)
-      // Extended break: 4+ weeks gap (was 10 days, which incorrectly fired
-      // for normal deload weeks with no workouts).
-      if (gapDays > 21) {
-        // Extended break — new cycle
-        cycleStartWeekIndex = i
-        weekInCycle = 1
-        workoutsThisCycle = weeks[i].workouts.length
-        plannedThisCycle = workoutsPerWeek
-        continue
-      }
-      if (missingWeeks > 0) {
-        weekInCycle += missingWeeks
-        plannedThisCycle += missingWeeks * workoutsPerWeek
-        // Check if phantom weeks push past cycle boundary
-        if (weekInCycle >= cycleLength) {
-          cycleStartWeekIndex = i
-          weekInCycle = 0 // reset to 0; the weekInCycle++ below makes it 1
-          workoutsThisCycle = 0
-          plannedThisCycle = 0
-        }
-      }
+  for (let i = 0; i < sorted.length; i++) {
+    if (i === 0) {
+      // First (oldest) week starts a new cycle
+      weekInCycle = 1
+      cycleStartIndex = 0
+      workoutsThisCycle = sorted[i].workouts.length
+      plannedThisCycle = workoutsPerWeek
+      continue
     }
 
-    weekInCycle++
-    workoutsThisCycle += weeks[i].workouts.length
-    plannedThisCycle += workoutsPerWeek
+    // Check gap between previous (older) week and this (newer) week
+    const prevStart = sorted[i - 1].start
+    const prevEnd = sorted[i - 1].end
+    const currStart = sorted[i].start
+    const gapDays = (currStart.getTime() - prevEnd.getTime()) / 86_400_000
+    // Issue #74: phantom weeks — count ISO weeks between consecutive buckets
+    const weekDiffMs = currStart.getTime() - prevStart.getTime()
+    const weekDiff = Math.round(weekDiffMs / (7 * 86_400_000))
+    const missingWeeks = Math.max(0, weekDiff - 1)
 
-    if (weekInCycle > cycleLength) {
-      // Cycle complete — this starts a new one
-      cycleStartWeekIndex = i
+    // Extended break: 3+ weeks gap (was 10 days, which incorrectly fired
+    // for normal deload weeks with no workouts).
+    if (gapDays > 21) {
+      // Issue #96: extended break — this week starts a new cycle
       weekInCycle = 1
-      // Reset counters for the new cycle starting at this week
-      workoutsThisCycle = weeks[i].workouts.length
+      cycleStartIndex = i
+      workoutsThisCycle = sorted[i].workouts.length
       plannedThisCycle = workoutsPerWeek
-    } else if (i === 0) {
-      cycleStartWeekIndex = 0
+      continue
+    }
+
+    // Add phantom weeks then this real week
+    weekInCycle += missingWeeks + 1
+    plannedThisCycle += (missingWeeks + 1) * workoutsPerWeek
+    workoutsThisCycle += sorted[i].workouts.length
+
+    // Check if we've crossed the cycle boundary
+    if (weekInCycle > cycleLength) {
+      // This week starts a new cycle
+      weekInCycle = 1
+      cycleStartIndex = i
+      workoutsThisCycle = sorted[i].workouts.length
+      plannedThisCycle = workoutsPerWeek
     }
   }
+
+  // cycleStartIndex is into `sorted` (oldest-first). Convert back to the
+  // most-recent-first index that the rest of the codebase expects.
+  // sorted[i] corresponds to weeks[weeks.length - 1 - i]
+  const cycleStartWeekIndex = weeks.length - 1 - cycleStartIndex
 
   return { weekInCycle, cycleStartWeekIndex, workoutsThisCycle, plannedThisCycle }
 }
@@ -405,7 +421,12 @@ function checkEarlyDeloadTriggers({
   }
 
   // Trigger 2: 2+ pain-flagged sessions in current cycle
-  const cycleWeeks = weeks.slice(cycleStartWeekIndex)
+  // weeks is most-recent-first; cycleStartWeekIndex is the index of the
+  // OLDEST week still in the current cycle. Weeks in the current cycle are
+  // weeks[0..cycleStartWeekIndex] inclusive.
+  const cycleWeeks = cycleStartWeekIndex > 0
+    ? weeks.slice(0, cycleStartWeekIndex + 1)
+    : weeks.slice(0, 1)
   const painSessions = cycleWeeks
     .flatMap((w) => w.workouts)
     .filter((w) => (w.exercises ?? []).some((e) => Boolean(e.pain)))
