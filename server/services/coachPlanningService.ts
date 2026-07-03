@@ -51,6 +51,12 @@ interface LlmResponseBody {
   choices?: Array<{ message?: { content?: string } }>
 }
 
+// Issue #95: cap LLM call duration. Without this, a slow LLM (10-30s) holds
+// the pg connection inside the save transaction, exhausting the pool under
+// concurrent saves. All other LLM callers (coachNarrator, coachProgressAnalysis,
+// coachProgramReview, coachBrain) already use AbortController with 3-5s timeout.
+const LLM_TIMEOUT_MS = 5000
+
 export async function planAndApplyNextWorkout(client: DbClient, completedEntry: CompletedEntry): Promise<SafeCoachPlan | null> {
   const [profile, workoutDays, history, exerciseLibrary] = await Promise.all([
     loadUserProfile(client, completedEntry.userId),
@@ -144,6 +150,8 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
   const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
   const prompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"] })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
@@ -157,13 +165,16 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
           { role: 'user', content: prompt },
         ],
       }),
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
     if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
     const body = (await response.json()) as LlmResponseBody
     const content = body?.choices?.[0]?.message?.content
     if (!content) return null
     return { ...(JSON.parse(content) as Partial<LlmPlan>), source: 'llm', nextWorkoutDayId: nextWorkoutDay?.id }
   } catch (error) {
+    clearTimeout(timeout)
     console.warn('LLM coach plan failed, using rules fallback:', error instanceof Error ? error.message : error)
     return null
   }

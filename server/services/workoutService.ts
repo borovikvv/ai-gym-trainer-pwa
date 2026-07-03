@@ -172,7 +172,16 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   sanitizedEntry.qualityScore = debrief.qualityScore
   await saveWorkoutDebriefRecommendation(client, sanitizedEntry as unknown as Parameters<typeof saveWorkoutDebriefRecommendation>[1], debrief)
   await markPlannedWorkoutCompleted(client, sanitizedEntry)
-  const coachPlan = await planAndApplyNextWorkout(client, { ...sanitizedEntry, debrief } as unknown as Parameters<typeof planAndApplyNextWorkout>[1])
+  // Issue #92: planAndApplyNextWorkout does DB writes + LLM call. If any of
+  // them throw (CHECK constraint, connection blip, LLM timeout), the workout
+  // itself is already saved above — we must NOT roll it back. Treat planner
+  // failure as non-fatal; the plan can be recomputed on next app open.
+  let coachPlan: SafeCoachPlan | null = null
+  try {
+    coachPlan = await planAndApplyNextWorkout(client, { ...sanitizedEntry, debrief } as unknown as Parameters<typeof planAndApplyNextWorkout>[1])
+  } catch (err) {
+    console.error('planAndApplyNextWorkout after save (non-fatal):', err instanceof Error ? err.message : err)
+  }
 
   // Issue #76: regenerate the NEXT planned workout after saving — the
   // mesocycle phase may have changed (e.g. entered deload), and the
@@ -267,7 +276,11 @@ export function sanitizeWorkoutHistoryEntry(entry: WorkoutHistoryEntryInput): Wo
         .map((set) => ({
           weight: roundGuardrailNumber(set.weight),
           reps: roundGuardrailNumber(set.reps),
-          rpe: roundGuardrailNumber(set.rpe),
+          // Issue #93: schema column is `integer`, so a fractional RPE (e.g.
+          // 7.5 from a future slider) would fail the INSERT and roll back the
+          // entire workout save. Round to integer; the validator already
+          // guarantees 1 <= rpe <= 10.
+          rpe: Math.round(roundGuardrailNumber(set.rpe)),
           completed: true as const,
         }))
       droppedSets += Math.max(0, beforeSetCount - sets.length)

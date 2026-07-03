@@ -60,4 +60,59 @@ describe('workout service guardrails', () => {
     }))
     warn.mockRestore()
   })
+
+  it('rounds fractional RPE to integer (#93) — schema column is integer, fractional would fail INSERT', () => {
+    const sanitized = sanitizeWorkoutHistoryEntry({
+      id: 'session-rpe',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-03T10:00:00Z',
+      totalVolume: 0,
+      exercises: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 42.5,
+          progressionType: 'increase',
+          progressionReason: 'ok',
+          sets: [
+            { weight: 40, reps: 8, rpe: 7.5, completed: true },
+            { weight: 40, reps: 8, rpe: 8.4, completed: true },
+            { weight: 40, reps: 8, rpe: 9.5, completed: true },
+          ],
+        },
+      ],
+    })
+
+    expect(sanitized.exercises[0].sets.map((s) => s.rpe)).toEqual([8, 8, 10])
+  })
+
+  it('keeps integer RPE unchanged (#93)', () => {
+    const sanitized = sanitizeWorkoutHistoryEntry({
+      id: 'session-rpe-int',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-03T10:00:00Z',
+      totalVolume: 0,
+      exercises: [
+        {
+          exerciseId: 'squat',
+          exerciseName: 'Присед',
+          pain: false,
+          nextRecommendedWeight: 60,
+          progressionType: 'hold',
+          progressionReason: 'ok',
+          sets: [
+            { weight: 50, reps: 12, rpe: 7, completed: true },
+            { weight: 50, reps: 12, rpe: 8, completed: true },
+          ],
+        },
+      ],
+    })
+
+    expect(sanitized.exercises[0].sets.map((s) => s.rpe)).toEqual([7, 8])
+  })
 })
