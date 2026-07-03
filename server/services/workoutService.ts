@@ -262,6 +262,23 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     console.error('saveTrainingRecord (non-fatal):', (err as Error).message)
   }
 
+  // Issue #94: invalidate cached progress_analysis and program_review for
+  // this user. Both are cached in the recommendations table (24h and weekly
+  // respectively) but were never cleared on workout save — the user could
+  // finish a workout and then see an analysis that doesn't include it for
+  // up to 24 hours. Non-fatal: if the delete fails the cache will still
+  // expire by time, just stale in the interim.
+  try {
+    await client.query(
+      `delete from public.recommendations
+       where user_id = $1
+         and recommendation_type in ('progress_analysis', 'program_review')`,
+      [sanitizedEntry.userId],
+    )
+  } catch (err) {
+    console.error('cache invalidation after save (non-fatal):', (err as Error).message)
+  }
+
   return { coachPlan, debrief }
 }
 
