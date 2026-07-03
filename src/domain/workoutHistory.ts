@@ -1,37 +1,17 @@
-import type { ExercisePlan  } from '../../shared/types'
+import type { ExercisePlan, WorkoutHistoryEntry } from '../../shared/types'
 import type { ReadinessCheckIn } from './readinessCheckIn'
 import { calculateProgression, type WorkoutSetInput } from './progression'
 import { getCanonicalExerciseId } from './exerciseIdentity'
-import { buildWorkoutDebrief, type WorkoutDebrief } from './workoutDebrief'
+import { buildWorkoutDebrief } from './workoutDebrief'
+
+// Issue #98 PR3: CompletedExerciseHistory and WorkoutHistoryEntry unified
+// in shared/types.ts. Re-export for backward compatibility.
+export type { CompletedExerciseHistory, WorkoutHistoryEntry, WorkoutSet, WorkoutDebrief } from '../../shared/types'
 
 export type ExerciseLog = {
   exerciseId: string
   pain: boolean
   sets: WorkoutSetInput[]
-}
-
-export type CompletedExerciseHistory = {
-  exerciseId: string
-  canonicalExerciseId?: string
-  exerciseName: string
-  pain: boolean
-  sets: WorkoutSetInput[]
-  volume: number
-  nextRecommendedWeight: number
-  progressionType: ReturnType<typeof calculateProgression>['type']
-  progressionReason: string
-}
-
-export type WorkoutHistoryEntry = {
-  id: string
-  userId: string
-  workoutDayId: string
-  workoutDayName: string
-  completedAt: string
-  totalVolume: number
-  readinessCheckIn?: ReadinessCheckIn | null
-  debrief?: WorkoutDebrief
-  exercises: CompletedExerciseHistory[]
 }
 
 export type CreateWorkoutHistoryEntryInput = {

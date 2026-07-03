@@ -54,17 +54,39 @@ export interface VolumeRecommendation {
 
 export type ProgressionType = 'increase' | 'hold' | 'deload' | 'pain' | 'skip'
 
+// Issue #98 PR3: WorkoutSet — rpe and completed are required in practice
+// (the frontend WorkoutSetInput type requires them, and the DB schema
+// has rpe NOT NULL DEFAULT 7, completed NOT NULL DEFAULT false). Making
+// them required in the shared contract catches missing-data bugs earlier.
 export interface WorkoutSet {
   weight: number
   reps: number
-  rpe?: number
-  completed?: boolean
+  rpe: number
+  completed: boolean
+}
+
+// Issue #98 PR3: WorkoutDebrief moved from src/domain/workoutDebrief.ts
+// so WorkoutHistoryEntry can reference it without a circular import.
+export interface WorkoutDebrief {
+  summary: string
+  wentWell: string[]
+  overload: string[]
+  progressed: string[]
+  nextChanges: string[]
+  why: string
+  qualityScore: number
 }
 
 export interface CompletedExerciseHistory {
   exerciseId: string
   exerciseName: string
+  // Issue #98 PR3: muscleGroup is sent by backend (from exercise_library join)
+  // but not always present on frontend-computed entries. Optional.
   muscleGroup?: string
+  // Issue #98 PR3: canonicalExerciseId is computed on frontend (via
+  // getCanonicalExerciseId) for exercise identity normalization. Optional
+  // because backend doesn't compute it.
+  canonicalExerciseId?: string
   pain: boolean
   sets: WorkoutSet[]
   volume: number
@@ -81,6 +103,10 @@ export interface WorkoutHistoryEntry {
   completedAt: string
   totalVolume: number
   readinessCheckIn?: ReadinessCheckIn | null
+  // Issue #98 PR3: debrief is computed on frontend post-workout and may
+  // be attached to the history entry. Optional because not all loaders
+  // populate it (e.g. loadRecentHistory on backend doesn't).
+  debrief?: WorkoutDebrief
   exercises: CompletedExerciseHistory[]
 }
 

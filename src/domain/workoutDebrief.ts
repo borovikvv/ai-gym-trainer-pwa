@@ -2,15 +2,10 @@ import type { WorkoutHistoryEntry } from './workoutHistory'
 import { formatWeight, pluralRu } from '../lib/format'
 import { isAssistedExercise } from '../lib/muscleGroups'
 
-export type WorkoutDebrief = {
-  summary: string
-  wentWell: string[]
-  overload: string[]
-  progressed: string[]
-  nextChanges: string[]
-  why: string
-  qualityScore: number
-}
+// Issue #98 PR3: WorkoutDebrief moved to shared/types.ts. Re-export for
+// backward compatibility (many files import WorkoutDebrief from here).
+export type { WorkoutDebrief } from '../../shared/types'
+import type { WorkoutDebrief } from '../../shared/types'
 
 export function computeWorkoutQualityScore(entry: WorkoutHistoryEntry): number {
   const exercises = entry.exercises ?? []
