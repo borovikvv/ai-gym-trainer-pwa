@@ -164,43 +164,18 @@ export type CoachWorkoutTodayPlan = {
   workoutDay: WorkoutDay
 }
 
-// Issue #98 PR2: MesocyclePhase and MesocycleState unified in shared/types.ts
-export type { MesocyclePhase, MesocycleState } from '../../shared/types'
-import type { MesocycleState } from '../../shared/types'
-
-export type CoachState = {
-  userId: string | null
-  recoveryStatus: string
-  readinessScore: number
-  weeklyLoadStatus: string
-  daysSinceLastWorkout: number | null
-  mesocycle: MesocycleState | null
-  warnings: string[]
-}
-
-export type CoachMemory = {
-  userId: string | null
-  generatedAt: string
-  trainerProfile: string
-  summary: string
-  recommendations: string[]
-  weeklyBalance: {
-    plannedWorkoutsPerWeek: number
-    completedWorkoutsLast7Days: number
-    loadStatus: string
-    muscleSetCounts: Record<string, number>
-    focusAreas: string[]
-  }
-  muscleGroupProfiles: Record<string, {
-    key: string
-    label: string
-    status: string
-    fatigue: string
-    lastTrainedDaysAgo: number | null
-    workingSetsLast7Days: number
-    heavySetsLast7Days: number
-  }>
-}
+// Issue #98 PR4: CoachState and CoachMemory unified in shared/types.ts.
+// The frontend's CoachState was missing 11 fields (generatedAt,
+// volumeLandmarkOverrides, volumeAdjustmentLog, volumeSnapshots,
+// muscleGroups, exercises, lastWorkoutId, lastWorkoutDayId,
+// actualWorkoutsLast7Days, plannedWorkoutsPerWeek, personalization).
+// The frontend's CoachMemory used inline literal type for
+// muscleGroupProfiles instead of the shared MuscleGroupProfile interface.
+// Both now re-exported from shared/types.ts.
+// MesocycleState and MesocyclePhase also re-exported for consumers that
+// import them from programApi (backward compat from PR2).
+export type { CoachState, CoachMemory, MesocyclePhase, MesocycleState } from '../../shared/types'
+import type { CoachState, CoachMemory } from '../../shared/types'
 
 export type PlannedWorkout = {
   id: string

@@ -110,6 +110,7 @@ function makeMesocycleState(overrides: Partial<CoachState['mesocycle']> = {}): N
 function makeCoachState(overrides: Partial<CoachState> = {}): CoachState {
   return {
     userId: 'vyacheslav',
+    generatedAt: '2026-07-03T12:00:00Z',
     recoveryStatus: 'normal',
     readinessScore: 75,
     weeklyLoadStatus: 'on_plan',
