@@ -82,7 +82,6 @@ export function GymScreen({
         acceptCoachDecision,
         goToNextExercise,
 }: GymScreenProps) {
-  const currentWeight = formatWeight(activeLog.sets[0]?.weight ?? activeExercise.targetWeight)
   const timedExercise = isTimedExercise(activeExercise)
 
   // Coach recommendation autofill: when the coach recommends a weight/reps
@@ -138,30 +137,7 @@ export function GymScreen({
         }}>← Выйти</button>
       </div>
 
-      {/* 2. Compact header — exercise name + prescription + small action buttons */}
-      <HeroStatus
-        eyebrow={activeExercise.prescription}
-        title={activeExercise.name}
-        metadata={activeExercise.coachFocus}
-        metric={`${currentWeight} кг`}
-        primaryAction={(
-          <button
-            type="button"
-            className="primary compact-action"
-            onClick={openExerciseGuide}
-            aria-label={`Открыть описание упражнения: ${activeExercise.name}`}
-          >
-            Техника
-          </button>
-        )}
-        secondaryAction={(
-          <button className="secondary compact" type="button" onClick={openReplacementSheet}>
-            Замена
-          </button>
-        )}
-      />
-
-      {/* 3. SectionList "Подходы" — large stepper + inline coach hint */}
+      {/* 2. SectionList "Подходы" — large stepper + inline coach hint */}
       <SectionList title="Подходы">
         {/* Inline coach recommendation — shown right above the set inputs */}
         {isInlineRec && rec && (
@@ -207,6 +183,27 @@ export function GymScreen({
 
         <button className="secondary wide" type="button" onClick={addSet}>Добавить подход</button>
       </SectionList>
+
+      {/* 3. Compact header — exercise name + prescription + small action buttons */}
+      <HeroStatus
+        eyebrow={activeExercise.prescription}
+        title={activeExercise.name}
+        primaryAction={(
+          <button
+            type="button"
+            className="primary compact-action"
+            onClick={openExerciseGuide}
+            aria-label={`Открыть описание упражнения: ${activeExercise.name}`}
+          >
+            Техника
+          </button>
+        )}
+        secondaryAction={(
+          <button className="secondary compact" type="button" onClick={openReplacementSheet}>
+            Замена
+          </button>
+        )}
+      />
 
       {/* 4. Compact "Прошлый раз / Цель" */}
       <MetricPair

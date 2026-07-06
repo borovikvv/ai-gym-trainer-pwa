@@ -356,7 +356,6 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     // Issue #33: weight pre-filled from plan (targetWeight=60), not from
     // history (nextRecommendedWeight=62.5).
-    expect(screen.getByText('60 кг')).toBeInTheDocument()
     expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
   })
 
@@ -449,7 +448,6 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('60 кг')).toBeInTheDocument()
     expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
   })
 
@@ -561,7 +559,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Зал' }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('62,5 кг')).toBeInTheDocument()
+    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('62,5')
     expect(screen.getByText(/4×6–8 · рекомендовано 62,5 кг/i)).toBeInTheDocument()
   })
 })
