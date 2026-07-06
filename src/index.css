@@ -7,6 +7,8 @@
    ========================================================================= */
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-body: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
   color: #1d1d1f;
   background: #f5f5f7;
   font-synthesis: none;
@@ -71,6 +73,8 @@
      existing visual identity should not be regressed. */
   --accent: #2e7d32;
   --accent-pressed: #1b5e20;
+  --success: #7c9a3d;
+  --success-bg: rgba(124, 154, 61, 0.12);
   --warning: #bf5600;
   --danger: #d70015;
 
@@ -134,6 +138,7 @@
   --text-tertiary: rgba(235, 235, 245, 0.48);
   --accent: #30d158;
   --accent-pressed: #25c24a;
+  --success: #8fb344;
   --warning: #ff9f0a;
   --danger: #ff453a;
   --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.4);

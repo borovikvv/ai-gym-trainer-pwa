@@ -121,6 +121,7 @@ export function GymScreen({
 
   return (
     <section className="screen active session-screen">
+      {/* 1. session-header */}
       <div className="session-header">
         <span className="sr-only">Вкладка «Зал» · {activeWorkoutDay.name}</span>
         <span className="sr-only">Сейчас · {activeExerciseIndex + 1} из {activeWorkoutDay.exercises.length}</span>
@@ -137,6 +138,7 @@ export function GymScreen({
         }}>← Выйти</button>
       </div>
 
+      {/* 2. Compact header — exercise name + prescription + small action buttons */}
       <HeroStatus
         eyebrow={activeExercise.prescription}
         title={activeExercise.name}
@@ -159,54 +161,7 @@ export function GymScreen({
         )}
       />
 
-      <MetricPair
-        metrics={[
-          { label: 'Прошлый раз', value: previousSetsSummary },
-          { label: 'Цель', value: activeExercise.todayGoal },
-        ]}
-      />
-      <span className="sr-only">Прошлый раз: {previousSetsSummary}</span>
-
-      <SessionActions activeExerciseName={activeExercise.name} openReplacementSheet={openReplacementSheet} openExercisePicker={openExercisePicker} removeCurrentExercise={removeCurrentExercise} />
-
-      {exerciseAddSuggestion && (
-        <div className="card coach-add-exercise">
-          <div>
-            <div className="label">Тренер предлагает добавить</div>
-            <b>{exerciseAddSuggestion.exercise.name}</b>
-            <div className="muted">{exerciseAddSuggestion.reason}</div>
-          </div>
-          <button
-            className="secondary compact"
-            onClick={addSuggestedExercise}
-            aria-label={`Добавить предложенное упражнение: ${exerciseAddSuggestion.exercise.name}`}
-          >
-            добавить
-          </button>
-        </div>
-      )}
-
-      {draftStatus && (
-        <div className="autosave-status" role="status">
-          <b>Прогресс защищён</b>
-          <span>{draftStatus}</span>
-          <small>После обновления страницы тренировка восстановится.</small>
-        </div>
-      )}
-
-      {/* Coach card — only for stop/replace/skip/finish actions.
-          For continue/hold/reduce, the recommendation is shown inline
-          in the "Подходы" section + auto-filled into inputs. */}
-      {isCardRec && (
-        <NextSetCoachCard
-          recommendation={visibleNextSetRecommendation}
-          allSetsCompleted={allSetsCompleted}
-          formatWeight={formatWeight}
-          onApplySuggestedExercise={applyCoachExerciseSuggestion}
-          onAcceptCoachDecision={acceptCoachDecision}
-        />
-      )}
-
+      {/* 3. SectionList "Подходы" — large stepper + inline coach hint */}
       <SectionList title="Подходы">
         {/* Inline coach recommendation — shown right above the set inputs */}
         {isInlineRec && rec && (
@@ -252,6 +207,56 @@ export function GymScreen({
 
         <button className="secondary wide" type="button" onClick={addSet}>Добавить подход</button>
       </SectionList>
+
+      {/* 4. Compact "Прошлый раз / Цель" */}
+      <MetricPair
+        metrics={[
+          { label: 'Прошлый раз', value: previousSetsSummary },
+          { label: 'Цель', value: activeExercise.todayGoal },
+        ]}
+      />
+      <span className="sr-only">Прошлый раз: {previousSetsSummary}</span>
+
+      {/* 5. Session actions, coach cards, next card, action bar */}
+      <SessionActions activeExerciseName={activeExercise.name} openReplacementSheet={openReplacementSheet} openExercisePicker={openExercisePicker} removeCurrentExercise={removeCurrentExercise} />
+
+      {exerciseAddSuggestion && (
+        <div className="card coach-add-exercise">
+          <div>
+            <div className="label">Тренер предлагает добавить</div>
+            <b>{exerciseAddSuggestion.exercise.name}</b>
+            <div className="muted">{exerciseAddSuggestion.reason}</div>
+          </div>
+          <button
+            className="secondary compact"
+            onClick={addSuggestedExercise}
+            aria-label={`Добавить предложенное упражнение: ${exerciseAddSuggestion.exercise.name}`}
+          >
+            добавить
+          </button>
+        </div>
+      )}
+
+      {draftStatus && (
+        <div className="autosave-status" role="status">
+          <b>Прогресс защищён</b>
+          <span>{draftStatus}</span>
+          <small>После обновления страницы тренировка восстановится.</small>
+        </div>
+      )}
+
+      {/* Coach card — only for stop/replace/skip/finish actions.
+          For continue/hold/reduce, the recommendation is shown inline
+          in the "Подходы" section + auto-filled into inputs. */}
+      {isCardRec && (
+        <NextSetCoachCard
+          recommendation={visibleNextSetRecommendation}
+          allSetsCompleted={allSetsCompleted}
+          formatWeight={formatWeight}
+          onApplySuggestedExercise={applyCoachExerciseSuggestion}
+          onAcceptCoachDecision={acceptCoachDecision}
+        />
+      )}
 
       <div className="next-card session-next-card">
         <div>

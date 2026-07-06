@@ -1,0 +1,240 @@
+/* =========================================================================
+   Warm Editorial Theme — AI Gym Trainer
+   Terracotta accent + olive success + editorial serif/sans type
+   ========================================================================= */
+
+/* ── Typography ─────────────────────────────────────────────────────── */
+
+:root {
+  --font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-body: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+/* ── Light theme overrides ──────────────────────────────────────────── */
+
+:root {
+  /* Warm accent — terracotta */
+  --accent: #c73b2e;
+  --accent-pressed: #a32e23;
+
+  /* Success — olive */
+  --success: #7c9a3d;
+  --success-bg: rgba(124, 154, 61, 0.12);
+  --success-border: rgba(124, 154, 61, 0.3);
+
+  /* Warning / danger */
+  --warning: #bf5600;
+  --danger: #d70015;
+
+  /* Warm paper surfaces */
+  --app-bg: #f2eee8;
+  --bg: #f2eee8;
+  --surface: #faf8f5;
+  --surface-solid: #faf8f5;
+  --surface-muted: #f0ece6;
+  --border: rgba(0, 0, 0, 0.1);
+  --separator: rgba(60, 60, 67, 0.18);
+
+  /* Text on warm paper */
+  --text-primary: #1c1917;
+  --text-secondary: rgba(60, 60, 67, 0.6);
+  --text-tertiary: rgba(60, 60, 67, 0.32);
+
+  /* Hero — warm dark */
+  --hero-bg: #2a2420;
+  --hero-text: #f5f0eb;
+  --hero-text-muted: rgba(245, 240, 235, 0.76);
+  --hero-text-tertiary: rgba(245, 240, 235, 0.66);
+
+  --shadow-soft: 0 18px 48px rgba(42, 36, 32, 0.12);
+}
+
+/* ── Dark theme overrides ───────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent: #e86152;
+    --accent-pressed: #d94a3a;
+
+    --success: #8fb344;
+    --success-bg: rgba(143, 179, 68, 0.14);
+    --success-border: rgba(143, 179, 68, 0.35);
+
+    --warning: #ff9f0a;
+    --danger: #ff453a;
+
+    --app-bg: #000000;
+    --bg: #1c1917;
+    --surface: rgba(28, 25, 23, 0.88);
+    --surface-solid: #1c1917;
+    --surface-muted: #2a2725;
+    --border: rgba(255, 255, 255, 0.16);
+    --separator: rgba(255, 255, 255, 0.18);
+
+    --text-primary: #f0ece6;
+    --text-secondary: rgba(235, 235, 245, 0.72);
+    --text-tertiary: rgba(235, 235, 245, 0.48);
+
+    --hero-bg: #1c1917;
+    --hero-text: #f0ece6;
+    --hero-text-muted: rgba(240, 236, 230, 0.76);
+    --hero-text-tertiary: rgba(240, 236, 230, 0.66);
+
+    --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  --accent: #e86152;
+  --accent-pressed: #d94a3a;
+
+  --success: #8fb344;
+  --success-bg: rgba(143, 179, 68, 0.14);
+  --success-border: rgba(143, 179, 68, 0.35);
+
+  --warning: #ff9f0a;
+  --danger: #ff453a;
+
+  --app-bg: #000000;
+  --bg: #1c1917;
+  --surface: rgba(28, 25, 23, 0.88);
+  --surface-solid: #1c1917;
+  --surface-muted: #2a2725;
+  --border: rgba(255, 255, 255, 0.16);
+  --separator: rgba(255, 255, 255, 0.18);
+
+  --text-primary: #f0ece6;
+  --text-secondary: rgba(235, 235, 245, 0.72);
+  --text-tertiary: rgba(235, 235, 245, 0.48);
+
+  --hero-bg: #1c1917;
+  --hero-text: #f0ece6;
+  --hero-text-muted: rgba(240, 236, 230, 0.76);
+  --hero-text-tertiary: rgba(240, 236, 230, 0.66);
+
+  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Component overrides — replaces hardcoded systemGreen (52, 199, 89)
+   with the Warm Editorial palette
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Typography ─────────────────────────────────────────────────────── */
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body), sans-serif;
+}
+
+h1, h2, h3, .title, .hero-status__title,
+.screen-header__title,
+.e1rm-sparkline-card__best {
+  font-family: var(--font-display), serif;
+}
+
+/* ── Primary button ─────────────────────────────────────────────────── */
+
+.primary {
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* ── Recommended weight chip ────────────────────────────────────────── */
+
+.recommended-weight {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+/* ── Day card selected / active set / workout row ───────────────────── */
+
+.day-card.selected,
+.plan-workout-row.selected,
+.workout-row--active,
+.current-set {
+  border-color: var(--success-border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+/* ── Set collapsed completed ────────────────────────────────────────── */
+
+.set-collapsed.completed {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+/* ── Check button ───────────────────────────────────────────────────── */
+
+.check {
+  background: var(--accent);
+}
+
+/* ── Difficulty button active ───────────────────────────────────────── */
+
+.difficulty button.active {
+  color: var(--accent-pressed);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ── Chip active states ─────────────────────────────────────────────── */
+
+.checkin-grid button.active,
+.readiness-grid button.active,
+.checkin-choice-row button.active,
+.choice-card.active,
+.mini-choice.active,
+.profile-chip.active,
+.filter-chip.active {
+  color: var(--accent-pressed);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ── Bar chart ──────────────────────────────────────────────────────── */
+
+.bar {
+  background: linear-gradient(180deg, var(--success), color-mix(in srgb, var(--success) 22%, transparent));
+}
+
+/* ── e1RM trend up ──────────────────────────────────────────────────── */
+
+.e1rm-trend--up {
+  color: var(--success);
+}
+
+/* ── Mesocycle deload ───────────────────────────────────────────────── */
+
+.mesocycle-indicator--deload {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+/* ── Exercise title button ──────────────────────────────────────────── */
+
+.exercise-title-button span {
+  color: var(--accent-pressed);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ── Readiness ring ─────────────────────────────────────────────────── */
+
+.readiness-ring {
+  color: var(--success);
+  border-color: var(--success-border);
+}
+
+/* ── Week day completed ─────────────────────────────────────────────── */
+
+.week-day.completed:not(.active) {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.week-day.completed:not(.active) .week-day__dot {
+  background: var(--success);
+  border-color: var(--success);
+}

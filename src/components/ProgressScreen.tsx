@@ -22,7 +22,7 @@ function SparklineSVG({ points, trendDirection, width = 140, height = 36 }: {
   width?: number
   height?: number
 }) {
-  const strokeColor = trendDirection === 'up' ? 'var(--accent)' : trendDirection === 'down' ? 'var(--danger)' : 'var(--text-tertiary)'
+  const strokeColor = trendDirection === 'up' ? 'var(--success)' : trendDirection === 'down' ? 'var(--danger)' : 'var(--text-tertiary)'
 
   // Single data point — show a dot in the center instead of returning null.
   // This gives visual feedback that data exists, even without a trend line.

@@ -176,51 +176,66 @@ function CurrentSetEditor({
   updateSetWeight,
   updateSetReps,
   updateSet,
-	markSetDone,
+  markSetDone,
 }: CurrentSetEditorProps) {
-	const unitLabel = effortUnitLabel(activeExercise)
-	const timed = isTimedExercise(activeExercise)
-	const canSaveSet = set.reps > 0
-	return (
+  const unitLabel = effortUnitLabel(activeExercise)
+  const timed = isTimedExercise(activeExercise)
+  const canSaveSet = set.reps > 0
+  const step = activeExercise.weightStep || 2.5
+  const currentWeight = set.weightInput != null ? Number(set.weightInput) || set.weight : set.weight
+  const currentReps = set.repsInput != null ? Number(set.repsInput) || set.reps : set.reps
+  return (
     <div className="set current-set">
       <div className="set-head">
-        <b>Текущий подход · {setNumber} из {totalSets}</b>
+        <b>Подход {setNumber} из {totalSets}</b>
         <span className="muted">цель {activeExercise.repMin}–{activeExercise.repMax}{timed ? ' сек' : ''} · {difficultyLabel(set.rpe).toLowerCase()}</span>
       </div>
-      <div className="inputs">
-        {!timed && (
-          <label>
-            <span>кг</span>
+
+      {!timed && (
+        <div className="big-stepper">
+          <span className="big-stepper__label">кг</span>
+          <div className="big-stepper__row">
+            <button type="button" className="big-stepper__btn" aria-label="Меньше вес"
+              onClick={() => updateSetWeight(String(Math.max(0, currentWeight - step)))}>−</button>
             <input
+              className="big-stepper__value"
               aria-label={`Вес, подход ${setNumber}`}
               value={set.weightInput ?? formatWeight(set.weight)}
               inputMode="decimal"
               onChange={(event) => updateSetWeight(event.target.value)}
             />
-          </label>
-        )}
-	        <label>
-	          <span>{unitLabel}</span>
-	          <input
-	            aria-label={`Повторы, подход ${setNumber}`}
-	            value={set.repsInput ?? (set.reps || '')}
-	            placeholder={unitLabel === 'сек' ? 'сек' : 'повт.'}
-	            inputMode="numeric"
-	            onChange={(event) => updateSetReps(event.target.value)}
-	          />
-	        </label>
-	        <button className="check" aria-label={`Записать подход ${setNumber}`} disabled={!canSaveSet} onClick={markSetDone}>✓</button>
-	      </div>
+            <button type="button" className="big-stepper__btn big-stepper__btn--plus" aria-label="Больше вес"
+              onClick={() => updateSetWeight(String(currentWeight + step))}>+</button>
+          </div>
+        </div>
+      )}
+
+      <div className="big-stepper">
+        <span className="big-stepper__label">{unitLabel}</span>
+        <div className="big-stepper__row">
+          <button type="button" className="big-stepper__btn" aria-label="Меньше повторов"
+            onClick={() => updateSetReps(String(Math.max(0, currentReps - 1)))}>−</button>
+          <input
+            className="big-stepper__value"
+            aria-label={`Повторы, подход ${setNumber}`}
+            value={set.repsInput ?? (set.reps || '')}
+            placeholder={unitLabel === 'сек' ? 'сек' : 'повт.'}
+            inputMode="numeric"
+            onChange={(event) => updateSetReps(event.target.value)}
+          />
+          <button type="button" className="big-stepper__btn big-stepper__btn--plus" aria-label="Больше повторов"
+            onClick={() => updateSetReps(String(currentReps + 1))}>+</button>
+        </div>
+      </div>
+
+      <button className="check check--wide" aria-label={`Записать подход ${setNumber}`} disabled={!canSaveSet} onClick={markSetDone}>Готово ✓</button>
+
       <div className="difficulty" aria-label={`Сложность подхода ${setNumber}`}>
         {difficultyOptions.map((option) => (
-          <button
-            key={option.label}
-            type="button"
+          <button key={option.label} type="button"
             className={set.rpe === option.value ? 'active' : ''}
             aria-label={`Сложность: ${option.label}, подход ${setNumber}`}
-            title={option.hint}
-            onClick={() => updateSet({ rpe: option.value })}
-          >
+            title={option.hint} onClick={() => updateSet({ rpe: option.value })}>
             {option.label}
           </button>
         ))}
