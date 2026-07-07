@@ -1185,3 +1185,149 @@ describe('issue #78: light days', () => {
     expect(hasLarge).toBe(true)
   })
 })
+
+describe('Issue #100: applyPrescription uses coachMemory.currentWorkingWeight as fallback', () => {
+  it('uses currentWorkingWeight when nextRecommendedWeight is missing from history', async () => {
+    // Scenario: bench press was at 55kg, then a deload dropped it to 40kg.
+    // The history has no nextRecommendedWeight (e.g., first session after
+    // a long break). coachMemory.currentWorkingWeight (from #99) = 55.
+    // The plan should use 55, not the library default of 50.
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 80,
+      weeklyLoadStatus: 'on_plan',
+      mesocycle: { phase: 'accumulation', isDeload: false, weekInCycle: 2, cycleLength: 4, loadingWeeks: 3, deloadWeeks: 1 },
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+
+    const coachMemory = {
+      exerciseProfiles: {
+        'bench-press': {
+          id: 'bench-press',
+          name: 'Жим лёжа',
+          muscleGroup: 'Грудь',
+          muscleKey: 'chest',
+          status: 'progress_possible',
+          currentWorkingWeight: 55,  // Issue #99: max of last 3 sessions
+          lastReps: 8,
+          lastTrainedAt: '2026-06-18T18:00:00.000Z',
+          recentSessions: 3,
+          hardSets: 0,
+          maxEffortSets: 0,
+          pain: false,
+          recommendation: 'прогрессировать',
+        },
+      },
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-01',
+      coachState,
+      coachMemory,
+      exerciseLibrary,
+      // History has a session with NO nextRecommendedWeight for bench press
+      history: [{
+        id: 'session-1',
+        userId: 'vyacheslav',
+        workoutDayId: 'day-1',
+        workoutDayName: 'День A',
+        completedAt: '2026-06-29T18:00:00.000Z',
+        totalVolume: 1000,
+        exercises: [{
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 0,  // 0 = no progression recommendation
+          progressionType: 'hold',
+          progressionReason: '',
+          sets: [{ weight: 40, reps: 12, rpe: 6, completed: true }],
+        }],
+      }],
+    })
+
+    const benchExercise = plan.exercises.find((e) => e.exerciseId === 'bench-press')
+    // Should use currentWorkingWeight (55), not library default (50) and not
+    // the history's nextRecommendedWeight (0).
+    expect(benchExercise).toBeDefined()
+    expect(benchExercise.targetWeight).toBeGreaterThanOrEqual(55)
+  })
+
+  it('prefers nextRecommendedWeight over currentWorkingWeight when both exist', async () => {
+    // When history has a valid nextRecommendedWeight, that takes priority.
+    // currentWorkingWeight is only a fallback.
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 80,
+      weeklyLoadStatus: 'on_plan',
+      mesocycle: { phase: 'accumulation', isDeload: false, weekInCycle: 2, cycleLength: 4, loadingWeeks: 3, deloadWeeks: 1 },
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+
+    const coachMemory = {
+      exerciseProfiles: {
+        'bench-press': {
+          id: 'bench-press',
+          name: 'Жим лёжа',
+          muscleGroup: 'Грудь',
+          muscleKey: 'chest',
+          status: 'progress_possible',
+          currentWorkingWeight: 55,
+          lastReps: 8,
+          lastTrainedAt: '2026-06-18T18:00:00.000Z',
+          recentSessions: 3,
+          hardSets: 0,
+          maxEffortSets: 0,
+          pain: false,
+          recommendation: 'прогрессировать',
+        },
+      },
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-01',
+      coachState,
+      coachMemory,
+      exerciseLibrary,
+      history: [{
+        id: 'session-1',
+        userId: 'vyacheslav',
+        workoutDayId: 'day-1',
+        workoutDayName: 'День A',
+        completedAt: '2026-06-29T18:00:00.000Z',
+        totalVolume: 1000,
+        exercises: [{
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 57.5,  // explicit progression recommendation
+          progressionType: 'increase',
+          progressionReason: '',
+          sets: [{ weight: 55, reps: 8, rpe: 7, completed: true }],
+        }],
+      }],
+    })
+
+    const benchExercise = plan.exercises.find((e) => e.exerciseId === 'bench-press')
+    // nextRecommendedWeight (57.5) wins over currentWorkingWeight (55)
+    expect(benchExercise).toBeDefined()
+    expect(benchExercise.targetWeight).toBeGreaterThanOrEqual(57.5)
+  })
+})

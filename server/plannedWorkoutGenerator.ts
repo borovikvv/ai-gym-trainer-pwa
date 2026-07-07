@@ -234,6 +234,7 @@ interface ApplyPrescriptionParams {
   exercise: NormalizedLibraryExercise
   profile?: ProfileForGenerator
   coachState: CoachState | null
+  coachMemory?: CoachMemoryForGenerator | null
   coachDecision?: CoachDecisionForGenerator | null
   history: WorkoutHistoryEntry[]
   lowReadiness: boolean
@@ -293,7 +294,7 @@ export async function buildGeneratedPlannedWorkout({
   for (const muscleKey of targetPattern) {
     const candidate = chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision: decision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext })
     if (!candidate) continue
-    selected.push(applyPrescription({ exercise: candidate, profile, coachState, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy }))
+    selected.push(applyPrescription({ exercise: candidate, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy }))
     usedExerciseIds.add(candidate.id)
     if (selected.length >= exerciseTarget) break
   }
@@ -308,7 +309,7 @@ export async function buildGeneratedPlannedWorkout({
       .filter((exercise) => !isHighFatigue(exercise.muscleKey, coachState))
       .sort((a, b) => exerciseScore(b, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, decision) - exerciseScore(a, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, decision))
     for (const exercise of fillers) {
-      selected.push(applyPrescription({ exercise, profile, coachState, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy }))
+      selected.push(applyPrescription({ exercise, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy }))
       usedExerciseIds.add(exercise.id)
       if (selected.length >= exerciseTarget) break
     }
@@ -413,6 +414,7 @@ function ensureCoreFinisher({ selected, library, coachState, coachMemory, decisi
     exercise: coreCandidate,
     profile,
     coachState,
+    coachMemory,
     coachDecision: decision,
     history,
     lowReadiness,
@@ -598,17 +600,31 @@ function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemo
   return candidates[0] ?? null
 }
 
-function applyPrescription({ exercise, profile, coachState, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null }: ApplyPrescriptionParams): GeneratedExercise {
+function applyPrescription({ exercise, profile, coachState, coachMemory = null, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null }: ApplyPrescriptionParams): GeneratedExercise {
   const recent = latestExerciseHistory(history, exercise.id)
-  const recentWeight = Number(recent?.nextRecommendedWeight ?? NaN)
-  const baseWeight = Number.isFinite(recentWeight) && recentWeight >= 0 ? recentWeight : exercise.targetWeight
+  const historicWeight = Number(recent?.nextRecommendedWeight ?? NaN)
+  // Issue #100: use currentWorkingWeight from coachMemory as a fallback.
+  // coachMemory computes currentWorkingWeight as the MAX of the last 3
+  // sessions (issue #99), so after a deload it remembers the real working
+  // weight. Without this fallback, the plan would use nextRecommendedWeight
+  // from the last (deload) session, which is too low.
+  const coachWorkingWeight = Number(
+    coachMemory?.exerciseProfiles?.[exercise.id]?.currentWorkingWeight ?? NaN,
+  )
+  // historicWeight must be > 0 to be considered valid (0 means no
+  // progression recommendation was recorded, e.g. first session or deload)
+  const baseWeight = Number.isFinite(historicWeight) && historicWeight > 0
+    ? historicWeight
+    : Number.isFinite(coachWorkingWeight) && coachWorkingWeight > 0
+      ? coachWorkingWeight
+      : exercise.targetWeight
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
     : clamp(exercise.setsCount, 2, preferences.sessionStyle === 'heavy_short' ? 3 : 4)
   let setsCount = baseSetsCount
   let repMin = lowReadiness ? Math.max(exercise.repMin, Math.min(exercise.repMax, 10)) : exercise.repMin
   let repMax = lowReadiness ? Math.max(repMin, exercise.repMax) : exercise.repMax
-  const hasRecentWorkingWeight = Boolean(recent) && Number.isFinite(recentWeight)
+  const hasRecentWorkingWeight = Boolean(recent) && Number.isFinite(historicWeight)
   const policy = coachDecision?.exercisePolicies?.[exercise.id]
   const shouldConsolidate = policy === 'consolidate'
   let targetWeight = roundWeight(lowReadiness && baseWeight > 0 && !hasRecentWorkingWeight ? Math.max(0, baseWeight - exercise.weightStep) : baseWeight)
