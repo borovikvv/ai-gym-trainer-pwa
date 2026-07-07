@@ -173,7 +173,29 @@ function buildExerciseProfiles({ library, history, profile }: BuildExerciseProfi
     }
     const sets = completedSetsOf(latest.exercise)
     const lastSet = sets.at(-1) ?? {}
-    const topWeight = sets.reduce((best, set) => Number(set.weight ?? 0) > Number(best.weight ?? 0) ? set : best, lastSet)
+    // Issue #99: currentWorkingWeight must reflect the user's actual strength
+    // potential, not just the latest session. After a planned deload or a
+    // light recovery session, the top weight drops — but the user hasn't
+    // lost strength, so the next workout should continue near the previous
+    // working weight, not start over from the reduced weight.
+    //
+    // Solution: take the MAX top weight across the last 3 sessions with this
+    // exercise. A deload/light session has a lower weight, so max() naturally
+    // excludes it without needing to explicitly detect deload.
+    //
+    // Exception: if the latest session was flagged with pain, we do NOT use
+    // the historical max — the user may have backed off because of injury,
+    // and forcing the old weight would be unsafe.
+    const RECENT_SESSIONS_FOR_WORKING_WEIGHT = 3
+    const recentSessions = sessions.slice(0, RECENT_SESSIONS_FOR_WORKING_WEIGHT)
+    const latestHadPain = Boolean(latest.exercise.pain)
+    const topWeight = latestHadPain
+      ? sets.reduce((best, set) => Number(set.weight ?? 0) > Number(best.weight ?? 0) ? set : best, lastSet)
+      : recentSessions.reduce((best, sessionRecord) => {
+          const sessionSets = completedSetsOf(sessionRecord.exercise)
+          const sessionBest = sessionSets.reduce((s, set) => Number(set.weight ?? 0) > Number(s.weight ?? 0) ? set : s, sessionSets.at(-1) ?? {})
+          return Number(sessionBest.weight ?? 0) > Number(best.weight ?? 0) ? sessionBest : best
+        }, lastSet)
     const hardSets = sets.filter((set) => Number(set.rpe) >= 9).length
     const maxEffortSets = sets.filter((set) => Number(set.rpe) >= 10).length
     const pain = Boolean(latest.exercise.pain)
