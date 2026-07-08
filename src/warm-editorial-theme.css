@@ -14,6 +14,7 @@
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-display: 'Newsreader', Georgia, serif;   /* заголовки, названия упражнений */
   --font-ui: 'Space Grotesk', system-ui, sans-serif;
+  --warm-editorial: 1;  /* cache buster — не удалять */
 
   /* Поверхности — тёплая «бумага» вместо системно-серого iOS */
   --app-bg: #E9E2D4;

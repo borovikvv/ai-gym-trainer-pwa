@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#E6E3DD; }
+  * { box-sizing:border-box; }
+  a { color:#DA5326; }
+  a:hover { color:#B8431C; }
+  .cv { font-family:'Space Grotesk',system-ui,sans-serif; color:#22201B; }
+  .ser { font-family:'Newsreader',Georgia,serif; }
+  .tnum { font-variant-numeric:tabular-nums; }
+  /* faithful "before" recreation uses the app's real iOS system stack */
+  .ios { font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; }
+</style>
+</helmet>
+
+<div class="cv" style="padding:56px 56px 120px;min-width:2040px;">
+
+  <!-- ============ MASTHEAD / STYLE SYSTEM ============ -->
+  <header style="max-width:1180px;margin-bottom:16px;">
+    <div style="font:600 13px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#B8431C;">AI Gym Trainer · редизайн фронтенда</div>
+    <h1 class="ser" style="margin:10px 0 0;font-size:64px;font-weight:500;line-height:1.02;letter-spacing:-0.01em;">Warm Editorial</h1>
+    <p style="margin:14px 0 0;max-width:760px;font-size:16px;line-height:1.55;color:#6E665A;">Тёплая «бумажная» база вместо системно-серого iOS, один энергичный акцент строго для действия, характерная типопара «редакционный серив + гротеск для данных» и переработанная иерархия. Скелет и токен-система приложения сохранены — меняются поверхности, шрифты и роль цвета. Ниже — сравнение «было → стало» по четырём экранам.</p>
+  </header>
+
+  <!-- ============ TURN 2 — WALL OF TEXT FIX ============ -->
+  <section id="2a" style="margin:8px 0 72px;padding:32px 34px;background:#FBF6EC;border:1px solid rgba(34,32,27,0.10);border-radius:28px;box-shadow:0 18px 44px rgba(60,40,20,0.08);">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+      <span style="font:700 13px 'Space Grotesk';letter-spacing:0.05em;color:#fff;background:#DA5326;padding:5px 12px;border-radius:999px;">2a</span>
+      <span style="font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#B8431C;">Правки по живому билду</span>
+    </div>
+    <h2 class="ser" style="margin:6px 0 4px;font-size:38px;font-weight:500;">Лечим «стену текста»</h2>
+    <p style="margin:0 0 22px;max-width:860px;font-size:15px;line-height:1.55;color:#6E665A;">Три причины, почему живой билд читается как документ, а не приложение — и что меняем. Пункт 1 — самый быстрый и самый заметный.</p>
+
+    <!-- diagnosis cards -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:40px;">
+      <div style="background:#fff;border:1px solid rgba(34,32,27,0.10);border-radius:18px;padding:18px 20px;">
+        <div style="font:700 13px 'Space Grotesk';color:#DA5326;">1 · Тёмная тема</div>
+        <p style="margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#4A443B;">Warm Editorial — светлая «бумага». Ты видишь тёмный вариант: мутно-коричневый, контраст текста упал, иерархия схлопнулась. <b>Фикс: сделать светлую тему по умолчанию</b> (или переработать тёмную по-настоящему).</p>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(34,32,27,0.10);border-radius:18px;padding:18px 20px;">
+        <div style="font:700 13px 'Space Grotesk';color:#DA5326;">2 · Дамп AI-текста</div>
+        <p style="margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#4A443B;">`summary` / `rationale` / описание тренировки выводятся целиком — по 3–9 строк. <b>Фикс: 1 строка сути + «Подробнее»</b>, детали прячем в раскрытие. Экран становится сканируемым.</p>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(34,32,27,0.10);border-radius:18px;padding:18px 20px;">
+        <div style="font:700 13px 'Space Grotesk';color:#DA5326;">3 · Обрезка и перенос</div>
+        <p style="margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#4A443B;">«персонал⏎ьная» ломается по буквам, текст режется. <b>Фикс: min-width у текста, line-clamp у заголовка, кнопки в отдельный ряд</b> — не сжимают название.</p>
+      </div>
+    </div>
+
+    <!-- comparison A: coach timeline / weekly review -->
+    <h3 class="ser" style="margin:0 0 4px;font-size:24px;font-weight:500;">Экран «Тренер» · разбор + «Далее»</h3>
+    <p style="margin:0 0 20px;font-size:14px;color:#6E665A;">Слева — как сейчас (тёмная тема, карточки-параграфы). Справа — светлая тема, сводка одной строкой, детали по тапу.</p>
+    <div style="display:flex;gap:56px;align-items:flex-start;">
+
+      <!-- BEFORE -->
+      <figure style="margin:0;">
+        <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#A79D8B;margin-bottom:14px;">Сейчас в билде</figcaption>
+        <div class="ios" style="width:360px;background:#141210;border-radius:38px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);box-shadow:0 30px 60px rgba(0,0,0,0.4);color:#EDE7DC;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 10px;font-size:13px;font-weight:600;color:#EDE7DC;"><span>0:29</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+          <div style="padding:6px 16px 20px;">
+            <div class="ser" style="font-size:30px;font-weight:500;margin-bottom:14px;">Недельный разбор</div>
+            <div style="display:flex;gap:8px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,0.04);margin-bottom:12px;"><span style="opacity:0.5;">▤</span><p style="margin:0;font-size:13px;line-height:1.5;color:rgba(237,231,220,0.62);">Программа требует небольших корректировок для повышения эффективности.</p></div>
+            <div style="border-left:4px solid #C23B2E;background:rgba(194,59,46,0.12);border-radius:12px;padding:14px;margin-bottom:10px;"><b style="font-size:14px;line-height:1.35;display:block;">Заменить жим гантелей лёжа на жим штанги лёжа.</b><p style="margin:6px 0 0;font-size:13px;line-height:1.5;color:rgba(237,231,220,0.6);">Жим штанги позволяет задействовать больше мышечных волокон и способствует увеличению силы.</p></div>
+            <div style="border-left:4px solid #C67A2E;background:rgba(198,122,46,0.12);border-radius:12px;padding:14px;margin-bottom:10px;"><b style="font-size:14px;line-height:1.35;display:block;">Увеличить количество повторений в упражнениях на ноги до 10–12.</b><p style="margin:6px 0 0;font-size:13px;line-height:1.5;color:rgba(237,231,220,0.6);">Это поможет улучшить выносливость и мышечную массу в нижней части тела.</p></div>
+            <div style="border-radius:12px;background:rgba(255,255,255,0.04);padding:14px;"><span style="font-size:11px;font-weight:700;color:rgba(237,231,220,0.45);">Фокус следующей недели</span><b style="display:block;margin-top:4px;font-size:14px;line-height:1.35;">Увеличение объёма тренировок и работа над силой.</b></div>
+          </div>
+        </div>
+      </figure>
+
+      <div class="ser" style="align-self:center;font-size:40px;color:#B8431C;">→</div>
+
+      <!-- AFTER -->
+      <figure style="margin:0;">
+        <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#B8431C;margin-bottom:14px;">Стало</figcaption>
+        <div style="width:360px;background:#F1E9DB;border-radius:38px;overflow:hidden;border:1px solid rgba(34,32,27,0.08);box-shadow:0 30px 60px rgba(60,40,20,0.18);color:#22201B;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 10px;font-size:13px;font-weight:600;"><span class="tnum">9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+          <div style="padding:6px 18px 20px;">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;"><div class="ser" style="font-size:26px;font-weight:500;">Недельный разбор</div><span class="tnum" style="font:600 12px 'Space Grotesk';color:#A79D8B;">3 правки</span></div>
+            <p style="margin:0 0 16px;font-size:13px;line-height:1.45;color:#6E665A;">Нужны небольшие корректировки для эффективности.</p>
+            <!-- scannable rows: severity dot + one-line + chevron -->
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid rgba(34,32,27,0.08);">
+              <span style="width:8px;height:8px;border-radius:999px;background:#C23B2E;flex:0 0 auto;"></span>
+              <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;line-height:1.3;">Жим гантелей → жим штанги</div><div style="font-size:12px;color:#A79D8B;">приоритет · сила</div></div>
+              <span style="color:#A79D8B;">›</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid rgba(34,32,27,0.08);">
+              <span style="width:8px;height:8px;border-radius:999px;background:#C67A2E;flex:0 0 auto;"></span>
+              <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;line-height:1.3;">Ноги: повторы до 10–12</div><div style="font-size:12px;color:#A79D8B;">объём · выносливость</div></div>
+              <span style="color:#A79D8B;">›</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 2px;">
+              <span style="width:8px;height:8px;border-radius:999px;background:#4E7A5B;flex:0 0 auto;"></span>
+              <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;line-height:1.3;">Больше объёма и силы</div><div style="font-size:12px;color:#A79D8B;">фокус недели</div></div>
+              <span style="color:#A79D8B;">›</span>
+            </div>
+            <!-- Далее -->
+            <div class="ser" style="font-size:22px;font-weight:500;margin:22px 0 10px;">Далее</div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid rgba(34,32,27,0.08);">
+              <div class="ser tnum" style="width:44px;height:44px;border-radius:12px;background:#EAE0CF;display:grid;place-items:center;font-size:15px;font-weight:500;flex:0 0 auto;">Вс</div>
+              <div style="flex:1;min-width:0;"><div class="ser" style="font-size:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Персональная</div><div style="font-size:12px;color:#6E665A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Спина · плечи · руки · 5 упр</div></div>
+              <div style="font:600 12px 'Space Grotesk';color:#DA5326;flex:0 0 auto;">Выбрать</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 4px;">
+              <div class="ser tnum" style="width:44px;height:44px;border-radius:12px;background:#EAE0CF;display:grid;place-items:center;font-size:15px;font-weight:500;flex:0 0 auto;">Вт</div>
+              <div style="flex:1;min-width:0;"><div class="ser" style="font-size:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Персональная</div><div style="font-size:12px;color:#6E665A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Пиковая неделя · грудь · 6 упр</div></div>
+              <div style="font:600 12px 'Space Grotesk';color:#DA5326;flex:0 0 auto;">Выбрать</div>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </div>
+
+    <!-- comparison B: plan next-workout card -->
+    <h3 class="ser" style="margin:44px 0 4px;font-size:24px;font-weight:500;">Экран «План» · следующая тренировка</h3>
+    <p style="margin:0 0 20px;font-size:14px;color:#6E665A;">9-строчный AI-абзац → 2 строки сути + «Подробнее». Название не ломается по буквам, кнопки — своим рядом.</p>
+    <div style="display:flex;gap:56px;align-items:flex-start;">
+
+      <!-- BEFORE -->
+      <figure style="margin:0;">
+        <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#A79D8B;margin-bottom:14px;">Сейчас в билде</figcaption>
+        <div class="ios" style="width:360px;background:#141210;border-radius:38px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);box-shadow:0 30px 60px rgba(0,0,0,0.4);color:#EDE7DC;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 10px;font-size:13px;font-weight:600;color:#EDE7DC;"><span>0:30</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+          <div style="padding:6px 16px 20px;">
+            <div class="ser" style="font-size:30px;font-weight:500;line-height:1.05;margin-bottom:14px;">План тренировок</div>
+            <div style="border-radius:22px;background:rgba(255,255,255,0.04);padding:18px;">
+              <div style="display:flex;justify-content:space-between;"><span style="font-size:12px;color:rgba(237,231,220,0.45);">Чт, 09.07</span><span class="ser" style="font-size:28px;font-weight:600;">~50<span style="font-size:13px;"> мин</span></span></div>
+              <div class="ser" style="font-size:24px;font-weight:500;line-height:1.05;margin:6px 0;">Следующая тренировка</div>
+              <div style="font-size:13px;color:rgba(237,231,220,0.55);">восстановительная персональная · 5 упр</div>
+              <p style="margin:12px 0 0;font-size:13px;line-height:1.55;color:rgba(237,231,220,0.62);">Эта тренировка подобрана с учётом вашей текущей готовности и уровня восстановления, чтобы избежать переутомления и поддержать прогресс. Мы сосредоточились на основных группах мышц, таких как грудь, спина и руки, чтобы вы могли развивать силу и мышечную массу, не перегружая организм. Упражнения выбраны так, чтобы они были эффективными.</p>
+              <button style="width:100%;margin-top:14px;padding:15px;border:0;border-radius:14px;background:#DA5326;color:#fff;font-weight:600;font-size:15px;">Открыть</button>
+              <button style="width:100%;margin-top:8px;padding:13px;border:0;border-radius:14px;background:rgba(255,255,255,0.06);color:#EDE7DC;font-weight:600;font-size:14px;">Состав</button>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <div class="ser" style="align-self:center;font-size:40px;color:#B8431C;">→</div>
+
+      <!-- AFTER -->
+      <figure style="margin:0;">
+        <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#B8431C;margin-bottom:14px;">Стало</figcaption>
+        <div style="width:360px;background:#F1E9DB;border-radius:38px;overflow:hidden;border:1px solid rgba(34,32,27,0.08);box-shadow:0 30px 60px rgba(60,40,20,0.18);color:#22201B;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 10px;font-size:13px;font-weight:600;"><span class="tnum">9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+          <div style="padding:6px 18px 20px;">
+            <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:#A79D8B;">3 тренировки/нед</div>
+            <div class="ser" style="font-size:32px;font-weight:500;line-height:1.02;margin:2px 0 16px;">План тренировок</div>
+            <div style="border-radius:24px;background:#2A2018;color:#F1E9DB;padding:22px;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div style="min-width:0;"><div style="font:600 11px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:rgba(241,233,219,0.55);">Чт, 09.07 · следующая</div><div class="ser" style="font-size:26px;font-weight:500;line-height:1.05;margin-top:6px;">Восстановительная</div></div>
+                <div class="ser tnum" style="text-align:right;flex:0 0 auto;padding-left:12px;"><div style="font-size:30px;font-weight:600;line-height:1;">50</div><div style="font-size:11px;font-family:'Space Grotesk';color:rgba(241,233,219,0.6);">мин</div></div>
+              </div>
+              <!-- tags instead of paragraph -->
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;">
+                <span style="font:600 12px 'Space Grotesk';padding:5px 10px;border-radius:999px;background:rgba(241,233,219,0.10);color:rgba(241,233,219,0.85);">5 упражнений</span>
+                <span style="font:600 12px 'Space Grotesk';padding:5px 10px;border-radius:999px;background:rgba(241,233,219,0.10);color:rgba(241,233,219,0.85);">Грудь · спина · руки</span>
+                <span style="font:600 12px 'Space Grotesk';padding:5px 10px;border-radius:999px;background:rgba(78,122,91,0.22);color:#B8D8C2;">лёгкая нагрузка</span>
+              </div>
+              <p style="margin:14px 0 0;font-size:13px;line-height:1.5;color:rgba(241,233,219,0.7);">Подобрана под готовность — без переутомления. <a href="#2a" style="color:#F0A886;font-weight:600;text-decoration:none;white-space:nowrap;">Подробнее</a></p>
+              <div style="display:flex;gap:8px;margin-top:16px;">
+                <button style="flex:1;padding:15px;border:0;border-radius:14px;background:#DA5326;color:#fff;font:600 15px 'Space Grotesk';">Открыть</button>
+                <button style="flex:0 0 auto;padding:15px 18px;border:1px solid rgba(241,233,219,0.22);border-radius:14px;background:transparent;color:#F1E9DB;font:600 14px 'Space Grotesk';">Состав</button>
+              </div>
+            </div>
+            <div style="margin-top:12px;padding:14px 16px;border-radius:16px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;align-items:center;gap:10px;">
+              <span style="width:8px;height:8px;border-radius:999px;background:#4E7A5B;"></span>
+              <span style="font-size:13px;color:#4A443B;">Готовность <b class="tnum">80/100</b> · восстановление хорошее</span>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </div>
+
+    <p style="margin:34px 0 0;max-width:860px;font-size:13.5px;line-height:1.55;color:#6E665A;">Принцип один на всех «текстовых» экранах (Разбор, Прогресс-рекомендации, План): <b style="color:#22201B;">карточка = заголовок-сущность + одна строка сути + метка серьёзности; полный текст живёт в раскрытии/на детальном экране.</b> Плюс светлая тема возвращает контраст. Код-фиксы — в <code style="background:#EAE0CF;padding:2px 6px;border-radius:6px;">IMPLEMENTATION.md</code> (Патч 5).</p>
+  </section>
+
+
+  <!-- style tokens strip -->
+  <section style="display:flex;gap:16px;flex-wrap:wrap;margin:28px 0 64px;">
+    <!-- palette -->
+    <div style="background:#FFFDF9;border:1px solid rgba(34,32,27,0.10);border-radius:20px;padding:22px 24px;width:520px;box-shadow:0 12px 30px rgba(60,40,20,0.06);">
+      <div style="font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#A79D8B;margin-bottom:16px;">Палитра</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+        <div><div style="height:56px;border-radius:12px;background:#F1E9DB;border:1px solid rgba(34,32,27,0.10);"></div><div style="margin-top:8px;font-size:12px;font-weight:600;">Бумага</div><div class="tnum" style="font-size:11px;color:#A79D8B;">#F1E9DB</div></div>
+        <div><div style="height:56px;border-radius:12px;background:#2A2018;"></div><div style="margin-top:8px;font-size:12px;font-weight:600;">Эспрессо</div><div class="tnum" style="font-size:11px;color:#A79D8B;">#2A2018</div></div>
+        <div><div style="height:56px;border-radius:12px;background:#DA5326;"></div><div style="margin-top:8px;font-size:12px;font-weight:600;">Акцент</div><div class="tnum" style="font-size:11px;color:#A79D8B;">#DA5326</div></div>
+        <div><div style="height:56px;border-radius:12px;background:#4E7A5B;"></div><div style="margin-top:8px;font-size:12px;font-weight:600;">Рост</div><div class="tnum" style="font-size:11px;color:#A79D8B;">#4E7A5B</div></div>
+      </div>
+      <div style="margin-top:16px;font-size:13px;line-height:1.5;color:#6E665A;">Акцент <b style="color:#22201B;">только для действий</b>. «Рост/успех» ушёл в спокойный оливковый — цвета больше не спорят за внимание.</div>
+    </div>
+    <!-- type -->
+    <div style="background:#FFFDF9;border:1px solid rgba(34,32,27,0.10);border-radius:20px;padding:22px 24px;width:520px;box-shadow:0 12px 30px rgba(60,40,20,0.06);">
+      <div style="font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#A79D8B;margin-bottom:14px;">Типографика</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;border-bottom:1px solid rgba(34,32,27,0.08);padding-bottom:14px;">
+        <div class="ser" style="font-size:38px;font-weight:500;line-height:1;">Newsreader</div>
+        <div style="font-size:12px;color:#A79D8B;text-align:right;">заголовки,<br>названия упражнений</div>
+      </div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding-top:14px;">
+        <div style="font-size:30px;font-weight:600;">Space Grotesk <span class="tnum" style="color:#DA5326;">60 кг × 10</span></div>
+        <div style="font-size:12px;color:#A79D8B;text-align:right;">интерфейс,<br>табличные числа</div>
+      </div>
+    </div>
+    <!-- principles -->
+    <div style="background:#2A2018;color:#F1E9DB;border-radius:20px;padding:22px 24px;width:calc(1040px - 1040px + 480px);flex:1;min-width:420px;box-shadow:0 12px 30px rgba(60,40,20,0.14);">
+      <div style="font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:rgba(241,233,219,0.55);margin-bottom:14px;">Что чиним</div>
+      <ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.7;color:rgba(241,233,219,0.9);">
+        <li>Идентичность вместо «экрана Настроек iOS»</li>
+        <li>Один смысл на акцент — CTA больше не конкурирует с «ростом»</li>
+        <li>«Зал»: крупный ввод веса/повторов — первым</li>
+        <li>Числа в табличном гротеске — колонки не «плывут»</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 1 — HOME ============ -->
+  <div style="margin-bottom:20px;">
+    <div style="display:inline-block;font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#B8431C;background:rgba(218,83,38,0.10);padding:6px 12px;border-radius:999px;">Экран 1</div>
+    <h2 class="ser" style="margin:12px 0 6px;font-size:34px;font-weight:500;">Дом · Тренер</h2>
+    <p style="margin:0;max-width:820px;font-size:15px;line-height:1.55;color:#6E665A;">Было — стопка карточек одного веса. Стало — одна доминирующая «сегодня»-карточка с действием, тонкая полоса мезоцикла, спокойные метрики.</p>
+  </div>
+  <div style="display:flex;gap:64px;align-items:flex-start;margin-bottom:96px;">
+
+    <!-- BEFORE home -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#A79D8B;margin-bottom:14px;">Было</figcaption>
+      <div class="ios" style="width:384px;background:#f5f5f7;border-radius:38px;overflow:hidden;border:1px solid rgba(0,0,0,0.06);box-shadow:0 30px 60px rgba(0,0,0,0.13);color:#1d1d1f;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span>9:41</span><span style="letter-spacing:2px;color:#1d1d1f;">●●● ▮</span></div>
+        <div style="padding:10px 16px 20px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+            <div><div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Сегодня</div><div style="font-size:34px;font-weight:760;line-height:1.05;margin-top:4px;">Тренер</div></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+              <div style="min-height:40px;padding:8px 10px;border:0.5px solid rgba(60,60,67,0.29);border-radius:12px;background:#fff;font-weight:700;font-size:13px;">Вячеслав ▾</div>
+              <div style="width:40px;height:40px;border-radius:16px;background:#1d1d1f;color:#fff;display:grid;place-items:center;font-weight:850;font-size:13px;">В</div>
+            </div>
+          </div>
+          <!-- hero dark -->
+          <div style="padding:20px;border-radius:30px;background:#1d1d1f;color:#fff;box-shadow:0 18px 48px rgba(0,0,0,0.12);">
+            <div style="display:flex;justify-content:space-between;gap:16px;">
+              <div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.66);">12 июля</div><h2 style="margin:8px 0;font-size:24px;font-weight:780;line-height:1.08;">Грудь/спина</h2><p style="margin:0;font-size:13px;color:rgba(255,255,255,0.76);">5 упр · ~52 мин</p></div>
+              <div style="width:76px;height:76px;border-radius:999px;background:#fff;color:#1b5e20;display:grid;place-items:center;flex:0 0 auto;border:8px solid rgba(52,199,89,0.2);"><div style="text-align:center;line-height:1;"><div style="font-size:20px;font-weight:850;">5</div><div style="font-size:11px;">упр.</div></div></div>
+            </div>
+            <p style="margin:12px 0 0;font-size:13px;color:rgba(255,255,255,0.76);">Жим лёжа: 60 кг</p>
+            <button style="width:100%;margin-top:16px;padding:14px;border:0;border-radius:16px;background:#2e7d32;color:#fff;font-weight:760;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;">▦ Начать</button>
+            <button style="width:100%;margin-top:8px;padding:11px;border:0.5px solid rgba(255,255,255,0.25);border-radius:16px;background:transparent;color:#fff;font-weight:760;font-size:14px;">Вне плана</button>
+          </div>
+          <!-- mesocycle -->
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;border-radius:10px;background:rgba(88,166,255,0.08);font-size:13px;"><span style="font-weight:700;">↻ Нед 2/4</span><span style="color:rgba(60,60,67,0.6);font-size:12px;">Накопление</span></div>
+          <!-- metric pair -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">
+            <div style="padding:14px;border:0.5px solid rgba(60,60,67,0.29);border-radius:22px;background:#fff;"><span style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Подряд</span><b style="display:block;margin-top:4px;font-size:20px;font-weight:780;">4 недели</b></div>
+            <div style="padding:14px;border:0.5px solid rgba(60,60,67,0.29);border-radius:22px;background:#fff;"><span style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Тренировок</span><b style="display:block;margin-top:4px;font-size:20px;font-weight:780;">2/3</b></div>
+          </div>
+          <!-- далее -->
+          <div style="margin-top:18px;"><div style="font-size:18px;font-weight:780;margin-bottom:12px;">Далее</div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:16px;border:0.5px solid rgba(60,60,67,0.29);border-radius:22px;background:#fff;">
+              <div><div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.3);">15 июля</div><h3 style="margin:2px 0 0;font-size:15px;font-weight:780;">День B</h3><p style="margin:2px 0 0;font-size:13px;color:rgba(60,60,67,0.6);">Ноги</p></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="padding:6px 10px;border-radius:999px;background:#f2f2f7;font-size:12px;font-weight:780;color:rgba(60,60,67,0.6);">4 упр.</span><button style="min-height:38px;padding:9px 12px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;font-size:13px;font-weight:760;">Выбрать</button></div>
+            </div>
+          </div>
+          <!-- library -->
+          <div style="margin-top:14px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:16px;border:0.5px solid rgba(60,60,67,0.29);border-radius:22px;background:#fff;"><span style="font-size:20px;">▤</span><span><b style="display:block;font-size:15px;">Библиотека</b><span style="font-size:13px;color:rgba(60,60,67,0.6);">Техника и замены</span></span></div>
+          <!-- nav -->
+          <div style="margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:7px;border-radius:22px;background:rgba(29,29,31,0.9);">
+            <div style="min-height:44px;border-radius:16px;background:#2e7d32;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:760;">Тренер</div>
+            <div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">Зал</div>
+            <div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">Прогресс</div>
+            <div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">План</div>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- arrow -->
+    <div class="ser" style="align-self:center;font-size:40px;color:#B8431C;">→</div>
+
+    <!-- AFTER home -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#B8431C;margin-bottom:14px;">Стало</figcaption>
+      <div style="width:384px;background:#F1E9DB;border-radius:38px;overflow:hidden;border:1px solid rgba(34,32,27,0.08);box-shadow:0 30px 60px rgba(60,40,20,0.18);color:#22201B;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span class="tnum">9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+        <div style="padding:12px 18px 20px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+            <div><div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:#A79D8B;">Сегодня · 12 июля</div><div class="ser" style="font-size:38px;font-weight:500;line-height:1;margin-top:4px;">Тренер</div></div>
+            <div style="width:44px;height:44px;border-radius:14px;background:#2A2018;color:#F1E9DB;display:grid;place-items:center;font-weight:700;font-size:15px;">В</div>
+          </div>
+          <!-- hero espresso -->
+          <div style="padding:22px;border-radius:26px;background:#2A2018;color:#F1E9DB;box-shadow:0 20px 44px rgba(42,32,24,0.28);">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              <div style="font:600 11px 'Space Grotesk';letter-spacing:0.16em;text-transform:uppercase;color:rgba(241,233,219,0.55);">Следующая тренировка</div>
+              <div style="font:600 11px 'Space Grotesk';letter-spacing:0.05em;color:rgba(241,233,219,0.8);background:rgba(241,233,219,0.12);padding:4px 9px;border-radius:999px;" class="tnum">5 упр · ~52 мин</div>
+            </div>
+            <h2 class="ser" style="margin:12px 0 0;font-size:34px;font-weight:500;line-height:1.02;">Грудь / спина</h2>
+            <div style="margin-top:16px;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(241,233,219,0.08);">
+              <div style="width:8px;height:8px;border-radius:999px;background:#DA5326;flex:0 0 auto;"></div>
+              <div style="font-size:14px;color:rgba(241,233,219,0.9);">Начинаем с <b style="color:#F1E9DB;">Жим лёжа</b></div>
+              <div class="tnum ser" style="margin-left:auto;font-size:22px;font-weight:500;">60<span style="font-size:13px;font-family:'Space Grotesk';color:rgba(241,233,219,0.6);"> кг</span></div>
+            </div>
+            <button style="width:100%;margin-top:16px;padding:16px;border:0;border-radius:16px;background:#DA5326;color:#fff;font-weight:600;font-size:16px;font-family:'Space Grotesk';">Начать тренировку</button>
+            <button style="width:100%;margin-top:8px;padding:12px;border:0;border-radius:14px;background:transparent;color:rgba(241,233,219,0.7);font-weight:500;font-size:14px;font-family:'Space Grotesk';">Тренировка вне плана</button>
+          </div>
+          <!-- mesocycle slim -->
+          <div style="margin-top:14px;padding:14px 16px;border-radius:16px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;">
+              <div style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#6E665A;">Мезоцикл · накопление</div>
+              <div class="tnum" style="font-size:13px;font-weight:600;color:#22201B;">неделя 2 / 4</div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:5px;">
+              <div style="flex:1;height:6px;border-radius:999px;background:#4E7A5B;"></div>
+              <div style="flex:1;height:6px;border-radius:999px;background:#4E7A5B;"></div>
+              <div style="flex:1;height:6px;border-radius:999px;background:rgba(78,122,91,0.22);"></div>
+              <div style="flex:1;height:6px;border-radius:999px;background:rgba(78,122,91,0.22);"></div>
+            </div>
+          </div>
+          <!-- metrics -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            <div style="padding:16px;border-radius:18px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);"><span style="font:600 12px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:#A79D8B;">Серия</span><b class="ser tnum" style="display:block;margin-top:6px;font-size:28px;font-weight:500;">4 <span style="font-size:14px;font-family:'Space Grotesk';color:#6E665A;">нед</span></b></div>
+            <div style="padding:16px;border-radius:18px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);"><span style="font:600 12px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:#A79D8B;">На неделе</span><b class="ser tnum" style="display:block;margin-top:6px;font-size:28px;font-weight:500;color:#4E7A5B;">2<span style="color:#A79D8B;"> / 3</span></b></div>
+          </div>
+          <!-- далее list -->
+          <div style="margin-top:18px;display:flex;align-items:baseline;justify-content:space-between;"><div class="ser" style="font-size:22px;font-weight:500;">Далее</div><div style="font-size:12px;color:#A79D8B;font-weight:600;">15 июля</div></div>
+          <div style="margin-top:12px;display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid rgba(34,32,27,0.08);">
+            <div class="ser tnum" style="width:40px;height:40px;border-radius:12px;background:#EAE0CF;display:grid;place-items:center;font-size:16px;font-weight:500;">B</div>
+            <div style="flex:1;"><div class="ser" style="font-size:16px;font-weight:500;">Ноги</div><div style="font-size:13px;color:#6E665A;">День B · 4 упражнения</div></div>
+            <div style="font:600 13px 'Space Grotesk';color:#DA5326;">Выбрать</div>
+          </div>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:12px;padding:15px 16px;border-radius:16px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);"><span style="font-size:18px;">▤</span><div style="flex:1;"><b style="display:block;font-size:15px;">Библиотека</b><span style="font-size:13px;color:#6E665A;">Техника и замены</span></div><span style="color:#A79D8B;">›</span></div>
+          <!-- nav -->
+          <div style="margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px;border-radius:20px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);">
+            <div style="min-height:44px;border-radius:14px;background:#DA5326;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600;">Тренер</div>
+            <div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">Зал</div>
+            <div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">Прогресс</div>
+            <div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">План</div>
+          </div>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+  <!-- ============ SCREEN 2 — GYM ============ -->
+  <div style="margin-bottom:20px;">
+    <div style="display:inline-block;font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#B8431C;background:rgba(218,83,38,0.10);padding:6px 12px;border-radius:999px;">Экран 2 · ключевой</div>
+    <h2 class="ser" style="margin:12px 0 6px;font-size:34px;font-weight:500;">Зал · тренировка</h2>
+    <p style="margin:0;max-width:820px;font-size:15px;line-height:1.55;color:#6E665A;">Главная проблема: ядро приложения — ввод веса/повторов — было в самом низу, мелкими инпутами. Стало: крупный степпер веса и повторов выведен наверх и первым, техника/замена демотированы в мелкие пилюли, подсказка тренера — компактной строкой.</p>
+  </div>
+  <div style="display:flex;gap:64px;align-items:flex-start;margin-bottom:96px;">
+
+    <!-- BEFORE gym -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#A79D8B;margin-bottom:14px;">Было</figcaption>
+      <div class="ios" style="width:384px;background:#f5f5f7;border-radius:38px;overflow:hidden;border:1px solid rgba(0,0,0,0.06);box-shadow:0 30px 60px rgba(0,0,0,0.13);color:#1d1d1f;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span>9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+        <div style="padding:8px 16px 18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">День A</div><div style="font-size:24px;font-weight:760;">Зал</div></div><span style="padding:6px 10px;border-radius:999px;background:#f2f2f7;font-size:12px;font-weight:780;color:rgba(60,60,67,0.6);">1 из 5</span></div>
+          <div style="font-size:14px;color:rgba(60,60,67,0.6);margin-bottom:12px;">← Выйти</div>
+          <!-- hero -->
+          <div style="padding:20px;border-radius:30px;background:#1d1d1f;color:#fff;">
+            <div style="display:flex;justify-content:space-between;gap:14px;"><div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.66);">3×8–10 · 60 кг · отдых 120 сек</div><h2 style="margin:8px 0;font-size:24px;font-weight:780;">Жим лёжа</h2><p style="margin:0;font-size:13px;color:rgba(255,255,255,0.76);line-height:1.4;">не гонимся за +2.5 кг. Добрать качество: 10/9/9 без боли.</p></div><div style="font-size:34px;font-weight:800;flex:0 0 auto;">60 кг</div></div>
+            <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px;"><button style="padding:14px;border:0;border-radius:16px;background:#2e7d32;color:#fff;font-weight:760;">Техника</button><button style="padding:11px;border:0.5px solid rgba(255,255,255,0.25);border-radius:16px;background:transparent;color:#fff;font-weight:760;font-size:13px;">Замена</button></div>
+          </div>
+          <!-- metric pair -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;"><div style="padding:14px;border:0.5px solid rgba(60,60,67,0.29);border-radius:22px;background:#fff;"><span style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Прошлый раз</span><b class="tnum" style="display:block;margin-top:4px;font-size:20px;font-weight:780;">60×10/9/8</b></div><div style="padding:14px;border:0.5px solid rgba(60,60,67,0.29);border-radius:22px;background:#fff;"><span style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Цель</span><b class="tnum" style="display:block;margin-top:4px;font-size:20px;font-weight:780;">60×10/9/9</b></div></div>
+          <!-- session actions -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 6px;"><button style="padding:11px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;font-weight:760;font-size:13px;">Замена</button><button style="padding:11px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;font-weight:760;font-size:13px;">Убрать</button></div>
+          <!-- coach add card -->
+          <div style="padding:14px;border:0.5px solid rgba(255,159,10,0.26);border-radius:22px;background:rgba(255,159,10,0.1);margin-bottom:10px;"><div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Тренер предлагает добавить</div><b style="font-size:15px;">Разведения гантелей</b></div>
+          <!-- подходы -->
+          <div style="margin-top:8px;font-size:18px;font-weight:780;">Подходы</div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:7px;margin:12px 0;"><button style="min-height:42px;border:0.5px solid rgba(60,60,67,0.29);border-radius:12px;background:#fff;font-size:12px;font-weight:780;">Повторить</button><button style="min-height:42px;border:0.5px solid rgba(60,60,67,0.29);border-radius:12px;background:#fff;font-size:12px;font-weight:780;">−2.5</button><button style="min-height:42px;border:0.5px solid rgba(60,60,67,0.29);border-radius:12px;background:#fff;font-size:12px;font-weight:780;">+2.5</button></div>
+          <!-- set inputs (the tiny core) -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 54px;gap:9px;padding:12px;border:0.5px solid rgba(52,199,89,0.5);border-radius:22px;background:#fff;">
+            <label style="display:grid;gap:6px;"><span style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Вес</span><div class="tnum" style="padding:12px 11px;border:0.5px solid rgba(60,60,67,0.29);border-radius:12px;font-size:18px;font-weight:820;">60</div></label>
+            <label style="display:grid;gap:6px;"><span style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Повт</span><div class="tnum" style="padding:12px 11px;border:0.5px solid rgba(60,60,67,0.29);border-radius:12px;font-size:18px;font-weight:820;">10</div></label>
+            <div style="border-radius:16px;background:#2e7d32;color:#fff;display:grid;place-items:center;font-size:22px;font-weight:900;">✓</div>
+          </div>
+          <button style="width:100%;margin-top:10px;padding:11px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;font-weight:760;font-size:13px;">Добавить подход</button>
+          <!-- next card -->
+          <div style="margin-top:12px;padding:16px;border-radius:16px;background:#1d1d1f;color:#fff;"><div style="font-size:13px;color:rgba(255,255,255,0.66);">Дальше</div><b style="font-size:15px;">Тяга верхнего блока</b></div>
+          <!-- sticky bar -->
+          <div style="margin-top:12px;display:flex;gap:8px;"><button style="flex:1;padding:14px;border:0;border-radius:16px;background:#2e7d32;color:#fff;font-weight:760;">Следующее →</button><button style="flex:1;padding:14px;border:0;border-radius:16px;background:transparent;color:rgba(60,60,67,0.6);font-weight:760;">Завершить</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <div class="ser" style="align-self:center;font-size:40px;color:#B8431C;">→</div>
+
+    <!-- AFTER gym -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#B8431C;margin-bottom:14px;">Стало</figcaption>
+      <div style="width:384px;background:#F1E9DB;border-radius:38px;overflow:hidden;border:1px solid rgba(34,32,27,0.08);box-shadow:0 30px 60px rgba(60,40,20,0.18);color:#22201B;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span class="tnum">9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+        <div style="padding:8px 18px 18px;">
+          <!-- slim top bar -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <div style="font:600 13px 'Space Grotesk';color:#6E665A;">← Выйти</div>
+            <div style="flex:1;height:6px;border-radius:999px;background:#EAE0CF;overflow:hidden;"><div style="width:20%;height:100%;background:#DA5326;"></div></div>
+            <div class="tnum" style="font:600 13px 'Space Grotesk';color:#22201B;">1 / 5</div>
+          </div>
+          <!-- exercise title + demoted pills -->
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div><div style="font:600 11px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#A79D8B;">Грудь · подход 2 из 3</div><h2 class="ser" style="margin:4px 0 0;font-size:30px;font-weight:500;line-height:1.02;">Жим лёжа</h2></div>
+            <div style="display:flex;flex-direction:column;gap:6px;flex:0 0 auto;"><span style="padding:7px 12px;border-radius:999px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.10);font:600 12px 'Space Grotesk';">Техника</span><span style="padding:7px 12px;border-radius:999px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.10);font:600 12px 'Space Grotesk';color:#6E665A;">Замена</span></div>
+          </div>
+          <!-- BIG logger -->
+          <div style="margin-top:16px;padding:22px 18px 18px;border-radius:24px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.10);box-shadow:0 14px 34px rgba(60,40,20,0.08);">
+            <!-- weight -->
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#A79D8B;">Вес, кг</div>
+            <div style="display:grid;grid-template-columns:56px 1fr 56px;align-items:center;gap:10px;margin-top:8px;">
+              <button style="height:56px;border-radius:16px;border:1px solid rgba(34,32,27,0.12);background:#F1E9DB;font-size:26px;font-weight:500;color:#22201B;">−</button>
+              <div class="ser tnum" style="text-align:center;font-size:60px;font-weight:500;line-height:1;">60</div>
+              <button style="height:56px;border-radius:16px;border:0;background:#2A2018;color:#F1E9DB;font-size:26px;font-weight:500;">+</button>
+            </div>
+            <!-- reps -->
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#A79D8B;margin-top:18px;">Повторы</div>
+            <div style="display:grid;grid-template-columns:56px 1fr 56px;align-items:center;gap:10px;margin-top:8px;">
+              <button style="height:56px;border-radius:16px;border:1px solid rgba(34,32,27,0.12);background:#F1E9DB;font-size:26px;font-weight:500;color:#22201B;">−</button>
+              <div class="ser tnum" style="text-align:center;font-size:60px;font-weight:500;line-height:1;">10</div>
+              <button style="height:56px;border-radius:16px;border:0;background:#2A2018;color:#F1E9DB;font-size:26px;font-weight:500;">+</button>
+            </div>
+            <button style="width:100%;margin-top:18px;padding:18px;border:0;border-radius:16px;background:#DA5326;color:#fff;font:600 17px 'Space Grotesk';">Готово ✓</button>
+          </div>
+          <!-- coach inline hint -->
+          <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(78,122,91,0.10);border-left:3px solid #4E7A5B;">
+            <span style="font:700 11px 'Space Grotesk';letter-spacing:0.06em;text-transform:uppercase;color:#4E7A5B;">→ Держать</span>
+            <b class="tnum" style="font-size:15px;">60 кг × 10</b>
+            <span style="font-size:12px;color:#6E665A;margin-left:auto;text-align:right;line-height:1.3;max-width:150px;">качество важнее веса</span>
+          </div>
+          <!-- prev / goal compact -->
+          <div style="margin-top:12px;display:flex;gap:22px;padding:0 2px;">
+            <div><div style="font:600 11px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:#A79D8B;">Прошлый раз</div><b class="tnum" style="font-size:15px;">60×10/9/8</b></div>
+            <div><div style="font:600 11px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:#A79D8B;">Цель</div><b class="tnum" style="font-size:15px;color:#4E7A5B;">60×10/9/9</b></div>
+          </div>
+          <!-- done sets chips -->
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <div class="tnum" style="flex:1;text-align:center;padding:10px;border-radius:12px;background:rgba(78,122,91,0.10);border:1px solid rgba(78,122,91,0.25);font-size:13px;font-weight:600;color:#3f6349;">1 · 60×10 ✓</div>
+            <div class="tnum" style="flex:1;text-align:center;padding:10px;border-radius:12px;background:#DA5326;color:#fff;font-size:13px;font-weight:600;">2 · сейчас</div>
+            <div class="tnum" style="flex:1;text-align:center;padding:10px;border-radius:12px;background:#EAE0CF;color:#A79D8B;font-size:13px;font-weight:600;">3</div>
+          </div>
+          <!-- sticky -->
+          <div style="margin-top:16px;display:flex;gap:8px;"><button style="flex:1;padding:15px;border:0;border-radius:16px;background:#2A2018;color:#F1E9DB;font:600 15px 'Space Grotesk';">Следующее →</button><button style="flex:0 0 auto;padding:15px 18px;border:1px solid rgba(34,32,27,0.14);border-radius:16px;background:transparent;color:#6E665A;font:600 14px 'Space Grotesk';">Финиш</button></div>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+  <!-- ============ SCREEN 3 — PROGRESS ============ -->
+  <div style="margin-bottom:20px;">
+    <div style="display:inline-block;font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#B8431C;background:rgba(218,83,38,0.10);padding:6px 12px;border-radius:999px;">Экран 3</div>
+    <h2 class="ser" style="margin:12px 0 6px;font-size:34px;font-weight:500;">Прогресс · динамика</h2>
+    <p style="margin:0;max-width:820px;font-size:15px;line-height:1.55;color:#6E665A;">Было — самое ценное (тренды силы e1RM) спрятано под аккордеонами. Стало — спарклайны силы вынесены наверх, тренд-роста окрашен оливковым, спад — приглушённым красным.</p>
+  </div>
+  <div style="display:flex;gap:64px;align-items:flex-start;margin-bottom:96px;">
+
+    <!-- BEFORE progress -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#A79D8B;margin-bottom:14px;">Было</figcaption>
+      <div class="ios" style="width:384px;background:#f5f5f7;border-radius:38px;overflow:hidden;border:1px solid rgba(0,0,0,0.06);box-shadow:0 30px 60px rgba(0,0,0,0.13);color:#1d1d1f;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span>9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+        <div style="padding:10px 16px 20px;">
+          <div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">Прогресс</div><div style="font-size:34px;font-weight:760;margin-bottom:16px;">Динамика</div>
+          <div style="padding:20px;border-radius:30px;background:#1d1d1f;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:14px;">
+            <div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.66);">14 дней</div><h2 style="margin:8px 0;font-size:22px;font-weight:780;line-height:1.1;">Движение в правильную сторону</h2><p class="tnum" style="margin:0;font-size:13px;color:rgba(255,255,255,0.76);">6 трен. · 24 300 кг</p></div>
+            <div style="width:78px;height:78px;border-radius:999px;border:1px solid rgba(255,255,255,0.28);background:rgba(255,255,255,0.1);display:grid;place-items:center;text-align:center;flex:0 0 auto;"><div><div class="tnum" style="font-size:24px;font-weight:820;">6/6</div><div style="font-size:10px;color:rgba(255,255,255,0.72);">ритм сильный</div></div></div>
+          </div>
+          <div style="margin-top:16px;font-size:18px;font-weight:780;margin-bottom:10px;">Следующий фокус</div>
+          <div style="display:grid;gap:0;">
+            <div style="display:grid;grid-template-columns:34px 1fr auto;gap:12px;padding:12px 0;border-top:0;align-items:flex-start;"><div style="width:34px;height:34px;border-radius:12px;background:#1d1d1f;color:#fff;display:grid;place-items:center;font-weight:800;">1</div><div><b>Присед со штангой</b><div style="font-size:13px;color:rgba(60,60,67,0.6);">можно +2.5 кг</div></div><span style="padding:6px 10px;border-radius:999px;background:#f2f2f7;font-size:12px;font-weight:780;color:rgba(60,60,67,0.6);">растёт</span></div>
+            <div style="display:grid;grid-template-columns:34px 1fr auto;gap:12px;padding:12px 0;border-top:0.5px solid rgba(60,60,67,0.29);align-items:flex-start;"><div style="width:34px;height:34px;border-radius:12px;background:#1d1d1f;color:#fff;display:grid;place-items:center;font-weight:800;">2</div><div><b>Жим лёжа</b><div style="font-size:13px;color:rgba(60,60,67,0.6);">добрать 10/9/9</div></div><span style="padding:6px 10px;border-radius:999px;background:#f2f2f7;font-size:12px;font-weight:780;color:rgba(60,60,67,0.6);">держим</span></div>
+          </div>
+          <div style="margin-top:16px;font-size:18px;font-weight:780;margin-bottom:10px;">Сила (e1RM)</div>
+          <div style="padding:12px;border-radius:22px;background:#fff;border:0.5px solid rgba(60,60,67,0.15);margin-bottom:10px;"><div style="display:flex;justify-content:space-between;"><b style="font-size:15px;">Присед со штангой</b><span class="tnum" style="font-size:13px;color:rgba(60,60,67,0.6);">92 кг</span></div><svg viewBox="0 0 140 36" width="100%" height="36" style="display:block;margin-top:6px;"><path d="M0,28 L28,26 L56,20 L84,18 L112,12 L140,8" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/><circle cx="140" cy="8" r="3" fill="#2e7d32"/></svg></div>
+          <!-- collapsed details -->
+          <div style="border:0.5px solid rgba(60,60,67,0.15);border-radius:22px;background:#fff;padding:14px;display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-weight:780;">Лучшие движения</span><span style="color:rgba(60,60,67,0.3);">▾</span></div>
+          <div style="border:0.5px solid rgba(60,60,67,0.15);border-radius:22px;background:#fff;padding:14px;display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-weight:780;">Последние тренировки</span><span style="color:rgba(60,60,67,0.3);">▾</span></div>
+          <div style="border:0.5px solid rgba(60,60,67,0.15);border-radius:22px;background:#fff;padding:14px;display:flex;justify-content:space-between;"><span style="font-weight:780;">Все упражнения</span><span style="padding:2px 10px;border-radius:999px;background:#f2f2f7;font-size:13px;font-weight:780;">13</span></div>
+          <div style="margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:7px;border-radius:22px;background:rgba(29,29,31,0.9);">
+            <div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">Тренер</div><div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">Зал</div><div style="min-height:44px;border-radius:16px;background:#2e7d32;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:760;">Прогресс</div><div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">План</div>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <div class="ser" style="align-self:center;font-size:40px;color:#B8431C;">→</div>
+
+    <!-- AFTER progress -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#B8431C;margin-bottom:14px;">Стало</figcaption>
+      <div style="width:384px;background:#F1E9DB;border-radius:38px;overflow:hidden;border:1px solid rgba(34,32,27,0.08);box-shadow:0 30px 60px rgba(60,40,20,0.18);color:#22201B;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span class="tnum">9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+        <div style="padding:12px 18px 20px;">
+          <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:#A79D8B;">Прогресс · 14 дней</div>
+          <div class="ser" style="font-size:38px;font-weight:500;line-height:1;margin:4px 0 16px;">Динамика</div>
+          <!-- hero espresso compact -->
+          <div style="padding:20px;border-radius:24px;background:#2A2018;color:#F1E9DB;display:flex;justify-content:space-between;align-items:center;gap:14px;">
+            <div><div class="ser" style="font-size:22px;font-weight:500;line-height:1.1;">Движение в правильную сторону</div><div class="tnum" style="margin-top:8px;font-size:13px;color:rgba(241,233,219,0.7);">6 тренировок · 24 300 кг</div></div>
+            <div class="ser tnum" style="flex:0 0 auto;text-align:center;"><div style="font-size:34px;font-weight:500;color:#DA5326;">6</div><div style="font-size:11px;font-family:'Space Grotesk';color:rgba(241,233,219,0.6);">из 6</div></div>
+          </div>
+          <!-- e1RM up top -->
+          <div class="ser" style="font-size:22px;font-weight:500;margin:20px 0 12px;">Сила · e1RM</div>
+          <div style="padding:16px;border-radius:18px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;"><b style="font-size:15px;">Присед со штангой</b><span class="tnum" style="font:600 14px 'Space Grotesk';color:#4E7A5B;">92 кг ↑</span></div>
+            <svg viewBox="0 0 300 48" width="100%" height="48" style="display:block;margin-top:8px;"><path d="M0,38 L60,34 L120,26 L180,24 L240,15 L300,8" fill="none" stroke="#4E7A5B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="300" cy="8" r="3.5" fill="#4E7A5B"/></svg>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#A79D8B;"><span>Ноги</span><span>+4% / нед</span></div>
+          </div>
+          <div style="padding:16px;border-radius:18px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;"><b style="font-size:15px;">Жим лёжа</b><span class="tnum" style="font:600 14px 'Space Grotesk';color:#6E665A;">68 кг →</span></div>
+            <svg viewBox="0 0 300 48" width="100%" height="48" style="display:block;margin-top:8px;"><path d="M0,22 L60,20 L120,24 L180,21 L240,22 L300,20" fill="none" stroke="#A79D8B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="300" cy="20" r="3.5" fill="#A79D8B"/></svg>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#A79D8B;"><span>Грудь</span><span>стабильно</span></div>
+          </div>
+          <!-- focus -->
+          <div class="ser" style="font-size:22px;font-weight:500;margin:20px 0 8px;">Следующий фокус</div>
+          <div style="display:flex;align-items:center;gap:14px;padding:12px 2px;border-bottom:1px solid rgba(34,32,27,0.08);"><div class="ser tnum" style="width:34px;height:34px;border-radius:11px;background:rgba(78,122,91,0.14);color:#3f6349;display:grid;place-items:center;font-size:16px;font-weight:500;">1</div><div style="flex:1;"><b style="font-size:15px;">Присед со штангой</b><div style="font-size:13px;color:#6E665A;">можно +2.5 кг</div></div><span style="font:600 12px 'Space Grotesk';color:#4E7A5B;">растёт</span></div>
+          <div style="display:flex;align-items:center;gap:14px;padding:12px 2px;"><div class="ser tnum" style="width:34px;height:34px;border-radius:11px;background:#EAE0CF;color:#6E665A;display:grid;place-items:center;font-size:16px;font-weight:500;">2</div><div style="flex:1;"><b style="font-size:15px;">Жим лёжа</b><div style="font-size:13px;color:#6E665A;">добрать 10/9/9</div></div><span style="font:600 12px 'Space Grotesk';color:#A79D8B;">держим</span></div>
+          <div style="margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px;border-radius:20px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);">
+            <div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">Тренер</div><div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">Зал</div><div style="min-height:44px;border-radius:14px;background:#DA5326;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600;">Прогресс</div><div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">План</div>
+          </div>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+  <!-- ============ SCREEN 4 — PLAN ============ -->
+  <div style="margin-bottom:20px;">
+    <div style="display:inline-block;font:600 12px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:#B8431C;background:rgba(218,83,38,0.10);padding:6px 12px;border-radius:999px;">Экран 4</div>
+    <h2 class="ser" style="margin:12px 0 6px;font-size:34px;font-weight:500;">План · календарь</h2>
+    <p style="margin:0;max-width:820px;font-size:15px;line-height:1.55;color:#6E665A;">Недельная сетка становится спокойнее и читаемее: тёплые ячейки, акцент только на «сегодня» и запланированных днях, карточки тренировок в редакционном ритме.</p>
+  </div>
+  <div style="display:flex;gap:64px;align-items:flex-start;margin-bottom:40px;">
+
+    <!-- BEFORE plan -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#A79D8B;margin-bottom:14px;">Было</figcaption>
+      <div class="ios" style="width:384px;background:#f5f5f7;border-radius:38px;overflow:hidden;border:1px solid rgba(0,0,0,0.06);box-shadow:0 30px 60px rgba(0,0,0,0.13);color:#1d1d1f;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span>9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+        <div style="padding:10px 16px 20px;">
+          <div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.6);">План</div><div style="font-size:34px;font-weight:760;margin-bottom:14px;">Неделя</div>
+          <div style="display:grid;grid-template-columns:44px 1fr 44px;gap:8px;align-items:center;margin-bottom:10px;"><button style="min-height:42px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;">‹</button><div style="text-align:center;font-weight:780;">8–14 июля</div><button style="min-height:42px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;">›</button></div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:7px;">
+            <div style="min-height:54px;border-radius:16px;border:0.5px solid rgba(60,60,67,0.29);display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;"><b style="font-size:14px;">8</b><span style="font-size:10px;">пн</span></div>
+            <div style="min-height:54px;border-radius:16px;background:#2e7d32;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;"><b style="font-size:14px;">9</b><span style="font-size:10px;">вт</span></div>
+            <div style="min-height:54px;border-radius:16px;border:0.5px solid rgba(60,60,67,0.29);display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;"><b style="font-size:14px;">10</b><span style="font-size:10px;">ср</span></div>
+            <div style="min-height:54px;border-radius:16px;border:2px solid #2e7d32;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;"><b style="font-size:14px;">11</b><span style="font-size:10px;">чт</span></div>
+            <div style="min-height:54px;border-radius:16px;background:#2e7d32;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;"><b style="font-size:14px;">12</b><span style="font-size:10px;">пт</span></div>
+            <div style="min-height:54px;border-radius:16px;border:0.5px solid rgba(60,60,67,0.29);display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;"><b style="font-size:14px;">13</b><span style="font-size:10px;">сб</span></div>
+            <div style="min-height:54px;border-radius:16px;border:0.5px solid rgba(60,60,67,0.29);display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;"><b style="font-size:14px;">14</b><span style="font-size:10px;">вс</span></div>
+          </div>
+          <div style="margin-top:16px;display:grid;gap:10px;">
+            <div style="padding:16px;border-radius:22px;background:#fff;border:0.5px solid rgba(60,60,67,0.29);"><div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.3);">Пятница, 12 июля</div><b style="font-size:15px;">День A · Грудь/спина</b><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;"><button style="padding:10px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;font-size:13px;font-weight:760;">Изменить</button><button style="padding:10px;border:0.5px solid rgba(60,60,67,0.29);border-radius:16px;background:#fff;font-size:13px;font-weight:760;">Начать</button></div></div>
+            <div style="padding:16px;border-radius:22px;background:#fff;border:0.5px solid rgba(60,60,67,0.29);"><div style="font-size:12px;font-weight:700;color:rgba(60,60,67,0.3);">Вторник, 9 июля</div><b style="font-size:15px;">День B · Ноги</b></div>
+          </div>
+          <div style="margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:7px;border-radius:22px;background:rgba(29,29,31,0.9);"><div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">Тренер</div><div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">Зал</div><div style="min-height:44px;color:rgba(255,255,255,0.72);display:grid;place-items:center;font-size:12px;font-weight:760;">Прогресс</div><div style="min-height:44px;border-radius:16px;background:#2e7d32;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:760;">План</div></div>
+        </div>
+      </div>
+    </figure>
+
+    <div class="ser" style="align-self:center;font-size:40px;color:#B8431C;">→</div>
+
+    <!-- AFTER plan -->
+    <figure style="margin:0;">
+      <figcaption style="font:600 12px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:#B8431C;margin-bottom:14px;">Стало</figcaption>
+      <div style="width:384px;background:#F1E9DB;border-radius:38px;overflow:hidden;border:1px solid rgba(34,32,27,0.08);box-shadow:0 30px 60px rgba(60,40,20,0.18);color:#22201B;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:13px;font-weight:600;"><span class="tnum">9:41</span><span style="letter-spacing:2px;">●●● ▮</span></div>
+        <div style="padding:12px 18px 20px;">
+          <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:#A79D8B;">План</div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin:4px 0 16px;"><div class="ser" style="font-size:38px;font-weight:500;line-height:1;">Неделя</div><div style="font:600 13px 'Space Grotesk';color:#6E665A;" class="tnum">8–21 июля · 14 дней</div></div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">8</b><span style="font-size:10px;color:#A79D8B;">пн</span></div>
+            <div style="min-height:54px;border-radius:14px;background:rgba(78,122,91,0.14);border:1px solid rgba(78,122,91,0.25);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;"><b class="tnum" style="font-size:14px;color:#3f6349;">9</b><span style="font-size:10px;color:#3f6349;">вт</span><div style="position:absolute;bottom:6px;width:5px;height:5px;border-radius:999px;background:#4E7A5B;"></div></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">10</b><span style="font-size:10px;color:#A79D8B;">ср</span></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1.5px solid #DA5326;display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">11</b><span style="font-size:10px;color:#B8431C;">чт</span></div>
+            <div style="min-height:54px;border-radius:14px;background:#DA5326;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;"><b class="tnum" style="font-size:14px;">12</b><span style="font-size:10px;opacity:0.85;">пт</span><div style="position:absolute;bottom:6px;width:5px;height:5px;border-radius:999px;background:#fff;"></div></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">13</b><span style="font-size:10px;color:#A79D8B;">сб</span></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">14</b><span style="font-size:10px;color:#A79D8B;">вс</span></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">15</b><span style="font-size:10px;color:#A79D8B;">пн</span></div>
+            <div style="min-height:54px;border-radius:14px;background:rgba(78,122,91,0.14);border:1px solid rgba(78,122,91,0.25);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;"><b class="tnum" style="font-size:14px;color:#3f6349;">16</b><span style="font-size:10px;color:#3f6349;">вт</span><div style="position:absolute;bottom:6px;width:5px;height:5px;border-radius:999px;background:#4E7A5B;"></div></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">17</b><span style="font-size:10px;color:#A79D8B;">ср</span></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">18</b><span style="font-size:10px;color:#A79D8B;">чт</span></div>
+            <div style="min-height:54px;border-radius:14px;background:rgba(78,122,91,0.14);border:1px solid rgba(78,122,91,0.25);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;"><b class="tnum" style="font-size:14px;color:#3f6349;">19</b><span style="font-size:10px;color:#3f6349;">пт</span><div style="position:absolute;bottom:6px;width:5px;height:5px;border-radius:999px;background:#4E7A5B;"></div></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">20</b><span style="font-size:10px;color:#A79D8B;">сб</span></div>
+            <div style="min-height:54px;border-radius:14px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;"><b class="tnum" style="font-size:14px;">21</b><span style="font-size:10px;color:#A79D8B;">вс</span></div>
+          </div>
+          <div class="ser" style="font-size:22px;font-weight:500;margin:20px 0 12px;">Запланировано</div>
+          <div style="padding:18px;border-radius:20px;background:#2A2018;color:#F1E9DB;margin-bottom:12px;">
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:rgba(241,233,219,0.55);">Пятница, 12 июля · сегодня</div>
+            <div class="ser" style="font-size:24px;font-weight:500;margin-top:6px;">День A — Грудь / спина</div>
+            <div style="display:flex;gap:8px;margin-top:14px;"><button style="flex:1;padding:12px;border:0;border-radius:14px;background:#DA5326;color:#fff;font:600 14px 'Space Grotesk';">Начать</button><button style="flex:1;padding:12px;border:1px solid rgba(241,233,219,0.25);border-radius:14px;background:transparent;color:#F1E9DB;font:600 14px 'Space Grotesk';">Изменить</button></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid rgba(34,32,27,0.08);"><div class="ser tnum" style="width:40px;height:40px;border-radius:12px;background:rgba(78,122,91,0.14);color:#3f6349;display:grid;place-items:center;font-size:16px;font-weight:500;">✓</div><div style="flex:1;"><div class="ser" style="font-size:16px;font-weight:500;">День B — Ноги</div><div style="font-size:13px;color:#6E665A;">Вторник, 9 июля · выполнено</div></div></div>
+          <div style="margin-top:22px;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px;border-radius:20px;background:#FFFDF9;border:1px solid rgba(34,32,27,0.08);"><div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">Тренер</div><div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">Зал</div><div style="min-height:44px;color:#6E665A;display:grid;place-items:center;font-size:12px;font-weight:500;">Прогресс</div><div style="min-height:44px;border-radius:14px;background:#DA5326;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600;">План</div></div>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

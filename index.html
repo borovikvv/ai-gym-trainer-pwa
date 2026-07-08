@@ -11,17 +11,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
       // Apply persisted theme before first paint to avoid FOUC.
-      // Default to 'system' (follows OS) unless user explicitly chose light/dark.
+      // Default to light theme (Warm Editorial) unless user explicitly chose dark.
       (function () {
         try {
           var stored = localStorage.getItem('ai-gym-trainer:theme');
-          if (stored === 'light' || stored === 'dark') {
-            document.documentElement.setAttribute('data-theme', stored);
+          if (stored === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+          } else if (stored === 'light' || stored === 'system' || !stored) {
+            document.documentElement.setAttribute('data-theme', 'light');
           }
-          // For 'system' or null, the CSS @media (prefers-color-scheme: dark)
-          // rule will apply automatically — no attribute needed.
         } catch (e) {
-          // localStorage may be unavailable (private mode); fall back to system.
+          // localStorage may be unavailable (private mode); fall back to light.
+          document.documentElement.setAttribute('data-theme', 'light');
         }
       })();
     </script>
