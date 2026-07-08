@@ -5,10 +5,10 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 const STORAGE_KEY = 'ai-gym-trainer:theme'
 
 function readStoredTheme(): ThemeMode {
-  if (typeof localStorage === 'undefined') return 'system'
+  if (typeof localStorage === 'undefined') return 'light'
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
-  return 'system'
+  return 'light'
 }
 
 function resolveEffectiveTheme(mode: ThemeMode): 'light' | 'dark' {
