@@ -32,6 +32,23 @@ interface ProgressAnalysisInput {
   now: Date
 }
 
+export interface ExerciseAnalysisFlag {
+  exerciseId: string
+  exerciseName: string
+  status: 'plateau' | 'trending_up' | 'trending_down' | 'stable' | 'insufficient_data'
+  weeksStagnant?: number
+  slopePerWeek?: number
+  recommendation: 'swap_exercise' | 'increase_weight' | 'hold_weight' | 'decrease_weight' | 'consolidate' | 'monitor'
+  reason: string
+}
+
+export interface GlobalAnalysisFlags {
+  overtraining: boolean
+  overtrainingReason?: string
+  muscleImbalance?: Array<{ muscleGroup: string; status: 'overworked' | 'underworked' }>
+  recommendedDeload: boolean
+}
+
 export interface ProgressAnalysis {
   date: string
   summary: string
@@ -47,6 +64,9 @@ export interface ProgressAnalysis {
   }>
   warnings: string[]
   suggestions: string[]
+  // Issue #105: structured flags for the planner (#106) and training records (#108)
+  exerciseFlags: ExerciseAnalysisFlag[]
+  globalFlags: GlobalAnalysisFlags
 }
 
 interface LlmResponseBody {
@@ -85,7 +105,7 @@ export async function analyzeProgress(input: ProgressAnalysisInput): Promise<Pro
         messages: [
           {
             role: 'system',
-            content: 'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""]}. Пиши на русском.',
+            content: 'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""],"exerciseFlags":[{"exerciseId":"","exerciseName":"","status":"plateau|trending_up|trending_down|stable|insufficient_data","weeksStagnant":0,"slopePerWeek":0,"recommendation":"swap_exercise|increase_weight|hold_weight|decrease_weight|consolidate|monitor","reason":""}],"globalFlags":{"overtraining":false,"overtrainingReason":"","muscleImbalance":[{"muscleGroup":"","status":"overworked|underworked"}],"recommendedDeload":false}}. Пиши на русском. exerciseFlags — по каждому упражнению из e1RM данных. globalFlags.overtraining=true только если НЕ deload-неделя и e1RM падает при высоком RPE.',
           },
           {
             role: 'user',
@@ -103,9 +123,12 @@ export async function analyzeProgress(input: ProgressAnalysisInput): Promise<Pro
     const content = body?.choices?.[0]?.message?.content
     if (!content) throw new Error('Empty LLM response')
 
-    const parsed = JSON.parse(content) as ProgressAnalysis
+    const parsed = JSON.parse(content) as Partial<ProgressAnalysis>
     parsed.date = input.now.toISOString()
-    return parsed
+    // Issue #105: ensure structured fields exist even if LLM omitted them
+    if (!parsed.exerciseFlags) parsed.exerciseFlags = []
+    if (!parsed.globalFlags) parsed.globalFlags = { overtraining: false, recommendedDeload: false }
+    return parsed as ProgressAnalysis
   } catch (error) {
     console.warn('coachProgressAnalysis LLM failed, using rules:', error instanceof Error ? error.message : error)
     return ruleBasedAnalysis(input)
@@ -201,6 +224,11 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
   const improvements: ProgressAnalysis['improvements'] = []
   const warnings: string[] = []
   const suggestions: string[] = []
+  // Issue #105: structured flags for the planner
+  const exerciseFlags: ExerciseAnalysisFlag[] = []
+  let overtraining = false
+  let overtrainingReason: string | undefined
+  let recommendedDeload = false
 
   // Issue #90: deload-aware e1RM interpretation. A temporary dip during a
   // deload week (or the week right after) is expected and should NOT be
@@ -211,7 +239,17 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
 
   // Check e1RM trends
   for (const e of input.e1rmHistories) {
-    if (e.dataPointCount < 3) continue
+    if (e.dataPointCount < 3) {
+      // Insufficient data — still emit a flag so the planner knows
+      exerciseFlags.push({
+        exerciseId: e.exerciseId,
+        exerciseName: e.exerciseName,
+        status: 'insufficient_data',
+        recommendation: 'monitor',
+        reason: `Мало данных (${e.dataPointCount} точек) для оценки тренда`,
+      })
+      continue
+    }
 
     if (e.trendDirection === 'flat') {
       plateaus.push({
@@ -219,18 +257,63 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
         weeksStagnant: e.dataPointCount,
         recommendation: `e1RM на ${e.exerciseName} не растёт. Рассмотри замену упражнения или изменение схемы подходов.`,
       })
+      exerciseFlags.push({
+        exerciseId: e.exerciseId,
+        exerciseName: e.exerciseName,
+        status: 'plateau',
+        weeksStagnant: e.dataPointCount,
+        slopePerWeek: e.slopePerWeek,
+        recommendation: 'swap_exercise',
+        reason: `e1RM не растёт ${e.dataPointCount} недель — плато, рассмотри замену`,
+      })
     } else if (e.trendDirection === 'down') {
       if (isDeloadPhase) {
         // Expected during deload — surface as informational, not a warning.
         suggestions.push(`${e.exerciseName}: e1RM ниже обычного (${e.slopePerWeek.toFixed(1)} кг/нед), но это разгрузочная неделя — снижение ожидаемо.`)
+        exerciseFlags.push({
+          exerciseId: e.exerciseId,
+          exerciseName: e.exerciseName,
+          status: 'trending_down',
+          slopePerWeek: e.slopePerWeek,
+          recommendation: 'monitor',
+          reason: 'Снижение e1RM в deload-неделю — ожидаемо',
+        })
       } else {
         warnings.push(`${e.exerciseName}: e1RM падает (${e.slopePerWeek.toFixed(1)} кг/нед). Возможна перетренированность.`)
+        overtraining = true
+        overtrainingReason = `${e.exerciseName}: e1RM падает (${e.slopePerWeek.toFixed(1)} кг/нед)`
+        exerciseFlags.push({
+          exerciseId: e.exerciseId,
+          exerciseName: e.exerciseName,
+          status: 'trending_down',
+          slopePerWeek: e.slopePerWeek,
+          recommendation: 'decrease_weight',
+          reason: 'e1RM падает — снизить вес, возможна перетренированность',
+        })
       }
     } else if (e.trendDirection === 'up' && e.slopePerWeek > 0.5) {
       improvements.push({
         exerciseName: e.exerciseName,
         e1rmChangePercent: Math.round((e.slopePerWeek / e.currentBest) * 100 * 10) / 10,
         note: `Хороший прогресс: +${e.slopePerWeek.toFixed(1)} кг/нед.`,
+      })
+      exerciseFlags.push({
+        exerciseId: e.exerciseId,
+        exerciseName: e.exerciseName,
+        status: 'trending_up',
+        slopePerWeek: e.slopePerWeek,
+        recommendation: 'increase_weight',
+        reason: `e1RM растёт +${e.slopePerWeek.toFixed(1)} кг/нед — можно повысить вес`,
+      })
+    } else {
+      // Stable or slow up
+      exerciseFlags.push({
+        exerciseId: e.exerciseId,
+        exerciseName: e.exerciseName,
+        status: 'stable',
+        slopePerWeek: e.slopePerWeek,
+        recommendation: 'hold_weight',
+        reason: 'e1RM стабилен — держать вес',
       })
     }
   }
@@ -247,8 +330,11 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
   }
   if (recentRpes.length > 0) {
     const avgRpe = recentRpes.reduce((a, b) => a + b, 0) / recentRpes.length
-    if (avgRpe > 8.5) {
+    if (avgRpe > 8.5 && !isDeloadPhase) {
       warnings.push(`Средний RPE за 4 недели: ${avgRpe.toFixed(1)}. Высокая усталость — рассмотри разгрузочную неделю.`)
+      overtraining = true
+      if (!overtrainingReason) overtrainingReason = `Средний RPE ${avgRpe.toFixed(1)} — высокая усталость`
+      recommendedDeload = true
     }
   }
 
@@ -263,11 +349,14 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
     }
   }
   const volumes = Object.entries(muscleVolume).sort(([, a], [, b]) => b - a)
+  const muscleImbalance: Array<{ muscleGroup: string; status: 'overworked' | 'underworked' }> = []
   if (volumes.length >= 2) {
     const max = volumes[0][1]
     const min = volumes[volumes.length - 1][1]
     if (max > 0 && min > 0 && max / min > 2.5) {
       suggestions.push(`Дисбаланс объёма: ${volumes[0][0]} (${Math.round(max)}кг) значительно больше ${volumes[volumes.length - 1][0]} (${Math.round(min)}кг).`)
+      muscleImbalance.push({ muscleGroup: volumes[0][0], status: 'overworked' })
+      muscleImbalance.push({ muscleGroup: volumes[volumes.length - 1][0], status: 'underworked' })
     }
   }
 
@@ -302,5 +391,12 @@ function ruleBasedAnalysis(input: ProgressAnalysisInput): ProgressAnalysis {
     improvements,
     warnings,
     suggestions,
+    exerciseFlags,
+    globalFlags: {
+      overtraining,
+      overtrainingReason,
+      muscleImbalance: muscleImbalance.length > 0 ? muscleImbalance : undefined,
+      recommendedDeload,
+    },
   }
 }
