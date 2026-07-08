@@ -406,8 +406,12 @@ export function useWorkoutNavigation({
       ...current,
       [activeWorkoutDay.id]: [...(current[activeWorkoutDay.id] ?? []), extraExercise],
     }))
+    // Issue #101: insert after the current exercise (activeExerciseIndex + 1)
+    // instead of appending to the end. This way the user doesn't have to scroll
+    // past the core finisher to find the exercise they just added.
+    const insertIndex = activeExerciseIndex + 1
     setActiveSessionWorkoutDay((current) => current && current.id === activeWorkoutDay.id
-      ? { ...current, exercises: [...current.exercises, extraExercise] }
+      ? { ...current, exercises: current.exercises.toSpliced(insertIndex, 0, extraExercise) }
       : current,
     )
     setLogs((current) => {
