@@ -16,6 +16,26 @@ vi.mock('./coachDebrief.js', () => ({
 vi.mock('./coachTrainingRecord.js', () => ({
   saveTrainingRecord: vi.fn().mockResolvedValue(undefined),
 }))
+// Issue #91: mock programService so saveWorkoutHistoryEntry can load
+// coachState, userProfile, and exerciseLibrary for training record
+vi.mock('./services/programService.js', () => ({
+  loadCoachStateForUser: vi.fn().mockResolvedValue({
+    readinessScore: 78,
+    recoveryStatus: 'ready',
+    weeklyLoadStatus: 'on_plan',
+    mesocycle: { phase: 'accumulation', weekInCycle: 2, cycleLength: 4 },
+  }),
+  loadUserProfile: vi.fn().mockResolvedValue({
+    age: 43,
+    goal: 'сила',
+    level: 'intermediate',
+    workoutsPerWeek: 3,
+  }),
+  loadExerciseLibrary: vi.fn().mockResolvedValue([
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', repMin: 6, repMax: 8, targetWeight: 50 },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', repMin: 8, repMax: 10, targetWeight: 40 },
+  ]),
+}))
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -216,6 +236,170 @@ describe('saveWorkoutHistoryEntry — issue #94 cache invalidation', () => {
     expect(result).toBeDefined()
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('cache invalidation after save (non-fatal)'),
+      expect.any(String),
+    )
+    errorSpy.mockRestore()
+  })
+})
+
+describe('Issue #91: training record fills 12 previously-empty fields', () => {
+  it('passes real coachState, profile, and exerciseLibrary data to saveTrainingRecord', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary } = await import('./services/programService.js')
+
+    vi.clearAllMocks()
+
+    const client = {
+      query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+    }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-91',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-07T18:09:41.164Z',
+      totalVolume: 4080,
+      qualityScore: 100,
+      exercises: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 47.5,
+          progressionType: 'increase',
+          progressionReason: 'ok',
+          sets: [{ weight: 47.5, reps: 8, rpe: 7, completed: true }],
+        },
+        {
+          exerciseId: 'lat-pulldown',
+          exerciseName: 'Тяга верхнего блока',
+          pain: false,
+          nextRecommendedWeight: 40,
+          progressionType: 'hold',
+          progressionReason: 'ok',
+          sets: [{ weight: 40, reps: 10, rpe: 7, completed: true }],
+        },
+      ],
+    })
+
+    // Verify loadCoachStateForUser, loadUserProfile, loadExerciseLibrary were called
+    expect(loadCoachStateForUser).toHaveBeenCalledWith(expect.anything(), 'vyacheslav')
+    expect(loadUserProfile).toHaveBeenCalledWith(expect.anything(), 'vyacheslav')
+    expect(loadExerciseLibrary).toHaveBeenCalled()
+
+    // Verify saveTrainingRecord was called with real data (not null/''/0)
+    expect(saveTrainingRecord).toHaveBeenCalledTimes(1)
+    const call = vi.mocked(saveTrainingRecord).mock.calls[0]
+    const [, entryArg, coachStateArg, decisionArg, profileArg] = call
+
+    // coachState should NOT be null anymore
+    expect(coachStateArg).not.toBeNull()
+    expect(coachStateArg.readinessScore).toBe(78)
+    expect(coachStateArg.recoveryStatus).toBe('ready')
+    expect(coachStateArg.weeklyLoadStatus).toBe('on_plan')
+    expect(coachStateArg.mesocycle).toEqual({ phase: 'accumulation', weekInCycle: 2, cycleLength: 4 })
+
+    // profile should have real values (not null/undefined)
+    expect(profileArg.age).toBe(43)
+    expect(profileArg.goal).toBe('сила')
+    expect(profileArg.level).toBe('intermediate')
+    expect(profileArg.workoutsPerWeek).toBe(3)
+
+    // decision.exercises should have muscleGroup/repMin/repMax from library
+    expect(decisionArg.exercises[0]).toMatchObject({
+      exerciseId: 'bench-press',
+      muscleGroup: 'Грудь',  // was '' before #91
+      repMin: 6,             // was 0 before #91
+      repMax: 8,             // was 0 before #91
+    })
+    expect(decisionArg.exercises[1]).toMatchObject({
+      exerciseId: 'lat-pulldown',
+      muscleGroup: 'Спина',  // was '' before #91
+      repMin: 8,             // was 0 before #91
+      repMax: 10,            // was 0 before #91
+    })
+
+    // lowReadiness and loadPolicy should be computed from coachState
+    expect(decisionArg.lowReadiness).toBe(false)  // readiness 78 >= 55
+    expect(decisionArg.loadPolicy).toBe('on_plan')  // was 'unknown' before #91
+
+    // entry.exercises should also have muscleGroup from library
+    expect(entryArg.exercises[0].muscleGroup).toBe('Грудь')  // was '' before #91
+    expect(entryArg.exercises[1].muscleGroup).toBe('Спина')  // was '' before #91
+  })
+
+  it('computes lowReadiness=true when readinessScore < 55', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadCoachStateForUser } = await import('./services/programService.js')
+
+    vi.clearAllMocks()
+
+    // Override the mock to return low readiness for this test
+    vi.mocked(loadCoachStateForUser).mockResolvedValue({
+      readinessScore: 45,
+      recoveryStatus: 'low',
+      weeklyLoadStatus: 'overreached',
+      mesocycle: { phase: 'deload', weekInCycle: 4, cycleLength: 4 },
+    })
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-low',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-07T18:09:41.164Z',
+      totalVolume: 1000,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 40,
+        progressionType: 'hold',
+        progressionReason: '',
+        sets: [{ weight: 40, reps: 8, rpe: 7, completed: true }],
+      }],
+    })
+
+    const call = vi.mocked(saveTrainingRecord).mock.calls[0]
+    const decisionArg = call[3]
+    expect(decisionArg.lowReadiness).toBe(true)
+    expect(decisionArg.loadPolicy).toBe('overreached')
+  })
+
+  it('does not fail the workout save if programService load fails (non-fatal)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { loadCoachStateForUser } = await import('./services/programService.js')
+
+    vi.clearAllMocks()
+    vi.mocked(loadCoachStateForUser).mockRejectedValue(new Error('DB connection lost'))
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    const result = await saveWorkoutHistoryEntry(client, {
+      id: 'session-fail',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-07T18:09:41.164Z',
+      totalVolume: 1000,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 40,
+        progressionType: 'hold',
+        progressionReason: '',
+        sets: [{ weight: 40, reps: 8, rpe: 7, completed: true }],
+      }],
+    })
+
+    // Workout should still save successfully — training record failure is non-fatal
+    expect(result).toBeDefined()
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('saveTrainingRecord (non-fatal)'),
       expect.any(String),
     )
     errorSpy.mockRestore()

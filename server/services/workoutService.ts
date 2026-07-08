@@ -7,6 +7,9 @@ import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachD
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { regeneratePlannedWorkout } from './plannedWorkoutService.js'
 import { saveTrainingRecord } from '../coachTrainingRecord.js'
+// Issue #91: load coachState + profile + exercise library to fill the 12
+// empty fields in training_record (was passing null/''/0 before)
+import { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary } from './programService.js'
 
 interface WorkoutSetInput {
   weight?: number
@@ -213,7 +216,36 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   }
 
   // Issue #86: Save training record for future fine-tuning (non-fatal)
+  // Issue #91: load coachState, userProfile, and exerciseLibrary to fill the
+  // 12 fields that were previously null/''/0. Without this, training records
+  // are useless for fine-tuning — the model can't learn "state X → plan Y"
+  // when state X is all fallback values.
   try {
+    const [coachStateForRecord, userProfileForRecord, exerciseLibraryForRecord] = await Promise.all([
+      loadCoachStateForUser(client, sanitizedEntry.userId!),
+      loadUserProfile(client, sanitizedEntry.userId!),
+      loadExerciseLibrary(client),
+    ])
+
+    // Build a lookup map: exerciseId → { muscleGroup, repMin, repMax }
+    // so we can fill the decision.exercises[] fields that were hardcoded ''
+    const libraryMap = new Map<string, { muscleGroup: string; repMin: number; repMax: number }>()
+    for (const libExercise of exerciseLibraryForRecord) {
+      const id = String((libExercise as { id?: string }).id ?? '')
+      if (id) {
+        libraryMap.set(id, {
+          muscleGroup: String((libExercise as { muscleGroup?: string }).muscleGroup ?? ''),
+          repMin: Number((libExercise as { repMin?: number }).repMin ?? 0),
+          repMax: Number((libExercise as { repMax?: number }).repMax ?? 0),
+        })
+      }
+    }
+
+    // Compute lowReadiness and loadPolicy from coachState
+    const readinessScore = coachStateForRecord?.readinessScore ?? 70
+    const lowReadiness = readinessScore < 55 || coachStateForRecord?.recoveryStatus === 'low'
+    const loadPolicy = coachStateForRecord?.weeklyLoadStatus ?? 'unknown'
+
     await saveTrainingRecord(
       client,
       {
@@ -232,30 +264,36 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
           nextRecommendedWeight: e.nextRecommendedWeight,
           progressionType: e.progressionType ?? 'hold',
           progressionReason: e.progressionReason ?? '',
-          muscleGroup: '',
+          muscleGroup: libraryMap.get(e.exerciseId ?? '')?.muscleGroup ?? '',
         })) as unknown as WorkoutHistoryEntry['exercises'],
       },
-      // coachState from coachPlan (computed during planAndApplyNextWorkout)
-      null, // coachState is computed inside coachPlanningService, not available here
-      // Use the debrief exercises as the "decision" (what was prescribed)
+      // Issue #91: pass real coachState instead of null
+      coachStateForRecord as unknown as Parameters<typeof saveTrainingRecord>[2],
+      // Issue #91: fill decision.exercises with muscleGroup/repMin/repMax from
+      // exercise_library (was hardcoded '' and 0)
       {
-        exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
-          exerciseId: e.exerciseId ?? '',
-          exerciseName: e.exerciseName ?? '',
-          muscleGroup: '',
-          setsCount: (e.sets ?? []).length,
-          repMin: 0,
-          repMax: 0,
-          targetWeight: e.nextRecommendedWeight ?? 0,
-        })),
-        lowReadiness: false,
-        loadPolicy: 'unknown',
+        exercises: (sanitizedEntry.exercises ?? []).map((e) => {
+          const lib = libraryMap.get(e.exerciseId ?? '')
+          return {
+            exerciseId: e.exerciseId ?? '',
+            exerciseName: e.exerciseName ?? '',
+            muscleGroup: lib?.muscleGroup ?? '',
+            setsCount: (e.sets ?? []).length,
+            repMin: lib?.repMin ?? 0,
+            repMax: lib?.repMax ?? 0,
+            targetWeight: e.nextRecommendedWeight ?? 0,
+          }
+        }),
+        // Issue #91: compute from coachState instead of hardcoding
+        lowReadiness,
+        loadPolicy,
       },
+      // Issue #91: pass real profile instead of all-null
       {
-        age: null,
-        goal: undefined,
-        level: undefined,
-        workoutsPerWeek: undefined,
+        age: userProfileForRecord.age ?? null,
+        goal: userProfileForRecord.goal || undefined,
+        level: userProfileForRecord.level || undefined,
+        workoutsPerWeek: userProfileForRecord.workoutsPerWeek || undefined,
       },
     )
   } catch (err) {
