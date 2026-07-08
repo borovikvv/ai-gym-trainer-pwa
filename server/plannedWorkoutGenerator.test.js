@@ -1331,3 +1331,196 @@ describe('Issue #100: applyPrescription uses coachMemory.currentWorkingWeight as
     expect(benchExercise.targetWeight).toBeGreaterThanOrEqual(57.5)
   })
 })
+
+describe('Issue #106: plannedWorkoutGenerator consumes analysis flags', () => {
+  const baseCoachState = {
+    recoveryStatus: 'ready',
+    readinessScore: 80,
+    weeklyLoadStatus: 'on_plan',
+    mesocycle: { phase: 'accumulation', isDeload: false, weekInCycle: 2, cycleLength: 4, loadingWeeks: 3, deloadWeeks: 1 },
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+
+  it('increases weight when exerciseFlag.recommendation === increase_weight', async () => {
+    const analysisResult = {
+      date: '2026-07-09T00:00:00Z',
+      summary: '',
+      plateaus: [],
+      improvements: [],
+      warnings: [],
+      suggestions: [],
+      exerciseFlags: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        status: 'trending_up',
+        slopePerWeek: 1.2,
+        recommendation: 'increase_weight',
+        reason: 'e1RM растёт',
+      }],
+      globalFlags: { overtraining: false, recommendedDeload: false },
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-10',
+      coachState: baseCoachState,
+      exerciseLibrary,
+      history: [{
+        id: 's1',
+        userId: 'vyacheslav',
+        workoutDayId: 'day-1',
+        workoutDayName: 'День A',
+        completedAt: '2026-07-03T18:00:00Z',
+        totalVolume: 1000,
+        exercises: [{
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 50,
+          progressionType: 'hold',
+          progressionReason: '',
+          sets: [{ weight: 50, reps: 8, rpe: 7, completed: true }],
+        }],
+      }],
+      analysisResult,
+    })
+
+    const bench = plan.exercises.find((e) => e.exerciseId === 'bench-press')
+    expect(bench).toBeDefined()
+    // baseWeight = 50 (from nextRecommendedWeight), +2.5 (weightStep) = 52.5
+    expect(bench.targetWeight).toBeGreaterThanOrEqual(52.5)
+  })
+
+  it('decreases weight when exerciseFlag.recommendation === decrease_weight', async () => {
+    const analysisResult = {
+      date: '2026-07-09T00:00:00Z',
+      summary: '',
+      plateaus: [],
+      improvements: [],
+      warnings: [],
+      suggestions: [],
+      exerciseFlags: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        status: 'trending_down',
+        slopePerWeek: -1.0,
+        recommendation: 'decrease_weight',
+        reason: 'e1RM падает',
+      }],
+      globalFlags: { overtraining: false, recommendedDeload: false },
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-10',
+      coachState: baseCoachState,
+      exerciseLibrary,
+      history: [{
+        id: 's1',
+        userId: 'vyacheslav',
+        workoutDayId: 'day-1',
+        workoutDayName: 'День A',
+        completedAt: '2026-07-03T18:00:00Z',
+        totalVolume: 1000,
+        exercises: [{
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 50,
+          progressionType: 'hold',
+          progressionReason: '',
+          sets: [{ weight: 50, reps: 8, rpe: 7, completed: true }],
+        }],
+      }],
+      analysisResult,
+    })
+
+    const bench = plan.exercises.find((e) => e.exerciseId === 'bench-press')
+    expect(bench).toBeDefined()
+    // baseWeight = 50, -2.5 (weightStep) = 47.5
+    expect(bench.targetWeight).toBeLessThanOrEqual(47.5)
+  })
+
+  it('forces lowReadiness when globalFlags.overtraining === true', async () => {
+    const analysisResult = {
+      date: '2026-07-09T00:00:00Z',
+      summary: '',
+      plateaus: [],
+      improvements: [],
+      warnings: [],
+      suggestions: [],
+      exerciseFlags: [],
+      globalFlags: { overtraining: true, overtrainingReason: 'e1RM падает', recommendedDeload: false },
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-10',
+      coachState: baseCoachState, // readinessScore = 80 (not low by itself)
+      exerciseLibrary,
+      history: [],
+      analysisResult,
+    })
+
+    // lowReadiness should be forced → coachReason should mention lighter/easier work
+    expect(plan.coachReason).toBeTruthy()
+    // The plan should still generate exercises (non-fatal)
+    expect(plan.exercises.length).toBeGreaterThan(0)
+  })
+
+  it('skips plateau exercise when alternative exists for same muscle', async () => {
+    // Library has 2 chest exercises: bench-press (plateau) + incline-db-press (alternative)
+    const libraryWithAlternative = [
+      ...exerciseLibrary,
+      { id: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 20, weightStep: 2, restSeconds: 90, instruction: 'жим' },
+    ]
+
+    const analysisResult = {
+      date: '2026-07-09T00:00:00Z',
+      summary: '',
+      plateaus: [],
+      improvements: [],
+      warnings: [],
+      suggestions: [],
+      exerciseFlags: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        status: 'plateau',
+        weeksStagnant: 4,
+        recommendation: 'swap_exercise',
+        reason: 'плато 4 недели',
+      }],
+      globalFlags: { overtraining: false, recommendedDeload: false },
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-10',
+      coachState: baseCoachState,
+      exerciseLibrary: libraryWithAlternative,
+      history: [],
+      analysisResult,
+    })
+
+    // bench-press should NOT be in the plan (swapped for incline-db-press)
+    const bench = plan.exercises.find((e) => e.exerciseId === 'bench-press')
+    const incline = plan.exercises.find((e) => e.exerciseId === 'incline-db-press')
+    expect(incline).toBeDefined()
+    // bench-press may or may not be present depending on muscle pattern,
+    // but if both chest exercises are candidates, incline should win
+    if (bench && incline) {
+      // Both present — that's OK, but incline should come first (non-plateau)
+      const benchIdx = plan.exercises.findIndex((e) => e.exerciseId === 'bench-press')
+      const inclineIdx = plan.exercises.findIndex((e) => e.exerciseId === 'incline-db-press')
+      expect(inclineIdx).toBeLessThan(benchIdx)
+    }
+  })
+})

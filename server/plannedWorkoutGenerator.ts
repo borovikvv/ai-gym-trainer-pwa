@@ -24,6 +24,8 @@ import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
 import { russianWeekdayName } from './utils.js'
 import { generateCoachNarration } from './coachNarrator.js'
+// Issue #106: consume structured analysis flags from coachProgressAnalysis (#105)
+import type { ProgressAnalysis, ExerciseAnalysisFlag } from './coachProgressAnalysis.js'
 
 
 // ---------------------------------------------------------------------------
@@ -159,6 +161,8 @@ interface BuildGeneratedPlannedWorkoutInput {
   exerciseLibrary?: LibraryExerciseInput[]
   history?: WorkoutHistoryEntry[]
   previousGeneratedWorkouts?: PreviousGeneratedWorkout[]
+  // Issue #106: structured analysis flags from coachProgressAnalysis (#105)
+  analysisResult?: ProgressAnalysis | null
 }
 
 interface GeneratedExercise {
@@ -228,6 +232,8 @@ interface ChooseBestExerciseParams {
   lowReadiness: boolean
   preferences: NormalizedPreferences
   weeklyContext: WeeklyContext
+  // Issue #106: skip plateau exercises when alternatives exist
+  exerciseFlags?: ExerciseAnalysisFlag[]
 }
 
 interface ApplyPrescriptionParams {
@@ -241,6 +247,8 @@ interface ApplyPrescriptionParams {
   preferences?: NormalizedPreferences
   weeklyContext?: WeeklyContext
   userTrainingPolicy?: UserTrainingPolicyForGenerator | null
+  // Issue #106: react to per-exercise analysis flags
+  exerciseFlag?: ExerciseAnalysisFlag | null
 }
 
 interface EnsureCoreFinisherParams {
@@ -271,6 +279,7 @@ export async function buildGeneratedPlannedWorkout({
   exerciseLibrary = [],
   history = [],
   previousGeneratedWorkouts = [],
+  analysisResult = null,
 }: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
@@ -284,17 +293,26 @@ export async function buildGeneratedPlannedWorkout({
   const recoveryStatus = String(coachState?.recoveryStatus ?? 'ready')
   const calendarRecoveryLimited = Number.isFinite(weeklyContext.daysSincePreviousWorkout) && weeklyContext.daysSincePreviousWorkout! > 0 && weeklyContext.daysSincePreviousWorkout! <= 1
   const calendarLoadLimited = weeklyContext.calendarLoadStatus === 'above_user_calendar'
-  const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited
+  // Issue #106: globalFlags.overtraining forces lowReadiness even if the
+  // coachState readinessScore is OK — the analysis detected e1RM dropping
+  // or sustained high RPE.
+  const analysisOvertraining = Boolean(analysisResult?.globalFlags?.overtraining)
+  const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited || analysisOvertraining
   const targetMinutes = Number(profile?.targetWorkoutMinutes ?? 60)
   const exerciseTarget = targetExerciseCount({ targetMinutes, preferences })
   const targetPattern = chooseTargetPattern(coachState, preferences, decision, lowReadiness, scheduledDate, previousGeneratedWorkouts)
 
+  // Issue #106: lookup map for per-exercise flags
+  const exerciseFlags = analysisResult?.exerciseFlags ?? []
+  const findFlag = (exerciseId: string): ExerciseAnalysisFlag | null =>
+    exerciseFlags.find((f) => f.exerciseId === exerciseId) ?? null
+
   const selected: GeneratedExercise[] = []
   const usedExerciseIds = new Set<string>()
   for (const muscleKey of targetPattern) {
-    const candidate = chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision: decision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext })
+    const candidate = chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision: decision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext, exerciseFlags })
     if (!candidate) continue
-    selected.push(applyPrescription({ exercise: candidate, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy }))
+    selected.push(applyPrescription({ exercise: candidate, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, exerciseFlag: findFlag(candidate.id) }))
     usedExerciseIds.add(candidate.id)
     if (selected.length >= exerciseTarget) break
   }
@@ -309,7 +327,7 @@ export async function buildGeneratedPlannedWorkout({
       .filter((exercise) => !isHighFatigue(exercise.muscleKey, coachState))
       .sort((a, b) => exerciseScore(b, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, decision) - exerciseScore(a, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, decision))
     for (const exercise of fillers) {
-      selected.push(applyPrescription({ exercise, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy }))
+      selected.push(applyPrescription({ exercise, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, exerciseFlag: findFlag(exercise.id) }))
       usedExerciseIds.add(exercise.id)
       if (selected.length >= exerciseTarget) break
     }
@@ -421,6 +439,8 @@ function ensureCoreFinisher({ selected, library, coachState, coachMemory, decisi
     preferences,
     weeklyContext,
     userTrainingPolicy,
+    // Issue #106: pass analysis flag for the core exercise (if any)
+    exerciseFlag: null, // core finisher is not in the analysis exerciseFlags
   })
   if (current.length <= exerciseTarget) return [...current, coreExercise]
 
@@ -588,8 +608,15 @@ function chooseTargetPattern(
   return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
 }
 
-function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext }: ChooseBestExerciseParams): NormalizedLibraryExercise | null {
+function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext, exerciseFlags = [] }: ChooseBestExerciseParams): NormalizedLibraryExercise | null {
   if (isRecoveryRestricted(muscleKey, weeklyContext) || isCoachMemoryRestricted(muscleKey, coachMemory) || coachDecision?.avoidMuscleGroups?.includes(muscleKey)) return null
+  // Issue #106: build a set of plateau exercise ids (recommendation =
+  // swap_exercise) so we can skip them IF alternatives exist for this muscle
+  const plateauIds = new Set(
+    exerciseFlags
+      .filter((f) => f.recommendation === 'swap_exercise')
+      .map((f) => f.exerciseId),
+  )
   const candidates = library
     .filter((exercise) => exercise.muscleKey === muscleKey)
     .filter((exercise) => !usedExerciseIds.has(exercise.id))
@@ -597,10 +624,13 @@ function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemo
     .filter((exercise) => !isCoachDecisionRestricted(exercise, coachDecision))
     .filter((exercise) => lowReadiness ? !isHighFatigue(exercise.muscleKey, coachState) : true)
     .sort((a, b) => exerciseScore(b, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, coachDecision) - exerciseScore(a, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, coachDecision))
-  return candidates[0] ?? null
+  // Issue #106: prefer non-plateau candidates; only fall back to a plateau
+  // exercise if no alternative exists for this muscle group
+  const nonPlateau = candidates.filter((c) => !plateauIds.has(c.id))
+  return nonPlateau[0] ?? candidates[0] ?? null
 }
 
-function applyPrescription({ exercise, profile, coachState, coachMemory = null, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null }: ApplyPrescriptionParams): GeneratedExercise {
+function applyPrescription({ exercise, profile, coachState, coachMemory = null, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null, exerciseFlag = null }: ApplyPrescriptionParams): GeneratedExercise {
   const recent = latestExerciseHistory(history, exercise.id)
   const historicWeight = Number(recent?.nextRecommendedWeight ?? NaN)
   // Issue #100: use currentWorkingWeight from coachMemory as a fallback.
@@ -628,9 +658,37 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   const policy = coachDecision?.exercisePolicies?.[exercise.id]
   const shouldConsolidate = policy === 'consolidate'
   let targetWeight = roundWeight(lowReadiness && baseWeight > 0 && !hasRecentWorkingWeight ? Math.max(0, baseWeight - exercise.weightStep) : baseWeight)
+
+  // Issue #106: react to per-exercise analysis flags from #105.
+  // These override the default weight progression based on e1RM trends.
+  if (exerciseFlag) {
+    const step = Math.max(0, Number(exercise.weightStep ?? 2.5))
+    switch (exerciseFlag.recommendation) {
+      case 'increase_weight':
+        // e1RM trending up — push the weight one step above the base
+        if (targetWeight > 0) targetWeight = roundWeight(targetWeight + step)
+        break
+      case 'decrease_weight':
+        // e1RM trending down (non-deload) — back off one step
+        if (targetWeight > 0) targetWeight = roundWeight(Math.max(0, targetWeight - step))
+        break
+      case 'consolidate':
+        // Hold the weight, don't increase, keep intensity easy
+        // (targetWeight stays at baseWeight, intensityTarget forced easy via flagConsolidate below)
+        break
+      case 'hold_weight':
+      case 'monitor':
+      case 'swap_exercise':
+        // swap_exercise should not reach here (filtered in chooseBestExerciseForMuscle),
+        // but if it does (no alternative), just hold the weight
+        break
+    }
+  }
   const restSeconds = lowReadiness ? Math.min(120, Math.max(60, exercise.restSeconds)) : exercise.restSeconds
   const noFailurePolicy = userTrainingPolicy?.allowFailureSets === false
-  let intensityTarget = lowReadiness || shouldConsolidate || noFailurePolicy || preferences.intensityTolerance === 'avoid_max'
+  // Issue #106: consolidate flag from analysis also forces easy intensity
+  const flagConsolidate = exerciseFlag?.recommendation === 'consolidate'
+  let intensityTarget = lowReadiness || shouldConsolidate || flagConsolidate || noFailurePolicy || preferences.intensityTolerance === 'avoid_max'
     ? 'easy'
     : preferences.intensityTolerance === 'rare_max'
       ? 'controlled'
