@@ -142,53 +142,59 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
       <ScreenHeader eyebrow="Прогресс" title="Динамика" />
       <span className="sr-only">Панель динамики</span>
 
-      {/* Issue #84: AI progress analysis */}
+      {/* Issue #84: AI progress analysis — Issue #104: collapsed into review-row */}
       {(analysis || analysisLoading) && (
         <SectionList title="Анализ тренера">
           {analysisLoading && <div className="muted">Анализирую прогресс...</div>}
           {analysis && (
             <div className="card coach-analysis-card">
-              <p>{analysis.summary}</p>
-              {analysis.plateaus.length > 0 && (
-                <div className="top-gap">
-                  {analysis.plateaus.map((p, i) => (
-                    <div key={i} className="coach-analysis-item coach-analysis-item--warning">
-                      <b>Плато: {p.exerciseName}</b>
-                      <div className="muted">{p.recommendation}</div>
-                    </div>
-                  ))}
-                </div>
+              {analysis.summary && (
+                <details className="review-row" open>
+                  <summary>
+                    <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
+                    <span className="review-row__title">Сводка</span>
+                  </summary>
+                  <p className="review-row__body">{analysis.summary}</p>
+                </details>
               )}
-              {analysis.improvements.length > 0 && (
-                <div className="top-gap">
-                  {analysis.improvements.map((imp, i) => (
-                    <div key={i} className="coach-analysis-item coach-analysis-item--good">
-                      <b>Рост: {imp.exerciseName} (+{imp.e1rmChangePercent}%/нед)</b>
-                      <div className="muted">{imp.note}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {analysis.warnings.length > 0 && (
-                <div className="top-gap">
-                  {analysis.warnings.map((w, i) => (
-                    <div key={i} className="coach-analysis-item coach-analysis-item--danger">
-                      <b>Внимание</b>
-                      <div className="muted">{w}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {analysis.suggestions.length > 0 && (
-                <div className="top-gap">
-                  {analysis.suggestions.map((s, i) => (
-                    <div key={i} className="coach-analysis-item">
-                      <b>Совет</b>
-                      <div className="muted">{s}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {analysis.plateaus.map((p, i) => (
+                <details key={`plat-${i}`} className="review-row">
+                  <summary>
+                    <span className="review-row__dot review-row__dot--medium" aria-hidden="true" />
+                    <span className="review-row__title">Плато: {p.exerciseName}</span>
+                    <span className="review-row__meta">{p.weeksStagnant} нед</span>
+                  </summary>
+                  <p className="review-row__body">{p.recommendation}</p>
+                </details>
+              ))}
+              {analysis.improvements.map((imp, i) => (
+                <details key={`imp-${i}`} className="review-row">
+                  <summary>
+                    <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
+                    <span className="review-row__title">Рост: {imp.exerciseName}</span>
+                    <span className="review-row__meta">+{imp.e1rmChangePercent}%/нед</span>
+                  </summary>
+                  <p className="review-row__body">{imp.note}</p>
+                </details>
+              ))}
+              {analysis.warnings.map((w, i) => (
+                <details key={`warn-${i}`} className="review-row">
+                  <summary>
+                    <span className="review-row__dot review-row__dot--high" aria-hidden="true" />
+                    <span className="review-row__title">Внимание</span>
+                  </summary>
+                  <p className="review-row__body">{w}</p>
+                </details>
+              ))}
+              {analysis.suggestions.map((s, i) => (
+                <details key={`sug-${i}`} className="review-row">
+                  <summary>
+                    <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
+                    <span className="review-row__title">Совет</span>
+                  </summary>
+                  <p className="review-row__body">{s}</p>
+                </details>
+              ))}
             </div>
           )}
         </SectionList>

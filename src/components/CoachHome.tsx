@@ -297,25 +297,34 @@ export function CoachHome({
         ]}
       />
 
-      {/* Issue #85: AI weekly program review */}
+      {/* Issue #85: AI weekly program review — Issue #104: collapsed into review-row */}
       {programReview && programReview.changes.length > 0 && (
         <SectionList title="Недельный разбор">
           <div className="card program-review-card">
             <div className="program-review-card__header">
               <ClipboardList size={18} aria-hidden="true" />
-              <p>{programReview.summary}</p>
+              <p>{shortTitle(programReview.summary)}</p>
+              <span className="review-row__meta">{programReview.changes.length} правок</span>
             </div>
             {programReview.changes.map((change, i) => (
-              <div key={i} className={`program-review-change program-review-change--${change.priority}`}>
-                <b>{change.description}</b>
-                <div className="muted">{change.rationale}</div>
-              </div>
+              <details key={i} className="review-row">
+                <summary>
+                  <span className={`review-row__dot review-row__dot--${change.priority}`} aria-hidden="true" />
+                  <span className="review-row__title">{shortTitle(change.description)}</span>
+                  <span className="review-row__meta">{change.type}</span>
+                </summary>
+                <p className="review-row__body">{change.rationale}</p>
+              </details>
             ))}
             {programReview.nextWeekFocus && (
-              <div className="program-review-card__focus">
-                <span className="label">Фокус следующей недели</span>
-                <b>{programReview.nextWeekFocus}</b>
-              </div>
+              <details className="review-row">
+                <summary>
+                  <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
+                  <span className="review-row__title">Фокус недели</span>
+                  <span className="review-row__meta">фокус</span>
+                </summary>
+                <p className="review-row__body">{programReview.nextWeekFocus}</p>
+              </details>
             )}
           </div>
         </SectionList>
@@ -372,4 +381,14 @@ export function CoachHome({
       )}
     </section>
   )
+}
+
+// Issue #104: shortTitle — first ~40 chars up to the first period, for
+// scannable one-line review rows instead of full paragraphs.
+function shortTitle(text: string): string {
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) return ''
+  const dotIndex = trimmed.indexOf('.')
+  const short = dotIndex > 0 && dotIndex <= 50 ? trimmed.slice(0, dotIndex) : trimmed
+  return short.length > 40 ? short.slice(0, 40).trim() + '…' : short
 }
