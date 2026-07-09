@@ -146,31 +146,29 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
       {/* Issue #108: "Что изменил тренер" — shows decision.changes from the
           latest training record. Replaces the old "Анализ тренера" section
           which showed raw diagnosis (plateaus/warnings) that the coach now
-          handles internally (#105-#107). */}
+          handles internally (#105-#107).
+          Issue #113: filter out 'hold' (no change) — it's noise, not signal. */}
       {(coachChanges || changesLoading) && (
         <SectionList title="Что изменил тренер">
           {changesLoading && <div className="muted">Загрузка...</div>}
-          {coachChanges && coachChanges.changes.length > 0 && (
-            <div className="card coach-analysis-card">
-              {coachChanges.summary && (
-                <p className="muted" style={{ marginBottom: 8 }}>{coachChanges.summary}</p>
-              )}
-              {coachChanges.changes.map((change, i) => {
-                const icons: Record<string, string> = {
-                  swap: '🔄',
-                  weight_increase: '↑',
-                  weight_decrease: '↓',
-                  volume_change: '±',
-                  hold: '=',
-                }
-                const labels: Record<string, string> = {
-                  swap: 'Замена',
-                  weight_increase: 'Вес повышен',
-                  weight_decrease: 'Вес снижен',
-                  volume_change: 'Объём изменён',
-                  hold: 'Без изменений',
-                }
-                return (
+          {coachChanges && (() => {
+            // Issue #113: only show real changes, not 'hold'
+            const realChanges = coachChanges.changes.filter((c) => c.type !== 'hold')
+            if (realChanges.length === 0) {
+              return <div className="muted">Замечаний нет — тренер доволен прогрессом.</div>
+            }
+            const labels: Record<string, string> = {
+              swap: 'Замена',
+              weight_increase: 'Вес повышен',
+              weight_decrease: 'Вес снижен',
+              volume_change: 'Объём изменён',
+            }
+            return (
+              <div className="card coach-analysis-card">
+                {coachChanges.summary && (
+                  <p className="muted" style={{ marginBottom: 8 }}>{coachChanges.summary}</p>
+                )}
+                {realChanges.map((change, i) => (
                   <details key={i} className="review-row">
                     <summary>
                       <span className={`review-row__dot ${
@@ -182,12 +180,12 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
                       <span className="review-row__title">{change.details}</span>
                       <span className="review-row__meta">{labels[change.type] ?? change.type}</span>
                     </summary>
-                    <p className="review-row__body">{icons[change.type] ?? '·'} {change.details} ({coachChanges.source === 'llm' ? 'ИИ-тренер' : 'правила'})</p>
+                    <p className="review-row__body">{change.details} ({coachChanges.source === 'llm' ? 'ИИ-тренер' : 'правила'})</p>
                   </details>
-                )
-              })}
-            </div>
-          )}
+                ))}
+              </div>
+            )
+          })()}
           {coachChanges && coachChanges.changes.length === 0 && (
             <div className="muted">Первая тренировка — тренер собирает данные.</div>
           )}
