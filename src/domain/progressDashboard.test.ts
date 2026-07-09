@@ -141,7 +141,7 @@ describe('buildProgressDashboard', () => {
     expect(dashboard.exerciseStatuses.map((item) => item.exerciseName)).toEqual(['Жим лёжа', 'Тяга верхнего блока', 'Планка'])
     expect(dashboard.exerciseStatuses[0]).toMatchObject({ status: 'закрепляем', lastResult: '40×6', nextTarget: '40 кг' })
     expect(dashboard.exerciseStatuses[1]).toMatchObject({ status: 'можно повысить', nextTarget: '37.5 кг' })
-    expect(dashboard.exerciseStatuses[2]).toMatchObject({ status: 'застой', lastResult: '60 сек', nextTarget: 'время/вес тела' })
+    expect(dashboard.exerciseStatuses[2]).toMatchObject({ status: 'застой', lastResult: '60 сек', nextTarget: 'вес тела' })
 
     expect(dashboard.coachDecisions[0]).toMatchObject({ title: 'Жим лёжа', source: 'правила прогрессии' })
     expect(dashboard.recentWorkouts[0].title).toBe('04.06 · День A')

@@ -122,7 +122,7 @@ function CompletedSetCard({
   return (
     <div className="set set-collapsed completed">
       <div className="set-head">
-        <b>Подход {setNumber} · {timed ? `${reps} сек` : `${formatWeight(weight)}×${reps}`} · {difficultyLabel(rpe).toLowerCase()}</b>
+        <b>Подход {setNumber} · {timed ? `${reps} сек` : weight > 0 ? `${formatWeight(weight)}×${reps}` : `${reps} повт.`} · {difficultyLabel(rpe).toLowerCase()}</b>
         <div className="set-actions">
           <button className="secondary compact" onClick={editCompletedSet} aria-label={`Редактировать подход ${setNumber}`}>править</button>
           {canRemove && <button className="secondary compact" onClick={removeSet} aria-label={`Удалить подход ${setNumber}`}>удалить</button>}

@@ -3,6 +3,8 @@ import type { CompletedExerciseHistory, WorkoutHistoryEntry } from './workoutHis
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildAllExerciseE1RMHistories, sparklineData, trendDescription, type ExerciseE1RMHistory } from './estimatedOneRepMax'
 import { isAssistedExercise } from '../lib/muscleGroups'
+// Issue #109: use isTimedExercise to distinguish timed (plank) from bodyweight (push-up)
+import { isTimedExercise } from './exerciseMetrics'
 
 export type ExerciseProgressStatus = 'растёт' | 'можно повысить' | 'закрепляем' | 'застой' | 'перегрузка' | 'была боль' | 'нет данных'
 
@@ -176,11 +178,19 @@ function exerciseStatus(exercise: CompletedExerciseHistory | undefined): Exercis
 function completedSetsSummary(exercise: CompletedExerciseHistory) {
   const completedSets = exercise.sets.filter((set) => set.completed && set.reps > 0)
   if (completedSets.length === 0) return 'нет выполненных подходов'
-  return completedSets.map((set) => set.weight > 0 ? `${formatNumber(set.weight)}×${set.reps}` : `${set.reps} сек`).join(' / ')
+  // Issue #109: check isTimedExercise by name, not by weight === 0.
+  // Bodyweight exercises (push-ups, pull-ups) have weight=0 but are
+  // rep-based, not timed. Only plank/dead-bug should show 'сек'.
+  const isTimed = isTimedExercise({ id: exercise.exerciseId, name: exercise.exerciseName, muscleGroup: exercise.muscleGroup ?? '' })
+  return completedSets.map((set) => {
+    if (isTimed) return `${set.reps} сек`
+    if (set.weight > 0) return `${formatNumber(set.weight)}×${set.reps}`
+    return `${set.reps}` // bodyweight rep-based (push-ups, etc.)
+  }).join(' / ')
 }
 
 function weightLabel(weight: number) {
-  return weight > 0 ? `${formatNumber(weight)} кг` : 'время/вес тела'
+  return weight > 0 ? `${formatNumber(weight)} кг` : 'вес тела'
 }
 
 function formatNumber(value: number) {

@@ -3,6 +3,8 @@ import type { ReadinessCheckIn } from './readinessCheckIn'
 import { calculateProgression, type WorkoutSetInput } from './progression'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildWorkoutDebrief } from './workoutDebrief'
+// Issue #109: use isTimedExercise to distinguish timed (plank) from bodyweight (push-up)
+import { isTimedExercise } from './exerciseMetrics'
 
 // Issue #98 PR3: CompletedExerciseHistory and WorkoutHistoryEntry unified
 // in shared/types.ts. Re-export for backward compatibility.
@@ -95,7 +97,11 @@ export function summarizeExerciseHistory(history: WorkoutHistoryEntry[], exercis
       if (!exercise) return []
       const bestSet = bestSetByWeightThenReps(exercise.sets)
       if (!bestSet) return []
-      if (bestSet.weight === 0) return `${formatDate(workout.completedAt)} · ${bestSet.reps} сек · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
+      // Issue #109: check isTimedExercise instead of weight === 0.
+      // Bodyweight exercises (push-ups) have weight=0 but are rep-based.
+      const isTimed = isTimedExercise({ id: exercise.exerciseId, name: exercise.exerciseName, muscleGroup: exercise.muscleGroup ?? '' })
+      if (isTimed) return `${formatDate(workout.completedAt)} · ${bestSet.reps} сек · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
+      if (bestSet.weight === 0) return `${formatDate(workout.completedAt)} · ${bestSet.reps} повт. · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
       return `${formatDate(workout.completedAt)} · ${formatNumber(bestSet.weight)} кг · ${bestSet.reps} повт. · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
     })
 }
