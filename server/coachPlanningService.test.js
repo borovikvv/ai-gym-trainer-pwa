@@ -88,6 +88,8 @@ describe('coach planning service', () => {
     // Mock fetch that never resolves within test timeframe — AbortController
     // will abort it after LLM_TIMEOUT_MS (5s). Use fake timers to avoid
     // actually waiting 5s.
+    // Issue #107: planAndApplyNextWorkout now also calls analyzeProgress
+    // which makes its own LLM call. Both will timeout and fall back to rules.
     vi.useFakeTimers()
     const fetchMock = vi.fn().mockImplementation((_url, opts) => {
       // Return a promise that never resolves on its own; the abort signal
@@ -120,8 +122,9 @@ describe('coach planning service', () => {
       ],
     })
 
-    // Fast-forward past the 5s timeout
-    await vi.advanceTimersByTimeAsync(5100)
+    // Issue #107: advance past BOTH timeouts — analyzeProgress (5s) and
+    // requestLlmCoachPlan (5s). They run sequentially, so 11s covers both.
+    await vi.advanceTimersByTimeAsync(11000)
     const result = await planPromise
 
     // LLM was called but timed out — we should get a rules-based plan back
@@ -137,5 +140,77 @@ describe('coach planning service', () => {
 
     vi.useRealTimers()
     warn.mockRestore()
+  })
+
+  it('Issue #107: LLM plan is used when valid (not replaced by rules)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
+
+    // Mock analyzeProgress to return quickly (rules-based, no LLM)
+    // by stubbing fetch: first call (analyzeProgress) returns empty analysis,
+    // second call (coach plan) returns a valid LLM plan.
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        // analyzeProgress LLM call — return minimal analysis
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({
+              summary: 'OK',
+              plateaus: [], improvements: [], warnings: [], suggestions: [],
+              exerciseFlags: [],
+              globalFlags: { overtraining: false, recommendedDeload: false },
+            }) } }],
+          }),
+        })
+      }
+      // LLM coach plan call — return a plan with source='llm'
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({
+            summary: 'LLM план: увеличить вес тяги',
+            source: 'llm',
+            changes: [{
+              programExerciseId: 'pe-row',
+              targetWeight: 45,
+              setsCount: 3,
+              repMin: 8,
+              repMax: 10,
+              restSeconds: 120,
+              todayGoal: '45×8/45×8/45×8',
+              coachFocus: 'LLM: работаем на силу',
+            }],
+            warnings: [],
+          }) } }],
+        }),
+      })
+    }))
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+    const result = await planAndApplyNextWorkout(client, {
+      id: 'session-llm',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      completedAt: '2026-06-08T12:00:00.000Z',
+      exercises: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          nextRecommendedWeight: 52.5,
+          sets: [{ weight: 50, reps: 6, rpe: 8, completed: true }],
+        },
+      ],
+    })
+
+    // LLM plan should be used — source='llm', not 'rules'
+    expect(result).not.toBeNull()
+    expect(result.source).toBe('llm')
+    expect(result.changes.length).toBeGreaterThan(0)
+    // The LLM-specified weight should be used (after clamping)
+    expect(result.changes[0].targetWeight).toBe(45)
+    expect(result.changes[0].coachFocus).toContain('LLM')
   })
 })

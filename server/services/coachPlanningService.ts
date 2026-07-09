@@ -6,6 +6,10 @@ import { COACH_PERSONA, buildCoachPrompt, buildSafeCoachPlan, clampCoachPlanToNe
 import { computeCoachState } from '../coachState.js'
 import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecisionLog.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
+// Issue #107: LLM prompt includes analysis flags so it can reason about plateaus/overtraining
+import { analyzeProgress } from '../coachProgressAnalysis.js'
+import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import type { ProgressAnalysis } from '../coachProgressAnalysis.js'
 
 interface CompletedEntry {
   userId: string
@@ -40,6 +44,8 @@ interface RequestLlmCoachPlanParams {
   nextWorkoutDay: WorkoutDayRef | null
   coachState: CoachState | null
   exerciseLibrary: unknown[]
+  // Issue #107: structured analysis flags so LLM can reason about plateaus
+  analysisResult?: ProgressAnalysis | null
 }
 
 interface LlmPlan extends Partial<SafeCoachPlan> {
@@ -86,21 +92,68 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
     workoutQualityScore: debriefQualityScore,
   })
 
-  const llmPlan = await requestLlmCoachPlan({ profile, workoutDays, completedWorkout: completedEntry, history, nextWorkoutDay, coachState, exerciseLibrary })
-  const safePlan = clampCoachPlanToNextWorkout({ plan: llmPlan ?? rulesPlan, nextWorkoutDay, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof clampCoachPlanToNextWorkout>[0]>["exerciseLibrary"] })
-  if (safePlan.changes.length === 0) {
-    safePlan.changes = rulesPlan.changes
-    safePlan.source = rulesPlan.source
-    safePlan.summary = rulesPlan.summary
-  } else {
-    const rulesReplacements = new Map(rulesPlan.changes.filter((change) => change.exerciseId).map((change) => [change.programExerciseId, change]))
-    safePlan.changes = safePlan.changes.map((change) => {
-      const safeReplacement: CoachPlanChange | undefined = rulesReplacements.get(change.programExerciseId)
-      if (!safeReplacement || change.exerciseId) return change
-      return { ...change, ...safeReplacement, coachFocus: `${safeReplacement.coachFocus} ${change.coachFocus ?? ''}`.slice(0, 500) }
+  // Issue #107: run progress analysis so LLM can reason about plateaus,
+  // overtraining, and muscle imbalance when planning the next workout.
+  let analysisResult: ProgressAnalysis | null = null
+  try {
+    const e1rmHistories = buildAllExerciseE1RMHistories([completedEntry as unknown as WorkoutHistoryEntry, ...history])
+    analysisResult = await analyzeProgress({
+      userId: completedEntry.userId,
+      history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],
+      e1rmHistories: e1rmHistories.map((h) => ({
+        exerciseId: h.exerciseId,
+        exerciseName: h.exerciseName,
+        muscleGroup: h.muscleGroup,
+        currentBest: h.currentBest,
+        trendDirection: h.trend.direction,
+        slopePerWeek: h.trend.slopePerWeek,
+        dataPointCount: h.trend.dataPointCount,
+      })),
+      coachState,
+      coachMemory: null,
+      now: new Date(completedEntry.completedAt ?? Date.now()),
     })
+  } catch (err) {
+    console.warn('analyzeProgress in planAndApplyNextWorkout (non-fatal):', err instanceof Error ? err.message : err)
   }
 
+  const llmPlan = await requestLlmCoachPlan({ profile, workoutDays, completedWorkout: completedEntry, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult })
+
+  // Issue #107: LLM is primary, rules are guardrails.
+  // If LLM gave a plan, use it (after clamping). Rules only fill in
+  // exerciseId when LLM didn't suggest a specific replacement — they do
+  // NOT replace LLM decisions wholesale.
+  if (llmPlan) {
+    const safePlan = clampCoachPlanToNextWorkout({ plan: llmPlan, nextWorkoutDay, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof clampCoachPlanToNextWorkout>[0]>["exerciseLibrary"] })
+    // If LLM produced at least one valid change after clamping, use it.
+    // Only fall back to rules if ALL changes were rejected by the clamp.
+    if (safePlan.changes.length > 0) {
+      // Fill in exerciseId from rules for changes where LLM didn't specify one
+      // (safety: ensure the exercise is valid even if LLM left it blank)
+      const rulesReplacements = new Map(rulesPlan.changes.filter((change) => change.exerciseId).map((change) => [change.programExerciseId, change]))
+      safePlan.changes = safePlan.changes.map((change) => {
+        const safeReplacement: CoachPlanChange | undefined = rulesReplacements.get(change.programExerciseId)
+        if (!safeReplacement || change.exerciseId) return change
+        return { ...change, ...safeReplacement, coachFocus: `${safeReplacement.coachFocus} ${change.coachFocus ?? ''}`.slice(0, 500) }
+      })
+      return applyPlanAndLog(client, completedEntry, safePlan, nextWorkoutDay, coachState)
+    }
+    // LLM plan was fully rejected by clamp → fall through to rules
+  }
+
+  // Fallback: no LLM (no API key, timeout, or all changes rejected)
+  return applyPlanAndLog(client, completedEntry, rulesPlan, nextWorkoutDay, coachState)
+}
+
+// Issue #107: extracted helper — applies a plan to the DB and logs it.
+// Used by both LLM-primary path and rules-fallback path.
+async function applyPlanAndLog(
+  client: DbClient,
+  completedEntry: CompletedEntry,
+  safePlan: SafeCoachPlan,
+  nextWorkoutDay: WorkoutDayRef,
+  coachState: CoachState | null,
+): Promise<SafeCoachPlan> {
   for (const change of safePlan.changes) {
     await client.query(
       `update public.program_exercises
@@ -144,12 +197,12 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
   return safePlan
 }
 
-async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary }: RequestLlmCoachPlanParams): Promise<LlmPlan | null> {
+async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult = null }: RequestLlmCoachPlanParams): Promise<LlmPlan | null> {
   const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
   if (!apiKey) return null
   const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
-  const prompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"] })
+  const prompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"], analysisResult })
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {

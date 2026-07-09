@@ -138,6 +138,25 @@ interface BuildCoachPromptInput {
   nextWorkoutDay?: WorkoutDayInput | null
   coachState?: CoachState | Partial<CoachState> | null
   exerciseLibrary?: ExerciseInput[]
+  // Issue #107: structured analysis flags so LLM can reason about plateaus
+  analysisResult?: {
+    exerciseFlags?: Array<{
+      exerciseId: string
+      exerciseName: string
+      status: string
+      recommendation: string
+      reason: string
+      weeksStagnant?: number
+      slopePerWeek?: number
+    }>
+    globalFlags?: {
+      overtraining: boolean
+      overtrainingReason?: string
+      recommendedDeload: boolean
+      muscleImbalance?: Array<{ muscleGroup: string; status: string }>
+    }
+    summary?: string
+  } | null
 }
 
 interface ChooseLibraryReplacementParams {
@@ -361,8 +380,14 @@ export function buildCoachPrompt({
   nextWorkoutDay,
   coachState,
   exerciseLibrary = [],
+  analysisResult = null,
 }: BuildCoachPromptInput): string {
-  return `${COACH_PERSONA}\n\nПроанализируй завершённую тренировку и скорректируй ТОЛЬКО следующую календарную тренировку.\n\nАнкета: ${JSON.stringify(profile)}\n\nCoach State пользователя: ${JSON.stringify(coachState ?? null)}\n\nЗавершённая тренировка: ${JSON.stringify(completedWorkout)}\n\nПоследняя история: ${JSON.stringify((history ?? []).slice(0, 6))}\n\nСледующая тренировка, которую можно менять: ${JSON.stringify(nextWorkoutDay)}\n\nДоступная библиотека упражнений для замен: ${JSON.stringify((exerciseLibrary ?? []).map((exercise) => ({ id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup, setsCount: exercise.setsCount, repMin: exercise.repMin, repMax: exercise.repMax, targetWeight: exercise.targetWeight, weightStep: exercise.weightStep, restSeconds: exercise.restSeconds })))}\n\nВерни строго JSON без markdown в формате: {"summary":"...","changes":[{"programExerciseId":"...","exerciseId":"optional-library-exercise-id","targetWeight":50,"setsCount":3,"repMin":8,"repMax":10,"restSeconds":120,"todayGoal":"...","coachFocus":"..."}],"warnings":["..."]}. Учитывай восстановление, усталость мышечных групп, фактическую частоту тренировок, подходы на пределе, боль и цель пользователя. Если мышцы следующей тренировки не восстановились, можешь заменить упражнение на упражнение из библиотеки для другой, более свежей группы мышц, указав exerciseId. Не повышай вес при боли или низком восстановлении. Не меняй programExerciseId вне следующей тренировки.`
+  // Issue #107: include structured analysis flags in the prompt so LLM can
+  // reason about plateaus, overtraining, and muscle imbalance.
+  const analysisText = analysisResult
+    ? `\n\nАнализ прогресса:\n${analysisResult.summary ?? ''}\n\nФлаги по упражнениям:\n${JSON.stringify(analysisResult.exerciseFlags ?? [])}\n\nГлобальные флаги:\n${JSON.stringify(analysisResult.globalFlags ?? {})}\n\nУчитывай эти флаги: при плато (recommendation=swap_exercise) — замени упражнение; при trending_up (increase_weight) — повысь вес на 1 шаг; при trending_down (decrease_weight) — снизь вес; при overtraining=true — снизь объём; при recommendedDeload=true — сделай разгрузочную тренировку.`
+    : ''
+  return `${COACH_PERSONA}\n\nПроанализируй завершённую тренировку и скорректируй ТОЛЬКО следующую календарную тренировку.\n\nАнкета: ${JSON.stringify(profile)}\n\nCoach State пользователя: ${JSON.stringify(coachState ?? null)}\n\nЗавершённая тренировка: ${JSON.stringify(completedWorkout)}\n\nПоследняя история: ${JSON.stringify((history ?? []).slice(0, 6))}\n\nСледующая тренировка, которую можно менять: ${JSON.stringify(nextWorkoutDay)}\n\nДоступная библиотека упражнений для замен: ${JSON.stringify((exerciseLibrary ?? []).map((exercise) => ({ id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup, setsCount: exercise.setsCount, repMin: exercise.repMin, repMax: exercise.repMax, targetWeight: exercise.targetWeight, weightStep: exercise.weightStep, restSeconds: exercise.restSeconds })))}${analysisText}\n\nВерни строго JSON без markdown в формате: {"summary":"...","changes":[{"programExerciseId":"...","exerciseId":"optional-library-exercise-id","targetWeight":50,"setsCount":3,"repMin":8,"repMax":10,"restSeconds":120,"todayGoal":"...","coachFocus":"..."}],"warnings":["..."]}. Учитывай восстановление, усталость мышечных групп, фактическую частоту тренировок, подходы на пределе, боль и цель пользователя. Если мышцы следующей тренировки не восстановились, можешь заменить упражнение на упражнение из библиотеки для другой, более свежей группы мышц, указав exerciseId. Не повышай вес при боли или низком восстановлении. Не меняй programExerciseId вне следующей тренировки.`
 }
 
 // ---------------------------------------------------------------------------
