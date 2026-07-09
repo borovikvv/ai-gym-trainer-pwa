@@ -364,7 +364,11 @@ function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFati
     else if (lastWorkoutQualityScore >= 20) score -= 10
     else score -= 15
   }
-  const priorWeight = 1 - clampNumber(trainingDataConfidence, 0, 1, 0)
+  // Issue #111: priorWeight must have a minimum floor (0.3) so the age-based
+  // readiness adjustment is always applied, even after 8+ workouts. Without
+  // this floor, teen (+5) and mature_adult (-8) adjustments are completely
+  // ignored once trainingDataConfidence reaches 1.0.
+  const priorWeight = 0.3 + (1 - clampNumber(trainingDataConfidence, 0, 1, 0)) * 0.7
   score += Number(userTrainingPolicy?.ageRecoveryProfile?.readinessPriorAdjustment ?? 0) * priorWeight
   return Math.max(0, Math.min(100, Math.round(score)))
 }
