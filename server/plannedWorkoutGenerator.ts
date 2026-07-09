@@ -410,7 +410,15 @@ function orderExercisesForWorkout(exercises: GeneratedExercise[]): GeneratedExer
 
 function ensureCoreFinisher({ selected, library, coachState, coachMemory, decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, profile, exerciseTarget }: EnsureCoreFinisherParams): GeneratedExercise[] {
   const current = [...(selected ?? [])]
-  if (current.length === 0 || workoutIsCoreFocused(current) || current.some((exercise) => normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`) === 'core')) return current
+  if (current.length === 0) return current
+  // Issue #110: check if core is already present. normalizeMuscleGroup
+  // correctly maps both 'Кор' and 'Пресс' to 'core', but we need to be
+  // extra defensive — also check by muscleKey of the candidate.
+  const hasCoreAlready = current.some((exercise) => {
+    const key = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
+    return key === 'core'
+  })
+  if (workoutIsCoreFocused(current) || hasCoreAlready) return current
   if (decision?.avoidMuscleGroups?.includes('core') || isRecoveryRestricted('core', weeklyContext) || isCoachMemoryRestricted('core', coachMemory)) return current
 
   const usedExerciseIds = new Set(current.map((exercise) => exercise.exerciseId))

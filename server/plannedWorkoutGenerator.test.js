@@ -1524,3 +1524,45 @@ describe('Issue #106: plannedWorkoutGenerator consumes analysis flags', () => {
     }
   })
 })
+
+describe('Issue #110: no duplicate core exercises', () => {
+  it('does not add a core finisher when core is already in the workout', async () => {
+    // Library with 2 core exercises: plank (Кор) + machine-crunch (Пресс)
+    const libraryWithTwoCore = [
+      ...exerciseLibrary,
+      { id: 'pallof-press', name: 'Pallof press', muscleGroup: 'Кор', setsCount: 2, repMin: 8, repMax: 12, targetWeight: 0, weightStep: 0, restSeconds: 60, instruction: 'кор' },
+      { id: 'machine-crunch', name: 'Скручивания в тренажёре', muscleGroup: 'Пресс', setsCount: 3, repMin: 10, repMax: 15, targetWeight: 15, weightStep: 2.5, restSeconds: 60, instruction: 'пресс' },
+    ]
+
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 80,
+      weeklyLoadStatus: 'on_plan',
+      mesocycle: { phase: 'accumulation', isDeload: false, weekInCycle: 2, cycleLength: 4, loadingWeeks: 3, deloadWeeks: 1 },
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-10',
+      coachState,
+      exerciseLibrary: libraryWithTwoCore,
+      history: [],
+    })
+
+    // Count core exercises — should be at most 1, never 2
+    const coreExercises = plan.exercises.filter((e) => {
+      const muscleGroup = e.muscleGroup ?? ''
+      return muscleGroup === 'Кор' || muscleGroup === 'Пресс' || muscleGroup.toLowerCase() === 'core'
+    })
+    expect(coreExercises.length).toBeLessThanOrEqual(1)
+  })
+})
