@@ -9,7 +9,11 @@ import { regeneratePlannedWorkout } from './plannedWorkoutService.js'
 import { saveTrainingRecord } from '../coachTrainingRecord.js'
 // Issue #91: load coachState + profile + exercise library to fill the 12
 // empty fields in training_record (was passing null/''/0 before)
-import { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary } from './programService.js'
+import { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary, loadRecentHistory } from './programService.js'
+// Issue #108: run analysis + compute changes for training records
+import { analyzeProgress } from '../coachProgressAnalysis.js'
+import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import type { TrainingRecordChange } from '../coachTrainingRecord.js'
 
 interface WorkoutSetInput {
   weight?: number
@@ -220,15 +224,17 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   // 12 fields that were previously null/''/0. Without this, training records
   // are useless for fine-tuning — the model can't learn "state X → plan Y"
   // when state X is all fallback values.
+  // Issue #108: also run analyzeProgress and compute decision.changes so
+  // the training record captures the full analysis → decision → outcome loop.
   try {
-    const [coachStateForRecord, userProfileForRecord, exerciseLibraryForRecord] = await Promise.all([
+    const [coachStateForRecord, userProfileForRecord, exerciseLibraryForRecord, recentHistory] = await Promise.all([
       loadCoachStateForUser(client, sanitizedEntry.userId!),
       loadUserProfile(client, sanitizedEntry.userId!),
       loadExerciseLibrary(client),
+      loadRecentHistory(client, sanitizedEntry.userId!),
     ])
 
     // Build a lookup map: exerciseId → { muscleGroup, repMin, repMax }
-    // so we can fill the decision.exercises[] fields that were hardcoded ''
     const libraryMap = new Map<string, { muscleGroup: string; repMin: number; repMax: number }>()
     for (const libExercise of exerciseLibraryForRecord) {
       const id = String((libExercise as { id?: string }).id ?? '')
@@ -245,6 +251,64 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     const readinessScore = coachStateForRecord?.readinessScore ?? 70
     const lowReadiness = readinessScore < 55 || coachStateForRecord?.recoveryStatus === 'low'
     const loadPolicy = coachStateForRecord?.weeklyLoadStatus ?? 'unknown'
+
+    // Issue #108: run progress analysis so the training record captures
+    // what the LLM knew at workout time (plateaus, overtraining, etc.)
+    let analysisResult = null
+    try {
+      const fullHistory = [sanitizedEntry as unknown as WorkoutHistoryEntry, ...recentHistory]
+      const e1rmHistories = buildAllExerciseE1RMHistories(fullHistory)
+      analysisResult = await analyzeProgress({
+        userId: sanitizedEntry.userId!,
+        history: fullHistory,
+        e1rmHistories: e1rmHistories.map((h) => ({
+          exerciseId: h.exerciseId,
+          exerciseName: h.exerciseName,
+          muscleGroup: h.muscleGroup,
+          currentBest: h.currentBest,
+          trendDirection: h.trend.direction,
+          slopePerWeek: h.trend.slopePerWeek,
+          dataPointCount: h.trend.dataPointCount,
+        })),
+        coachState: coachStateForRecord as unknown as Parameters<typeof analyzeProgress>[0]['coachState'],
+        coachMemory: null,
+        now: new Date(sanitizedEntry.completedAt!),
+      })
+    } catch (analysisErr) {
+      console.warn('analyzeProgress in saveTrainingRecord (non-fatal):', analysisErr instanceof Error ? analysisErr.message : analysisErr)
+    }
+
+    // Issue #108: compute changes by comparing this workout's exercises
+    // with the previous workout's exercises
+    const changes: TrainingRecordChange[] = []
+    const previousWorkout = recentHistory[0]
+    if (previousWorkout) {
+      const prevExercises = new Map(
+        (previousWorkout.exercises ?? []).map((e) => [e.exerciseId ?? '', e]),
+      )
+      for (const e of sanitizedEntry.exercises ?? []) {
+        const exId = e.exerciseId ?? ''
+        const prev = prevExercises.get(exId)
+        if (!prev) {
+          // New exercise not in previous workout
+          changes.push({ exerciseId: exId, type: 'swap', details: 'Новое упражнение' })
+          continue
+        }
+        const prevWeight = prev.nextRecommendedWeight ?? 0
+        const currWeight = e.nextRecommendedWeight ?? 0
+        const prevSets = (prev.sets ?? []).length
+        const currSets = (e.sets ?? []).length
+        if (currWeight > prevWeight) {
+          changes.push({ exerciseId: exId, type: 'weight_increase', details: `${prevWeight} → ${currWeight} кг` })
+        } else if (currWeight < prevWeight) {
+          changes.push({ exerciseId: exId, type: 'weight_decrease', details: `${prevWeight} → ${currWeight} кг` })
+        } else if (currSets !== prevSets) {
+          changes.push({ exerciseId: exId, type: 'volume_change', details: `${prevSets} → ${currSets} подходов` })
+        } else {
+          changes.push({ exerciseId: exId, type: 'hold', details: 'без изменений' })
+        }
+      }
+    }
 
     await saveTrainingRecord(
       client,
@@ -267,10 +331,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
           muscleGroup: libraryMap.get(e.exerciseId ?? '')?.muscleGroup ?? '',
         })) as unknown as WorkoutHistoryEntry['exercises'],
       },
-      // Issue #91: pass real coachState instead of null
       coachStateForRecord as unknown as Parameters<typeof saveTrainingRecord>[2],
-      // Issue #91: fill decision.exercises with muscleGroup/repMin/repMax from
-      // exercise_library (was hardcoded '' and 0)
       {
         exercises: (sanitizedEntry.exercises ?? []).map((e) => {
           const lib = libraryMap.get(e.exerciseId ?? '')
@@ -284,17 +345,20 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
             targetWeight: e.nextRecommendedWeight ?? 0,
           }
         }),
-        // Issue #91: compute from coachState instead of hardcoding
         lowReadiness,
         loadPolicy,
+        // Issue #108: capture decision source and changes
+        source: coachPlan?.source ?? 'rules',
+        changes,
       },
-      // Issue #91: pass real profile instead of all-null
       {
         age: userProfileForRecord.age ?? null,
         goal: userProfileForRecord.goal || undefined,
         level: userProfileForRecord.level || undefined,
         workoutsPerWeek: userProfileForRecord.workoutsPerWeek || undefined,
       },
+      // Issue #108: pass analysis result
+      analysisResult,
     )
   } catch (err) {
     console.error('saveTrainingRecord (non-fatal):', (err as Error).message)

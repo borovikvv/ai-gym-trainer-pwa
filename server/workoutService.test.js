@@ -18,6 +18,7 @@ vi.mock('./coachTrainingRecord.js', () => ({
 }))
 // Issue #91: mock programService so saveWorkoutHistoryEntry can load
 // coachState, userProfile, and exerciseLibrary for training record
+// Issue #108: also mock loadRecentHistory for changes computation
 vi.mock('./services/programService.js', () => ({
   loadCoachStateForUser: vi.fn().mockResolvedValue({
     readinessScore: 78,
@@ -35,10 +36,27 @@ vi.mock('./services/programService.js', () => ({
     { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', repMin: 6, repMax: 8, targetWeight: 50 },
     { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', repMin: 8, repMax: 10, targetWeight: 40 },
   ]),
+  loadRecentHistory: vi.fn().mockResolvedValue([]),
+}))
+// Issue #108: mock analyzeProgress so training record doesn't hang on LLM
+vi.mock('./coachProgressAnalysis.js', () => ({
+  analyzeProgress: vi.fn().mockResolvedValue({
+    date: '2026-07-09T00:00:00Z',
+    summary: 'Стабильный прогресс',
+    plateaus: [], improvements: [], warnings: [], suggestions: [],
+    exerciseFlags: [],
+    globalFlags: { overtraining: false, recommendedDeload: false },
+  }),
+}))
+// Issue #108: mock e1RM histories (used by analyzeProgress input)
+vi.mock('../src/domain/estimatedOneRepMax.js', () => ({
+  buildAllExerciseE1RMHistories: vi.fn().mockReturnValue([]),
 }))
 
 afterEach(() => {
-  vi.restoreAllMocks()
+  // Note: vi.clearAllMocks() would reset factory mock implementations in
+  // vitest 4.x. Instead we only clear specific mocks that need it in each
+  // test (via vi.mocked(...).mockClear()).
 })
 
 describe('workout service guardrails', () => {
@@ -247,7 +265,7 @@ describe('Issue #91: training record fills 12 previously-empty fields', () => {
     const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
     const { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary } = await import('./services/programService.js')
 
-    vi.clearAllMocks()
+    vi.mocked(saveTrainingRecord).mockClear()
 
     const client = {
       query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
@@ -333,7 +351,7 @@ describe('Issue #91: training record fills 12 previously-empty fields', () => {
     const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
     const { loadCoachStateForUser } = await import('./services/programService.js')
 
-    vi.clearAllMocks()
+    vi.mocked(saveTrainingRecord).mockClear()
 
     // Override the mock to return low readiness for this test
     vi.mocked(loadCoachStateForUser).mockResolvedValue({
@@ -371,9 +389,10 @@ describe('Issue #91: training record fills 12 previously-empty fields', () => {
 
   it('does not fail the workout save if programService load fails (non-fatal)', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
     const { loadCoachStateForUser } = await import('./services/programService.js')
 
-    vi.clearAllMocks()
+    vi.mocked(saveTrainingRecord).mockClear()
     vi.mocked(loadCoachStateForUser).mockRejectedValue(new Error('DB connection lost'))
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
@@ -403,5 +422,180 @@ describe('Issue #91: training record fills 12 previously-empty fields', () => {
       expect.any(String),
     )
     errorSpy.mockRestore()
+  })
+})
+
+describe('Issue #108: training record captures analysis → decision → outcome loop', () => {
+  // Issue #108: these tests need fresh mock defaults because the #91 tests
+  // above may have overridden loadCoachStateForUser with reject/resolvedValue.
+  // We import the mocked modules and reset their implementations in each test.
+  const defaultCoachState = {
+    readinessScore: 78,
+    recoveryStatus: 'ready',
+    weeklyLoadStatus: 'on_plan',
+    mesocycle: { phase: 'accumulation', weekInCycle: 2, cycleLength: 4 },
+  }
+
+  it('passes analysisResult and decision.source to saveTrainingRecord', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadCoachStateForUser, loadRecentHistory } = await import('./services/programService.js')
+    vi.mocked(saveTrainingRecord).mockClear()
+    vi.mocked(loadCoachStateForUser).mockResolvedValue(defaultCoachState)
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-108',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-09T18:00:00Z',
+      totalVolume: 3000,
+      qualityScore: 85,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 52.5,
+        progressionType: 'increase',
+        progressionReason: '',
+        sets: [{ weight: 50, reps: 8, rpe: 7, completed: true }],
+      }],
+    })
+
+    expect(saveTrainingRecord).toHaveBeenCalledTimes(1)
+    const call = vi.mocked(saveTrainingRecord).mock.calls[0]
+    const decisionArg = call[3]
+    const analysisArg = call[5]
+
+    // Issue #108: decision.source should be set (from coachPlan, default 'rules')
+    expect(decisionArg.source).toBeDefined()
+
+    // Issue #108: decision.changes should be an array (even if empty)
+    expect(Array.isArray(decisionArg.changes)).toBe(true)
+
+    // Issue #108: analysisResult should not be null (mocked analyzeProgress returned a result)
+    expect(analysisArg).not.toBeNull()
+    expect(analysisArg.summary).toBe('Стабильный прогресс')
+    expect(analysisArg.exerciseFlags).toEqual([])
+    expect(analysisArg.globalFlags.overtraining).toBe(false)
+  })
+
+  it('computes changes by comparing with previous workout', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadCoachStateForUser, loadRecentHistory } = await import('./services/programService.js')
+    vi.mocked(saveTrainingRecord).mockClear()
+    vi.mocked(loadCoachStateForUser).mockResolvedValue(defaultCoachState)
+
+    // Mock previous workout with bench-press at 50kg, 3 sets
+    vi.mocked(loadRecentHistory).mockResolvedValue([{
+      id: 'prev-session',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-1',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-02T18:00:00Z',
+      totalVolume: 1200,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 50,
+        progressionType: 'hold',
+        progressionReason: '',
+        sets: [
+          { weight: 50, reps: 8, rpe: 7, completed: true },
+          { weight: 50, reps: 8, rpe: 7, completed: true },
+          { weight: 50, reps: 8, rpe: 8, completed: true },
+        ],
+      }],
+    }])
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    // Current workout: bench-press at 52.5kg (weight increase)
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-108b',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-09T18:00:00Z',
+      totalVolume: 1260,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 52.5,
+        progressionType: 'increase',
+        progressionReason: '',
+        sets: [{ weight: 52.5, reps: 8, rpe: 7, completed: true }],
+      }],
+    })
+
+    const call = vi.mocked(saveTrainingRecord).mock.calls[0]
+    const decisionArg = call[3]
+
+    // Changes should include weight_increase for bench-press
+    expect(decisionArg.changes.length).toBeGreaterThan(0)
+    const benchChange = decisionArg.changes.find((c) => c.exerciseId === 'bench-press')
+    expect(benchChange).toBeDefined()
+    expect(benchChange.type).toBe('weight_increase')
+    expect(benchChange.details).toContain('50')
+    expect(benchChange.details).toContain('52.5')
+  })
+
+  it('records swap when exercise is new (not in previous workout)', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadCoachStateForUser, loadRecentHistory } = await import('./services/programService.js')
+    vi.mocked(saveTrainingRecord).mockClear()
+    vi.mocked(loadCoachStateForUser).mockResolvedValue(defaultCoachState)
+
+    // Previous workout has bench-press only
+    vi.mocked(loadRecentHistory).mockResolvedValue([{
+      id: 'prev-session',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-1',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-02T18:00:00Z',
+      totalVolume: 1200,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 50,
+        progressionType: 'hold',
+        progressionReason: '',
+        sets: [{ weight: 50, reps: 8, rpe: 7, completed: true }],
+      }],
+    }])
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    // Current workout has lat-pulldown (new exercise, not in previous)
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-108c',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День B',
+      completedAt: '2026-07-09T18:00:00Z',
+      totalVolume: 400,
+      exercises: [{
+        exerciseId: 'lat-pulldown',
+        exerciseName: 'Тяга верхнего блока',
+        pain: false,
+        nextRecommendedWeight: 40,
+        progressionType: 'hold',
+        progressionReason: '',
+        sets: [{ weight: 40, reps: 10, rpe: 7, completed: true }],
+      }],
+    })
+
+    const call = vi.mocked(saveTrainingRecord).mock.calls[0]
+    const decisionArg = call[3]
+
+    // lat-pulldown is new → should be a swap
+    const latChange = decisionArg.changes.find((c) => c.exerciseId === 'lat-pulldown')
+    expect(latChange).toBeDefined()
+    expect(latChange.type).toBe('swap')
   })
 })

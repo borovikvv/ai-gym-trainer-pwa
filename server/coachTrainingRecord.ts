@@ -16,6 +16,14 @@
 
 import type { DbClient } from './dbClient.js'
 import type { WorkoutHistoryEntry, ReadinessCheckIn } from '../shared/types.js'
+// Issue #108: capture analysis flags and decision source in training records
+import type { ProgressAnalysis } from './coachProgressAnalysis.js'
+
+export interface TrainingRecordChange {
+  exerciseId: string
+  type: 'swap' | 'weight_increase' | 'weight_decrease' | 'volume_change' | 'hold'
+  details: string
+}
 
 export interface TrainingRecord {
   userId: string
@@ -32,6 +40,12 @@ export interface TrainingRecord {
     goal: string | null
     level: string | null
     workoutsPerWeek: number | null
+    // Issue #108: LLM analysis at workout time (plateaus, overtraining, etc.)
+    analysis?: {
+      exerciseFlags: ProgressAnalysis['exerciseFlags']
+      globalFlags: ProgressAnalysis['globalFlags']
+      summary: string
+    } | null
   }
   decision: {
     exercises: Array<{
@@ -45,6 +59,10 @@ export interface TrainingRecord {
     }>
     lowReadiness: boolean
     loadPolicy: string
+    // Issue #108: source of the decision (rules / llm / llm_clamped)
+    source?: string
+    // Issue #108: what changed vs the previous workout
+    changes?: TrainingRecordChange[]
   }
   outcome: {
     completedReps: number
@@ -88,6 +106,9 @@ export async function saveTrainingRecord(
     }>
     lowReadiness: boolean
     loadPolicy: string
+    // Issue #108: source and changes
+    source?: string
+    changes?: TrainingRecordChange[]
   },
   profile: {
     age?: number | null
@@ -95,6 +116,8 @@ export async function saveTrainingRecord(
     level?: string
     workoutsPerWeek?: number
   },
+  // Issue #108: LLM analysis result at workout time
+  analysisResult?: ProgressAnalysis | null,
 ): Promise<void> {
   // Compute outcome from completed sets
   let completedReps = 0
@@ -130,11 +153,20 @@ export async function saveTrainingRecord(
       goal: profile.goal ?? null,
       level: profile.level ?? null,
       workoutsPerWeek: profile.workoutsPerWeek ?? null,
+      // Issue #108: capture analysis at workout time
+      analysis: analysisResult ? {
+        exerciseFlags: analysisResult.exerciseFlags,
+        globalFlags: analysisResult.globalFlags,
+        summary: analysisResult.summary,
+      } : null,
     },
     decision: {
       exercises: decision.exercises,
       lowReadiness: decision.lowReadiness,
       loadPolicy: decision.loadPolicy,
+      // Issue #108: capture decision source and changes
+      source: decision.source ?? 'rules',
+      changes: decision.changes ?? [],
     },
     outcome: {
       completedReps,
