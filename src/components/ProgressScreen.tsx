@@ -109,30 +109,31 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
   const coachDecisions = progressDashboard.coachDecisions.slice(0, 2)
   const painSignal = progressDashboard.overview.painMarks === 0 ? 'без боли' : `${progressDashboard.overview.painMarks} сигнал`
 
-  // Issue #84: AI progress analysis
-  const [analysis, setAnalysis] = useState<{
-    summary: string
-    plateaus: Array<{ exerciseName: string; weeksStagnant: number; recommendation: string }>
-    improvements: Array<{ exerciseName: string; e1rmChangePercent: number; note: string }>
-    warnings: string[]
-    suggestions: string[]
+  // Issue #108: fetch the latest training record's decision.changes to show
+  // "what the coach changed" instead of raw analysis text (plateaus/warnings).
+  // The coach now acts on analysis internally (#105-#107) — the user should
+  // see results, not diagnosis.
+  const [coachChanges, setCoachChanges] = useState<{
+    changes: Array<{ exerciseId: string; type: string; details: string }>
+    source: string
+    createdAt: string
+    summary: string | null
   } | null>(null)
-  const [analysisLoading, setAnalysisLoading] = useState(false)
+  const [changesLoading, setChangesLoading] = useState(false)
 
   useEffect(() => {
     if (!activeUserId || !isProgramApiConfigured) return
     const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
     if (!apiBase) return
     let cancelled = false
-    // Use a microtask to avoid synchronous setState in effect (lint rule)
     Promise.resolve().then(() => {
       if (cancelled) return
-      setAnalysisLoading(true)
-      fetch(`${apiBase}/api/coach/progress-analysis/${encodeURIComponent(activeUserId)}`)
+      setChangesLoading(true)
+      fetch(`${apiBase}/api/coach/training-records/${encodeURIComponent(activeUserId)}/latest`)
         .then((r) => r.ok ? r.json() : null)
-        .then((data) => { if (!cancelled && data?.analysis) setAnalysis(data.analysis) })
+        .then((data) => { if (!cancelled && data?.record) setCoachChanges(data.record) })
         .catch(() => {})
-        .finally(() => { if (!cancelled) setAnalysisLoading(false) })
+        .finally(() => { if (!cancelled) setChangesLoading(false) })
     })
     return () => { cancelled = true }
   }, [activeUserId])
@@ -142,60 +143,53 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
       <ScreenHeader eyebrow="Прогресс" title="Динамика" />
       <span className="sr-only">Панель динамики</span>
 
-      {/* Issue #84: AI progress analysis — Issue #104: collapsed into review-row */}
-      {(analysis || analysisLoading) && (
-        <SectionList title="Анализ тренера">
-          {analysisLoading && <div className="muted">Анализирую прогресс...</div>}
-          {analysis && (
+      {/* Issue #108: "Что изменил тренер" — shows decision.changes from the
+          latest training record. Replaces the old "Анализ тренера" section
+          which showed raw diagnosis (plateaus/warnings) that the coach now
+          handles internally (#105-#107). */}
+      {(coachChanges || changesLoading) && (
+        <SectionList title="Что изменил тренер">
+          {changesLoading && <div className="muted">Загрузка...</div>}
+          {coachChanges && coachChanges.changes.length > 0 && (
             <div className="card coach-analysis-card">
-              {analysis.summary && (
-                <details className="review-row" open>
-                  <summary>
-                    <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
-                    <span className="review-row__title">Сводка</span>
-                  </summary>
-                  <p className="review-row__body">{analysis.summary}</p>
-                </details>
+              {coachChanges.summary && (
+                <p className="muted" style={{ marginBottom: 8 }}>{coachChanges.summary}</p>
               )}
-              {analysis.plateaus.map((p, i) => (
-                <details key={`plat-${i}`} className="review-row">
-                  <summary>
-                    <span className="review-row__dot review-row__dot--medium" aria-hidden="true" />
-                    <span className="review-row__title">Плато: {p.exerciseName}</span>
-                    <span className="review-row__meta">{p.weeksStagnant} нед</span>
-                  </summary>
-                  <p className="review-row__body">{p.recommendation}</p>
-                </details>
-              ))}
-              {analysis.improvements.map((imp, i) => (
-                <details key={`imp-${i}`} className="review-row">
-                  <summary>
-                    <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
-                    <span className="review-row__title">Рост: {imp.exerciseName}</span>
-                    <span className="review-row__meta">+{imp.e1rmChangePercent}%/нед</span>
-                  </summary>
-                  <p className="review-row__body">{imp.note}</p>
-                </details>
-              ))}
-              {analysis.warnings.map((w, i) => (
-                <details key={`warn-${i}`} className="review-row">
-                  <summary>
-                    <span className="review-row__dot review-row__dot--high" aria-hidden="true" />
-                    <span className="review-row__title">Внимание</span>
-                  </summary>
-                  <p className="review-row__body">{w}</p>
-                </details>
-              ))}
-              {analysis.suggestions.map((s, i) => (
-                <details key={`sug-${i}`} className="review-row">
-                  <summary>
-                    <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
-                    <span className="review-row__title">Совет</span>
-                  </summary>
-                  <p className="review-row__body">{s}</p>
-                </details>
-              ))}
+              {coachChanges.changes.map((change, i) => {
+                const icons: Record<string, string> = {
+                  swap: '🔄',
+                  weight_increase: '↑',
+                  weight_decrease: '↓',
+                  volume_change: '±',
+                  hold: '=',
+                }
+                const labels: Record<string, string> = {
+                  swap: 'Замена',
+                  weight_increase: 'Вес повышен',
+                  weight_decrease: 'Вес снижен',
+                  volume_change: 'Объём изменён',
+                  hold: 'Без изменений',
+                }
+                return (
+                  <details key={i} className="review-row">
+                    <summary>
+                      <span className={`review-row__dot ${
+                        change.type === 'weight_increase' ? 'review-row__dot--low'
+                        : change.type === 'weight_decrease' ? 'review-row__dot--high'
+                        : change.type === 'swap' ? 'review-row__dot--medium'
+                        : 'review-row__dot--low'
+                      }`} aria-hidden="true" />
+                      <span className="review-row__title">{change.details}</span>
+                      <span className="review-row__meta">{labels[change.type] ?? change.type}</span>
+                    </summary>
+                    <p className="review-row__body">{icons[change.type] ?? '·'} {change.details} ({coachChanges.source === 'llm' ? 'ИИ-тренер' : 'правила'})</p>
+                  </details>
+                )
+              })}
             </div>
+          )}
+          {coachChanges && coachChanges.changes.length === 0 && (
+            <div className="muted">Первая тренировка — тренер собирает данные.</div>
           )}
         </SectionList>
       )}

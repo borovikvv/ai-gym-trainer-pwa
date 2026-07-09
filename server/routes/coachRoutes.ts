@@ -295,3 +295,35 @@ coachRoutes.get('/coach/training-records/:userId/export', requireAllowedUserId, 
     next(error)
   }
 })
+
+// Issue #108: return the latest training record's decision.changes so the
+// frontend can show "what the coach changed" instead of raw analysis text.
+coachRoutes.get('/coach/training-records/:userId/latest', requireAllowedUserId, async (req, res, next) => {
+  try {
+    const userId = req.params.userId
+    const result = await pool.query(
+      `select body, created_at
+       from public.recommendations
+       where user_id = $1 and recommendation_type = 'training_record'
+       order by created_at desc
+       limit 1`,
+      [userId],
+    )
+    if (result.rows.length === 0) {
+      res.json({ ok: true, record: null })
+      return
+    }
+    const record = JSON.parse(result.rows[0].body)
+    res.json({
+      ok: true,
+      record: {
+        createdAt: result.rows[0].created_at,
+        source: record.decision?.source ?? 'rules',
+        changes: record.decision?.changes ?? [],
+        summary: record.input?.analysis?.summary ?? null,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
