@@ -60,13 +60,18 @@ const DEFAULT_POLICY: UserPolicy = {
 interface ProfileLike {
   userId?: string
   user_id?: string
-  age?: number
+  age?: number | null  // Issue #112: normalizeProfile returns null for missing age
 }
 
 export function getUserTrainingPolicy(userOrProfile: ProfileLike | string | null | undefined): UserTrainingPolicy {
   const profile = typeof userOrProfile === 'object' && userOrProfile !== null ? userOrProfile : null
   const key = String(profile?.userId ?? profile?.user_id ?? userOrProfile ?? '').trim().toLowerCase()
-  const age = Number(profile?.age ?? NaN)
+  // Issue #112: age can be null (from normalizeProfile when DB age is NULL).
+  // Number(null) = 0, which buildAgeRecoveryProfile treats as "adult" (age > 0
+  // is false for 0). We need NaN for "age not provided" so the function falls
+  // through to the default "adult" profile instead of treating null as age=0.
+  const rawAge = profile?.age
+  const age = rawAge === null || rawAge === undefined ? NaN : Number(rawAge)
   return {
     ...DEFAULT_POLICY,
     ...(POLICIES[key] ?? { userId: key || DEFAULT_POLICY.userId }),

@@ -142,7 +142,13 @@ export function computeCoachState({
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
 
   const lastWorkout = normalizedHistory[0] ?? null
-  const userTrainingPolicy = getUserTrainingPolicy(profile as unknown as string)
+  // Issue #112: pass profile as object (not cast to string) so
+  // getUserTrainingPolicy can extract age for buildAgeRecoveryProfile.
+  // The old `as unknown as string` cast was TS-only and didn't break runtime,
+  // but it was misleading and hid the real bug: age=null was converted to
+  // Number(null)=0 by getUserTrainingPolicy, which buildAgeRecoveryProfile
+  // treated as "adult" instead of "unknown".
+  const userTrainingPolicy = getUserTrainingPolicy(profile)
   const trainingDataConfidence = computeTrainingDataConfidence(normalizedHistory)
   const daysSinceLastWorkout = lastWorkout ? wholeDaysBetween(new Date(lastWorkout.completedAt), nowDate) : null
   const workoutsLast7Days = normalizedHistory.filter((session) => daysBetween(new Date(session.completedAt), nowDate) <= 7).length
