@@ -17,8 +17,17 @@ API_HOST=127.0.0.1
 CORS_ORIGIN=https://trainer.borovikvv.ru
 OPENAI_API_KEY=sk-...          # optional (falls back to rules)
 OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4o-mini       # base model for all tiers unless overridden below
+# Optional per-tier model overrides (server/lib/llmClient.ts). Each falls back
+# to OPENAI_MODEL, so a single-model setup keeps working without them.
+# LLM_MODEL_FAST=...           # per-set advisor, narrator (latency-sensitive)
+# LLM_MODEL_MID=...            # post-workout planning, memory reflection
+# LLM_MODEL_SMART=...          # weekly program review, progress analysis
 ```
+
+Every LLM call is logged to stdout as an `llm.call` activity event with
+`{ caller, tier, model, promptTokens, completionTokens, latencyMs, ok }` —
+use it to track real cost per tier.
 
 ## Deploy Steps
 

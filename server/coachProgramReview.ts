@@ -12,6 +12,7 @@
  */
 
 import type { WorkoutHistoryEntry, CoachState, CoachMemory } from '../shared/types.js'
+import { requestLlmJson } from './lib/llmClient.js'
 
 interface WorkoutDayInput {
   name?: string
@@ -57,71 +58,29 @@ export interface ProgramReview {
   nextWeekFocus: string
 }
 
-interface LlmResponseBody {
-  choices?: Array<{ message?: { content?: string } }>
-}
-
 const LLM_TIMEOUT_MS = 5000
 
 /**
  * Review the training program and suggest changes.
  */
 export async function reviewProgram(input: ProgramReviewInput): Promise<ProgramReview> {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
-  if (!apiKey) return ruleBasedReview(input)
-
-  const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
-  const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
-
-  const prompt = buildLlmPrompt(input)
-
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        max_tokens: 500,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: 'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"priority":"high|medium|low"}],"nextWeekFocus":""}. Пиши на русском. Максимум 3 изменения.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeout)
-
-    if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body = (await response.json()) as LlmResponseBody
-    const content = body?.choices?.[0]?.message?.content
-    if (!content) throw new Error('Empty LLM response')
-
-    const parsed = JSON.parse(content) as ProgramReview
-    parsed.date = input.now.toISOString()
-    // Clamp changes to 3
-    if (parsed.changes && parsed.changes.length > 3) {
-      parsed.changes = parsed.changes.slice(0, 3)
-    }
-    return parsed
-  } catch (error) {
-    console.warn('coachProgramReview LLM failed, using rules:', error instanceof Error ? error.message : error)
-    return ruleBasedReview(input)
+  const parsed = await requestLlmJson<ProgramReview>({
+    tier: 'smart',
+    caller: 'coachProgramReview',
+    timeoutMs: LLM_TIMEOUT_MS,
+    temperature: 0.3,
+    maxTokens: 500,
+    system:
+      'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"priority":"high|medium|low"}],"nextWeekFocus":""}. Пиши на русском. Максимум 3 изменения.',
+    prompt: buildLlmPrompt(input),
+  })
+  if (!parsed) return ruleBasedReview(input)
+  parsed.date = input.now.toISOString()
+  // Clamp changes to 3
+  if (parsed.changes && parsed.changes.length > 3) {
+    parsed.changes = parsed.changes.slice(0, 3)
   }
+  return parsed
 }
 
 function buildLlmPrompt(input: ProgramReviewInput): string {

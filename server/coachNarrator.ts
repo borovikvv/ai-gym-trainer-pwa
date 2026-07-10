@@ -6,6 +6,7 @@
  */
 
 import type { CoachState } from '../shared/types.js'
+import { requestLlmText } from './lib/llmClient.js'
 
 interface NarrationInput {
   scheduledDate: string
@@ -45,10 +46,6 @@ interface NarrationInput {
   }
 }
 
-interface LlmResponseBody {
-  choices?: Array<{ message?: { content?: string } }>
-}
-
 const LLM_TIMEOUT_MS = 3000
 
 /**
@@ -56,54 +53,18 @@ const LLM_TIMEOUT_MS = 3000
  * Falls back to template if no API key, LLM fails, or timeout.
  */
 export async function generateCoachNarration(input: NarrationInput): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
-  if (!apiKey) return buildTemplateNarration(input)
-
-  const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
-  const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
-
-  const prompt = buildLlmPrompt(input)
-
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.4,
-        max_tokens: 200,
-        messages: [
-          {
-            role: 'system',
-            content: 'Ты персональный силовой тренер. Объясни пользователю коротко (2-3 предложения) почему именно эта тренировка. Пиши на русском, дружелюбно, без технических терминов (readiness, MEV, MRV). Без emoji. Максимум 3 предложения.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeout)
-
-    if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body = (await response.json()) as LlmResponseBody
-    const content = body?.choices?.[0]?.message?.content
-    if (!content || content.trim().length < 10) throw new Error('Empty LLM response')
-
-    return content.trim()
-  } catch (error) {
-    console.warn('coachNarrator LLM failed, using template:', error instanceof Error ? error.message : error)
-    return buildTemplateNarration(input)
-  }
+  const content = await requestLlmText({
+    tier: 'fast',
+    caller: 'coachNarrator',
+    timeoutMs: LLM_TIMEOUT_MS,
+    temperature: 0.4,
+    maxTokens: 200,
+    system:
+      'Ты персональный силовой тренер. Объясни пользователю коротко (2-3 предложения) почему именно эта тренировка. Пиши на русском, дружелюбно, без технических терминов (readiness, MEV, MRV). Без emoji. Максимум 3 предложения.',
+    prompt: buildLlmPrompt(input),
+  })
+  if (!content || content.length < 10) return buildTemplateNarration(input)
+  return content
 }
 
 function buildLlmPrompt(input: NarrationInput): string {

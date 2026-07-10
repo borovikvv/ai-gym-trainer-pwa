@@ -132,9 +132,9 @@ describe('coach planning service', () => {
     expect(result).not.toBeNull()
     // The plan came from rules, not LLM
     expect(result.source).toBe('rules')
-    // Warning was logged about the fallback
+    // Warning was logged about the fallback (unified llmClient message format)
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('LLM coach plan failed'),
+      expect.stringContaining('coachPlanningService LLM failed'),
       expect.any(String),
     )
 

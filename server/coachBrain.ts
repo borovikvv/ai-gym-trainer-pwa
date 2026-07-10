@@ -1,6 +1,7 @@
 // Issue #65 (#36 decomposition): all `any` replaced with concrete types.
 import type { CoachState, ExerciseRef } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
+import { requestLlmJson } from './lib/llmClient.js'
 
 const ALLOWED_LIVE_ACTIONS = new Set([
   'hold_strategy',
@@ -27,13 +28,22 @@ interface SessionContext {
   workoutExercises?: ExerciseRef[]
 }
 
+export interface RequestLlmLiveStrategyArgs {
+  userId: string
+  exercise: ExerciseRef
+  completedSets: SetInput[]
+  coachState: CoachState | Partial<CoachState>
+  session: SessionContext
+  rulesDecision: LiveStrategyDecision
+}
+
 interface BuildLiveStrategyDecisionInput {
   userId: string
   exercise: ExerciseRef
   completedSets?: SetInput[]
   coachState?: CoachState | Partial<CoachState>
   session?: SessionContext
-  requestLlm?: ((args: unknown) => Promise<LiveStrategyDecision>) | null
+  requestLlm?: ((args: RequestLlmLiveStrategyArgs) => Promise<LiveStrategyDecision | null>) | null
 }
 
 interface LiveStrategyAction {
@@ -68,10 +78,6 @@ interface RawLlmDecision {
   actions?: Array<{ type?: string; reason?: string; exerciseId?: string; programExerciseId?: string }>
   constraints?: { maxRpe?: number; allowFailure?: boolean; maxAdditionalExercises?: number }
   warnings?: unknown[]
-}
-
-interface LlmResponseBody {
-  choices?: Array<{ message?: { content?: string } }>
 }
 
 // ---------------------------------------------------------------------------
@@ -119,35 +125,16 @@ export async function requestLlmLiveStrategy({
   session: SessionContext
   rulesDecision: LiveStrategyDecision
 }): Promise<LiveStrategyDecision | null> {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
-  if (!apiKey) return null
-  const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
-  const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
-  const prompt = buildLiveStrategyPrompt({ userId, exercise, completedSets, coachState, session, rulesDecision })
-
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'Ты персональный силовой тренер. Верни только валидный JSON. Безопасность, техника и восстановление важнее добивания объёма.' },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    })
-    if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body = (await response.json()) as LlmResponseBody
-    const content = body?.choices?.[0]?.message?.content
-    if (!content) return null
-    return { ...(JSON.parse(content) as RawLlmDecision), source: 'llm', decisionType: 'live_strategy' } as LiveStrategyDecision
-  } catch (error) {
-    console.warn('LLM live strategy failed, using rules fallback:', error instanceof Error ? error.message : error)
-    return null
-  }
+  const parsed = await requestLlmJson<RawLlmDecision>({
+    tier: 'fast',
+    caller: 'coachBrain.liveStrategy',
+    timeoutMs: 5000,
+    temperature: 0.2,
+    system: 'Ты персональный силовой тренер. Верни только валидный JSON. Безопасность, техника и восстановление важнее добивания объёма.',
+    prompt: buildLiveStrategyPrompt({ userId, exercise, completedSets, coachState, session, rulesDecision }),
+  })
+  if (!parsed) return null
+  return { ...parsed, source: 'llm', decisionType: 'live_strategy' } as LiveStrategyDecision
 }
 
 export function clampLiveStrategyDecision(

@@ -12,6 +12,7 @@
 
 import type { WorkoutHistoryEntry } from '../shared/types.js'
 import type { CoachState, CoachMemory } from '../shared/types.js'
+import { requestLlmJson } from './lib/llmClient.js'
 
 interface E1RMSummary {
   exerciseId: string
@@ -69,70 +70,28 @@ export interface ProgressAnalysis {
   globalFlags: GlobalAnalysisFlags
 }
 
-interface LlmResponseBody {
-  choices?: Array<{ message?: { content?: string } }>
-}
-
 const LLM_TIMEOUT_MS = 5000
 
 /**
  * Analyze workout progress using LLM (if available) or rules (fallback).
  */
 export async function analyzeProgress(input: ProgressAnalysisInput): Promise<ProgressAnalysis> {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
-  if (!apiKey) return ruleBasedAnalysis(input)
-
-  const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
-  const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
-
-  const prompt = buildLlmPrompt(input)
-
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        max_tokens: 500,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: 'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""],"exerciseFlags":[{"exerciseId":"","exerciseName":"","status":"plateau|trending_up|trending_down|stable|insufficient_data","weeksStagnant":0,"slopePerWeek":0,"recommendation":"swap_exercise|increase_weight|hold_weight|decrease_weight|consolidate|monitor","reason":""}],"globalFlags":{"overtraining":false,"overtrainingReason":"","muscleImbalance":[{"muscleGroup":"","status":"overworked|underworked"}],"recommendedDeload":false}}. Пиши на русском. exerciseFlags — по каждому упражнению из e1RM данных. globalFlags.overtraining=true только если НЕ deload-неделя и e1RM падает при высоком RPE.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeout)
-
-    if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body = (await response.json()) as LlmResponseBody
-    const content = body?.choices?.[0]?.message?.content
-    if (!content) throw new Error('Empty LLM response')
-
-    const parsed = JSON.parse(content) as Partial<ProgressAnalysis>
-    parsed.date = input.now.toISOString()
-    // Issue #105: ensure structured fields exist even if LLM omitted them
-    if (!parsed.exerciseFlags) parsed.exerciseFlags = []
-    if (!parsed.globalFlags) parsed.globalFlags = { overtraining: false, recommendedDeload: false }
-    return parsed as ProgressAnalysis
-  } catch (error) {
-    console.warn('coachProgressAnalysis LLM failed, using rules:', error instanceof Error ? error.message : error)
-    return ruleBasedAnalysis(input)
-  }
+  const parsed = await requestLlmJson<Partial<ProgressAnalysis>>({
+    tier: 'smart',
+    caller: 'coachProgressAnalysis',
+    timeoutMs: LLM_TIMEOUT_MS,
+    temperature: 0.3,
+    maxTokens: 500,
+    system:
+      'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""],"exerciseFlags":[{"exerciseId":"","exerciseName":"","status":"plateau|trending_up|trending_down|stable|insufficient_data","weeksStagnant":0,"slopePerWeek":0,"recommendation":"swap_exercise|increase_weight|hold_weight|decrease_weight|consolidate|monitor","reason":""}],"globalFlags":{"overtraining":false,"overtrainingReason":"","muscleImbalance":[{"muscleGroup":"","status":"overworked|underworked"}],"recommendedDeload":false}}. Пиши на русском. exerciseFlags — по каждому упражнению из e1RM данных. globalFlags.overtraining=true только если НЕ deload-неделя и e1RM падает при высоком RPE.',
+    prompt: buildLlmPrompt(input),
+  })
+  if (!parsed) return ruleBasedAnalysis(input)
+  parsed.date = input.now.toISOString()
+  // Issue #105: ensure structured fields exist even if LLM omitted them
+  if (!parsed.exerciseFlags) parsed.exerciseFlags = []
+  if (!parsed.globalFlags) parsed.globalFlags = { overtraining: false, recommendedDeload: false }
+  return parsed as ProgressAnalysis
 }
 
 function buildLlmPrompt(input: ProgressAnalysisInput): string {

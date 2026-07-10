@@ -10,6 +10,7 @@ import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkou
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 import type { ProgressAnalysis } from '../coachProgressAnalysis.js'
+import { requestLlmJson } from '../lib/llmClient.js'
 
 interface CompletedEntry {
   userId: string
@@ -51,10 +52,6 @@ interface RequestLlmCoachPlanParams {
 interface LlmPlan extends Partial<SafeCoachPlan> {
   source?: string
   nextWorkoutDayId?: string
-}
-
-interface LlmResponseBody {
-  choices?: Array<{ message?: { content?: string } }>
 }
 
 // Issue #95: cap LLM call duration. Without this, a slow LLM (10-30s) holds
@@ -198,39 +195,17 @@ async function applyPlanAndLog(
 }
 
 async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult = null }: RequestLlmCoachPlanParams): Promise<LlmPlan | null> {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
-  if (!apiKey) return null
-  const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
-  const model = process.env.OPENAI_MODEL || process.env.LLM_MODEL || 'gpt-4o-mini'
   const prompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"], analysisResult })
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: `${COACH_PERSONA} Возвращай только валидный JSON.` },
-          { role: 'user', content: prompt },
-        ],
-      }),
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-    if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
-    const body = (await response.json()) as LlmResponseBody
-    const content = body?.choices?.[0]?.message?.content
-    if (!content) return null
-    return { ...(JSON.parse(content) as Partial<LlmPlan>), source: 'llm', nextWorkoutDayId: nextWorkoutDay?.id }
-  } catch (error) {
-    clearTimeout(timeout)
-    console.warn('LLM coach plan failed, using rules fallback:', error instanceof Error ? error.message : error)
-    return null
-  }
+  const parsed = await requestLlmJson<Partial<LlmPlan>>({
+    tier: 'mid',
+    caller: 'coachPlanningService',
+    timeoutMs: LLM_TIMEOUT_MS,
+    temperature: 0.2,
+    system: `${COACH_PERSONA} Возвращай только валидный JSON.`,
+    prompt,
+  })
+  if (!parsed) return null
+  return { ...parsed, source: 'llm', nextWorkoutDayId: nextWorkoutDay?.id }
 }
 
 function formatCoachPlanRecommendation(plan: SafeCoachPlan, nextWorkoutDay: WorkoutDayRef): string {
