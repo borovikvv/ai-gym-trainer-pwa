@@ -44,6 +44,8 @@ interface NarrationInput {
   preferences: {
     focusAreas?: string[]
   }
+  /** Фаза 2: блок долгосрочной памяти (травмы, реакции, цели). */
+  longTermMemory?: string
 }
 
 const LLM_TIMEOUT_MS = 3000
@@ -90,7 +92,10 @@ function buildLlmPrompt(input: NarrationInput): string {
     ? 'Сейчас разгрузочная неделя (deload) — объём и интенсивность снижены намеренно, это часть плана. Объясни это пользователю.'
     : ''
 
-  return `Дата: ${input.scheduledDate}
+  // Фаза 2: долгосрочная память — нарратор может ссылаться на цели и травмы.
+  const memoryBlock = input.longTermMemory ? `${input.longTermMemory}\n` : ''
+
+  return `${memoryBlock}Дата: ${input.scheduledDate}
 Готовность: ${cs?.readinessScore ?? 70}/100
 Восстановление: ${cs?.recoveryStatus ?? 'unknown'}
 Недельная нагрузка: ${cs?.weeklyLoadStatus ?? 'unknown'}

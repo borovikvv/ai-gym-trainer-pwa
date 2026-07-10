@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { ExercisePlan  } from '../../shared/types'
 import type { UserQuestionnaire } from '../data/programApi'
 import { ScreenHeader } from './ui'
+import { CoachMemorySection } from './CoachMemorySection'
 
 type UserProfileScreenProps = {
   users: Array<{ id: string; name: string; initials: string }>
@@ -300,6 +301,8 @@ export function UserProfileScreen({
         <button className="sr-only" type="button">Профиль</button>
         <button className="primary" onClick={onSaveQuestionnaire}>Сохранить анкету</button>
       </div>
+
+      <CoachMemorySection userId={activeUserId} />
     </section>
   )
 }

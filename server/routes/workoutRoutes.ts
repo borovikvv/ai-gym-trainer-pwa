@@ -2,6 +2,7 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
 import { deleteWorkoutDraft, loadActiveWorkoutDraft, loadWorkoutHistory, saveWorkoutDraft, saveWorkoutHistoryEntry } from '../services/workoutService.js'
+import { runMemoryReflection } from '../services/memoryReflectionService.js'
 import { buildWorkoutSavedEvent, logActivity } from '../activityLog.js'
 import { assertAllowedUserId } from '../privateUsers.js'
 
@@ -28,6 +29,10 @@ workoutRoutes.post('/workout-history', async (req, res, next) => {
 	      coachPlanSummary: coachPlan?.summary ?? null,
 	      coachPlanChangeCount: Array.isArray(coachPlan?.changes) ? coachPlan.changes.length : null,
 	    })
+	    // Фаза 2: пост-тренировочная рефлексия памяти тренера. Вне транзакции,
+	    // fire-and-forget через pool — сбой не влияет на сохранение тренировки.
+	    runMemoryReflection({ client: pool, entry: req.body, debrief: saveResult?.debrief ?? null })
+	      .catch((err) => console.error('memoryReflection (non-fatal):', err instanceof Error ? err.message : err))
 	    res.status(201).json({ ok: true, coachPlan, debrief: saveResult?.debrief ?? null })
   } catch (error) {
     await client.query('rollback')

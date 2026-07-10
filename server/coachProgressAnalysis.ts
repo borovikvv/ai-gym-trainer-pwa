@@ -31,6 +31,8 @@ interface ProgressAnalysisInput {
   coachState: CoachState | null
   coachMemory: CoachMemory | null
   now: Date
+  /** Фаза 2: блок долгосрочной памяти (травмы, реакции, цели). */
+  longTermMemory?: string
 }
 
 export interface ExerciseAnalysisFlag {
@@ -148,8 +150,11 @@ function buildLlmPrompt(input: ProgressAnalysisInput): string {
     ? 'ВАЖНО: текущая неделя — разгрузочная (deload). Временное снижение e1RM и рост RPE — ожидаемая норма, НЕ признак перетренированности. Не флаги падение e1RM как тревожный сигнал в этой фазе.'
     : ''
 
-  return `Дата анализа: ${now.toISOString().slice(0, 10)}
+  // Фаза 2: долгосрочная память (травмы, реакции на нагрузку, цели)
+  const memoryBlock = input.longTermMemory ? `\n${input.longTermMemory}\n` : ''
 
+  return `Дата анализа: ${now.toISOString().slice(0, 10)}
+${memoryBlock}
 Тренировок за 4 недели: ${workoutsCount}
 Средний RPE: ${avgRpe}
 Отметок боли: ${painCount}

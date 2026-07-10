@@ -16,6 +16,7 @@ import { loadCoachMemoryForUser } from './programService.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from '../userTrainingPolicies.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 import { normalizeMuscleGroup } from '../lib/muscleGroups.js'
+import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 
 // ---------------------------------------------------------------------------
 // Cached per-user data (stable for the duration of a workout)
@@ -29,6 +30,8 @@ export interface LiveCoachUserData {
   e1rmHistories: ReturnType<typeof buildAllExerciseE1RMHistories>
   policy: UserTrainingPolicy
   profile: { age?: number | null; goal?: string; level?: string; workoutsPerWeek?: number }
+  /** Фаза 2: блок долгосрочной памяти (травмы, реакции, цели) для промпта. */
+  longTermMemory: string
 }
 
 const CACHE_TTL_MS = 10 * 60 * 1000
@@ -57,6 +60,7 @@ export async function loadLiveCoachUserData(client: DbClient, userId: string): P
     e1rmHistories: e1rmHistories ?? buildAllExerciseE1RMHistories(history),
     policy: getUserTrainingPolicy(profile ?? userId),
     profile: profile ?? {},
+    longTermMemory: await loadLongTermMemoryBlock(client, userId),
   }
   cache.set(userId, { data, expiresAt: Date.now() + CACHE_TTL_MS })
   return data
@@ -116,6 +120,7 @@ export function buildLiveContextPrompt(input: BuildLiveContextPromptInput): stri
 
   lines.push(`АТЛЕТ: ${describeAthlete(input.userId, userData)}`)
   lines.push(`ПРАВИЛА БЕЗОПАСНОСТИ: ${describePolicy(userData.policy)}`)
+  if (userData.longTermMemory) lines.push(userData.longTermMemory)
   lines.push(`ГОТОВНОСТЬ СЕГОДНЯ: ${describeReadiness(userData.coachState, session?.readinessCheckIn ?? null)}`)
   const mesocycle = describeMesocycle(userData.coachState)
   if (mesocycle) lines.push(`МЕЗОЦИКЛ: ${mesocycle}`)

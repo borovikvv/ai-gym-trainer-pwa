@@ -7,6 +7,7 @@ import { plannedWorkoutRoutes } from './routes/plannedWorkoutRoutes.js'
 import { profileRoutes } from './routes/profileRoutes.js'
 import { programRoutes } from './routes/programRoutes.js'
 import { workoutRoutes } from './routes/workoutRoutes.js'
+import { memoryRoutes } from './routes/memoryRoutes.js'
 
 const port = Number(process.env.API_PORT ?? 8910)
 const host = process.env.API_HOST ?? '127.0.0.1'
@@ -42,6 +43,7 @@ app.use('/api', profileRoutes)
 app.use('/api', workoutRoutes)
 app.use('/api', coachRoutes)
 app.use('/api', plannedWorkoutRoutes)
+app.use('/api', memoryRoutes)
 
 app.use((error, _req, res, _next) => {
   console.error(error)

@@ -1950,6 +1950,69 @@ select:disabled {
   line-height: 1.45;
 }
 
+/* Фаза 2: память тренера (профиль) и цели (главная) */
+.coach-memory-list,
+.goals-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.coach-memory-fact {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: start;
+  font-size: 14px;
+}
+
+.coach-memory-kind {
+  opacity: 0.7;
+}
+
+.coach-memory-source {
+  font-size: 12px;
+}
+
+.coach-memory-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.coach-memory-add,
+.goal-add {
+  display: grid;
+  gap: 8px;
+}
+
+.coach-memory-add-actions,
+.goal-add-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.goal-item {
+  font-size: 14px;
+}
+
+.goal-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.goal-meta {
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+.goal-achieved .goal-title {
+  color: var(--success, #6b7f3f);
+}
+
 .coach-choice-row {
   display: grid;
   grid-template-columns: 1fr;

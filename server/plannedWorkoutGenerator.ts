@@ -163,6 +163,8 @@ interface BuildGeneratedPlannedWorkoutInput {
   previousGeneratedWorkouts?: PreviousGeneratedWorkout[]
   // Issue #106: structured analysis flags from coachProgressAnalysis (#105)
   analysisResult?: ProgressAnalysis | null
+  // Фаза 2: блок долгосрочной памяти для нарратора
+  longTermMemory?: string
 }
 
 interface GeneratedExercise {
@@ -280,6 +282,7 @@ export async function buildGeneratedPlannedWorkout({
   history = [],
   previousGeneratedWorkouts = [],
   analysisResult = null,
+  longTermMemory = '',
 }: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
@@ -364,6 +367,7 @@ export async function buildGeneratedPlannedWorkout({
       coachMemory: coachMemory as unknown,
       decision,
       lowReadiness,
+      longTermMemory,
       weeklyContext,
       selectedExercises: orderedSelected.map((e) => ({
         exerciseName: e.exerciseName,

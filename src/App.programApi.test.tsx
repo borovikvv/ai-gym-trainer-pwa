@@ -123,6 +123,13 @@ describe('Coach Timeline database-backed program data', () => {
       createPlannedWorkoutInApi: vi.fn().mockResolvedValue(null),
       updatePlannedWorkoutInApi: vi.fn().mockResolvedValue([]),
       deletePlannedWorkoutFromApi: vi.fn().mockResolvedValue(undefined),
+      // Фаза 2: память тренера и цели
+      fetchMemoryFactsFromApi: vi.fn().mockResolvedValue([]),
+      addMemoryFactToApi: vi.fn().mockResolvedValue([]),
+      patchMemoryFactInApi: vi.fn().mockResolvedValue([]),
+      fetchGoalsFromApi: vi.fn().mockResolvedValue([]),
+      addGoalToApi: vi.fn().mockResolvedValue([]),
+      patchGoalInApi: vi.fn().mockResolvedValue([]),
     }))
 
     const { default: App } = await import('./App')

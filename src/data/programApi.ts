@@ -496,6 +496,133 @@ function mapApiExercise(exercise: ApiExercisePlan | ExercisePlan): ExercisePlan 
   }
 }
 
+// ---------------------------------------------------------------------------
+// Фаза 2: долгосрочная память тренера и цели
+// ---------------------------------------------------------------------------
+
+export type MemoryFactKind = 'injury' | 'load_response' | 'preference' | 'constraint' | 'milestone'
+
+export type CoachMemoryFact = {
+  id: string
+  userId: string
+  kind: MemoryFactKind
+  content: string
+  status: 'active' | 'archived'
+  source: 'llm' | 'user' | 'rules'
+  confidence: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type CoachGoal = {
+  id: string
+  userId: string
+  title: string
+  exerciseId: string | null
+  metric: 'e1rm' | 'working_weight' | 'reps_at_weight' | 'bodyweight' | 'habit'
+  targetValue: number | null
+  targetDate: string | null
+  status: 'active' | 'achieved' | 'paused' | 'dropped'
+  progressNote: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchMemoryFactsFromApi(
+  userId: string,
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<CoachMemoryFact[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/coach/memory-facts/${userId}`)
+  if (!response.ok) throw new Error(`API memory facts failed: ${response.status}`)
+  const data = await response.json() as { facts?: CoachMemoryFact[] }
+  return data.facts ?? []
+}
+
+export async function addMemoryFactToApi(
+  userId: string,
+  fact: { kind: MemoryFactKind; content: string },
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<CoachMemoryFact[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/coach/memory-facts/${userId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fact),
+  })
+  if (!response.ok) throw new Error(`API add memory fact failed: ${response.status}`)
+  const data = await response.json() as { facts?: CoachMemoryFact[] }
+  return data.facts ?? []
+}
+
+export async function patchMemoryFactInApi(
+  userId: string,
+  factId: string,
+  patch: { content?: string; status?: 'archived'; confirm?: boolean },
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<CoachMemoryFact[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/coach/memory-facts/${userId}/${factId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!response.ok) throw new Error(`API patch memory fact failed: ${response.status}`)
+  const data = await response.json() as { facts?: CoachMemoryFact[] }
+  return data.facts ?? []
+}
+
+export async function fetchGoalsFromApi(
+  userId: string,
+  status: 'active' | 'all' = 'active',
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<CoachGoal[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/coach/goals/${userId}?status=${status}`)
+  if (!response.ok) throw new Error(`API goals failed: ${response.status}`)
+  const data = await response.json() as { goals?: CoachGoal[] }
+  return data.goals ?? []
+}
+
+export async function addGoalToApi(
+  userId: string,
+  goal: { title: string; metric?: CoachGoal['metric']; exerciseId?: string | null; targetValue?: number | null; targetDate?: string | null },
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<CoachGoal[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/coach/goals/${userId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(goal),
+  })
+  if (!response.ok) throw new Error(`API add goal failed: ${response.status}`)
+  const data = await response.json() as { goals?: CoachGoal[] }
+  return data.goals ?? []
+}
+
+export async function patchGoalInApi(
+  userId: string,
+  goalId: string,
+  patch: { title?: string; status?: CoachGoal['status']; targetValue?: number; targetDate?: string },
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<CoachGoal[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/coach/goals/${userId}/${goalId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!response.ok) throw new Error(`API patch goal failed: ${response.status}`)
+  const data = await response.json() as { goals?: CoachGoal[] }
+  return data.goals ?? []
+}
+
 function buildPrescription(exercise: ApiExercisePlan | ExercisePlan) {
   if (isTimedExercise(exercise)) {
     return `${exercise.setsCount}×${exercise.repMin}–${exercise.repMax} сек · отдых ${exercise.restSeconds} сек`

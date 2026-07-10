@@ -11,6 +11,7 @@ import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 import type { ProgressAnalysis } from '../coachProgressAnalysis.js'
 import { requestLlmJson } from '../lib/llmClient.js'
+import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 
 interface CompletedEntry {
   userId: string
@@ -47,6 +48,8 @@ interface RequestLlmCoachPlanParams {
   exerciseLibrary: unknown[]
   // Issue #107: structured analysis flags so LLM can reason about plateaus
   analysisResult?: ProgressAnalysis | null
+  // Фаза 2: блок долгосрочной памяти
+  longTermMemory?: string
 }
 
 interface LlmPlan extends Partial<SafeCoachPlan> {
@@ -114,7 +117,10 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
     console.warn('analyzeProgress in planAndApplyNextWorkout (non-fatal):', err instanceof Error ? err.message : err)
   }
 
-  const llmPlan = await requestLlmCoachPlan({ profile, workoutDays, completedWorkout: completedEntry, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult })
+  // Фаза 2: долгосрочная память (травмы, реакции, цели) — в промпт планировщика.
+  const longTermMemory = await loadLongTermMemoryBlock(client, completedEntry.userId)
+
+  const llmPlan = await requestLlmCoachPlan({ profile, workoutDays, completedWorkout: completedEntry, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult, longTermMemory })
 
   // Issue #107: LLM is primary, rules are guardrails.
   // If LLM gave a plan, use it (after clamping). Rules only fill in
@@ -194,8 +200,9 @@ async function applyPlanAndLog(
   return safePlan
 }
 
-async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult = null }: RequestLlmCoachPlanParams): Promise<LlmPlan | null> {
-  const prompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"], analysisResult })
+async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult = null, longTermMemory = '' }: RequestLlmCoachPlanParams): Promise<LlmPlan | null> {
+  const basePrompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"], analysisResult })
+  const prompt = longTermMemory ? `${longTermMemory}\n\n${basePrompt}` : basePrompt
   const parsed = await requestLlmJson<Partial<LlmPlan>>({
     tier: 'mid',
     caller: 'coachPlanningService',

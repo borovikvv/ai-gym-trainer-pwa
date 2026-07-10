@@ -25,6 +25,8 @@ interface ProgramReviewInput {
   programDays: WorkoutDayInput[]
   coachState: CoachState | null
   coachMemory: CoachMemory | null
+  /** Фаза 2: блок долгосрочной памяти (травмы, реакции, цели с прогрессом). */
+  longTermMemory?: string
   profile: {
     goal?: string
     level?: string
@@ -71,7 +73,7 @@ export async function reviewProgram(input: ProgramReviewInput): Promise<ProgramR
     temperature: 0.3,
     maxTokens: 500,
     system:
-      'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"priority":"high|medium|low"}],"nextWeekFocus":""}. Пиши на русском. Максимум 3 изменения.',
+      'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Если у атлета есть цели и по ним видно отставание от графика — предлагай изменения, приближающие к цели (приоритет целевого упражнения, объём на нужную группу), и отрази путь к цели в nextWeekFocus. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"priority":"high|medium|low"}],"nextWeekFocus":""}. Пиши на русском. Максимум 3 изменения.',
     prompt: buildLlmPrompt(input),
   })
   if (!parsed) return ruleBasedReview(input)
@@ -142,8 +144,12 @@ function buildLlmPrompt(input: ProgramReviewInput): string {
     ? 'ВАЖНО: текущая неделя — разгрузочная (deload). Не предлагай add_deload или снижение объёма — пользователь уже разгружается. Снижение e1RM и рост RPE на этой неделе ожидаемы.'
     : ''
 
-  return `Дата: ${now.toISOString().slice(0, 10)}
+  // Фаза 2: память + цели. Обзор обязан оценивать «путь к цели» — прогресс
+  // уже посчитан правилами (refreshGoalProgress) и входит в блок памяти.
+  const memoryBlock = input.longTermMemory ? `\n${input.longTermMemory}\n` : ''
 
+  return `Дата: ${now.toISOString().slice(0, 10)}
+${memoryBlock}
 Текущая программа:
 ${programText}
 

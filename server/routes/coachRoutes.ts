@@ -12,6 +12,7 @@ import { reviewProgram } from '../coachProgramReview.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 import { assertAllowedUserId } from '../privateUsers.js'
+import { loadGoals, loadLongTermMemoryBlock, loadMemoryFacts, refreshGoalProgress } from '../coachLongTermMemory.js'
 
 export const coachRoutes = Router()
 
@@ -132,8 +133,15 @@ coachRoutes.get('/coach/state/:userId', requireAllowedUserId, async (req, res, n
 
 coachRoutes.get('/coach/memory/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
-    const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, String(req.params.userId))
-    res.json({ ok: true, coachMemory, coachState })
+    const userId = String(req.params.userId)
+    const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, userId)
+    // Фаза 2: единая «память тренера» — статистическая (coachMemory) +
+    // долгосрочные факты и цели.
+    const [memoryFacts, goals] = await Promise.all([
+      loadMemoryFacts(pool, userId, 'active').catch(() => []),
+      loadGoals(pool, userId, 'all').catch(() => []),
+    ])
+    res.json({ ok: true, coachMemory, coachState, memoryFacts, goals })
   } catch (error) {
     next(error)
   }
@@ -234,6 +242,7 @@ coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async 
       coachState,
       coachMemory,
       now,
+      longTermMemory: await loadLongTermMemoryBlock(pool, userId),
     })
 
     // Save to DB (non-fatal)
@@ -280,18 +289,28 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, async (re
     }
 
     // No cache → generate new review
-    const [profile, programDays, { coachMemory, coachState }] = await Promise.all([
+    const [profile, programDays, memoryResult] = await Promise.all([
       loadUserProfile(pool, userId),
       loadUserWorkoutDays(pool, userId),
       loadCoachMemoryForUser(pool, userId),
     ])
+    const { coachMemory, coachState, e1rmHistories } = memoryResult
     const history = await loadRecentHistory(pool, userId)
+    // Фаза 2: «путь к цели» — правила считают траекторию по e1RM-трендам и
+    // обновляют progress_note каждой активной цели; свежие оценки попадают в
+    // блок памяти для LLM-обзора. Сбой не мешает самому обзору.
+    try {
+      await refreshGoalProgress(pool, userId, e1rmHistories ?? [], now)
+    } catch (goalErr) {
+      console.warn('refreshGoalProgress (non-fatal):', goalErr instanceof Error ? goalErr.message : goalErr)
+    }
     const review = await reviewProgram({
       userId,
       history,
       programDays: programDays as Parameters<typeof reviewProgram>[0]['programDays'],
       coachState,
       coachMemory,
+      longTermMemory: await loadLongTermMemoryBlock(pool, userId),
       profile: {
         goal: profile.goal,
         level: profile.level,

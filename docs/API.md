@@ -96,19 +96,38 @@ Delete a draft.
 ### `GET /coach/state/:userId`
 Returns current coach state (readiness, recovery, mesocycle, muscleGroups, exercises).
 ### `GET /coach/memory/:userId`
-Returns coach memory (weekly balance, muscle group profiles, recommendations) + coach state.
+Returns coach memory (weekly balance, muscle group profiles, recommendations) + coach state + long-term `memoryFacts` and `goals` (Фаза 2).
 ### `POST /coach/next-set`
-Recommends the next set (weight, reps, rest, action).
+Recommends the next set (weight, reps, rest, action). Фаза 1: the rules baseline is refined by a FAST-tier LLM using the full live context (readiness, mesocycle, exercise history, session so far), clamped by user policy; falls back to rules on any LLM failure. Every decision is logged to `coach_decision_log`.
 ```json
 // Request body:
-{ "userId": "...", "exercise": {...}, "completedSets": [...],
+{ "userId": "...", "sessionId": null, "exercise": {...}, "completedSets": [...],
   "remainingSets": 2, "pain": false,
+  "sessionSoFar": [{ "exerciseId": "...", "exerciseName": "...", "sets": [...] }],
   "context": { "coachState": {...}, "session": {...} } }
+// Response: { ok, recommendation: { action, recommendedWeight, ..., source: "llm"|"rules", detail }, coachState, source }
 ```
 ### `POST /coach/live-strategy`
-Live strategy decision for the rest of the workout (hold/reduce/replace/finish).
+Live strategy decision for the rest of the workout (hold/reduce/replace/finish). Kept as an explicit endpoint; the frontend no longer calls it per set (merged into `/coach/next-set`).
 ### `POST /coach/workout-today`
 Generate a coach-recommended workout for today (recovery accessory if readiness is low).
+
+---
+
+## Long-term Memory & Goals (Фаза 2)
+
+### `GET /coach/memory-facts/:userId?status=active|archived|all`
+Persistent coach memory facts (injuries, load responses, preferences, constraints, milestones). Written by the post-workout LLM reflection and by the user.
+### `POST /coach/memory-facts/:userId`
+Add a user fact: `{ "kind": "injury|load_response|preference|constraint|milestone", "content": "..." }`.
+### `PATCH /coach/memory-facts/:userId/:id`
+`{ "content": "..." }` to edit, `{ "status": "archived" }` to archive (injuries can only be archived by the user, never by the LLM), `{ "confirm": true }` to confirm an LLM-noticed fact.
+### `GET /coach/goals/:userId?status=active|all`
+Multi-week goals the coach steers toward. `progress_note` is refreshed weekly from e1RM trends by the program review.
+### `POST /coach/goals/:userId`
+`{ "title": "...", "metric": "e1rm", "exerciseId": "bench-press", "targetValue": 80, "targetDate": "2026-09-01" }`.
+### `PATCH /coach/goals/:userId/:id`
+Update `title` / `status` (`active|achieved|paused|dropped`) / `targetValue` / `targetDate`.
 
 ---
 

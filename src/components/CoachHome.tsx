@@ -6,6 +6,7 @@ import { toHumanCoachText } from '../domain/coachCopy'
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
+import { GoalsCard } from './GoalsCard'
 import { useEffect, useState } from 'react'
 import { isProgramApiConfigured } from '../data/programApi'
 
@@ -297,6 +298,9 @@ export function CoachHome({
         ]}
       />
 
+      {/* Фаза 2: многонедельные цели — тренер ведёт к ним через макроцикл */}
+      <GoalsCard userId={activeUserId} exerciseOptions={goalExerciseOptions(allUserWorkoutDays)} />
+
       {/* Issue #85: AI weekly program review — Issue #104: collapsed into review-row */}
       {programReview && programReview.changes.length > 0 && (
         <SectionList title="Недельный разбор">
@@ -381,6 +385,18 @@ export function CoachHome({
       )}
     </section>
   )
+}
+
+// Фаза 2: уникальные упражнения программы для визарда целей (e1RM-цель
+// привязывается к конкретному упражнению).
+function goalExerciseOptions(workoutDays: WorkoutDay[]): Array<{ id: string; name: string }> {
+  const seen = new Map<string, string>()
+  for (const day of workoutDays) {
+    for (const exercise of day.exercises ?? []) {
+      if (exercise.id && !seen.has(exercise.id)) seen.set(exercise.id, exercise.name)
+    }
+  }
+  return [...seen.entries()].map(([id, name]) => ({ id, name }))
 }
 
 // Issue #104: shortTitle — first ~40 chars up to the first period, for
