@@ -22,7 +22,8 @@ import { useProgramEditing } from './hooks/useProgramEditing'
 import { useQuestionnaire } from './hooks/useQuestionnaire'
 import { useActiveWorkoutContext } from './hooks/useActiveWorkoutContext'
 import { useUserSelection } from './hooks/useUserSelection'
-import { useRestTimer } from './hooks/useRestTimer'
+import { useRestTimer, useWakeLock } from './hooks/useRestTimer'
+import { formatWeight } from './lib/format'
 import { createWorkoutHistoryEntry } from './domain/workoutHistory'
 import { suggestExerciseToAdd } from './domain/exerciseSuggestion'
 import {
@@ -154,7 +155,18 @@ function App() {
 
   const [sheetOpen, setSheetOpen] = useState(false)
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false)
-  const { restRemainingSeconds, setRestRemainingSeconds, clearRestTimer } = useRestTimer()
+  // Фаза 3.2: уведомление «отдых окончен» показывает цель следующего подхода.
+  // Замыкание вызывается только по окончании таймера — visibleNextSetRecommendation
+  // к этому моменту инициализировано (объявлено ниже в этом же компоненте).
+  const { restRemainingSeconds, setRestRemainingSeconds, clearRestTimer } = useRestTimer({
+    buildFinishText: () => {
+      const rec = visibleNextSetRecommendation
+      if (!rec || !(rec.weight > 0) || !(rec.reps > 0)) return ''
+      return `Следующий подход: ${formatWeight(rec.weight)} кг × ${rec.reps}`
+    },
+  })
+  // Фаза 3.2: экран не гаснет во время тренировки (feature-detected).
+  useWakeLock(screen === 'session')
   const [manualWorkoutDaySelected, setManualWorkoutDaySelected] = useState(false)
   const {
     draftStatus,
@@ -523,6 +535,7 @@ function App() {
             onAdjustWeight={adjustWeight}
             onMarkPain={markPain}
             onClearRestTimer={clearRestTimer}
+            onExtendRest={(seconds) => setRestRemainingSeconds((current) => current + seconds)}
             onEditCompletedSet={editCompletedSet}
             onRemoveSet={removeSet}
             onUpdateSetWeight={updateSetWeight}

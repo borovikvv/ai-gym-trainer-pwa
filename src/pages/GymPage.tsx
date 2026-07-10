@@ -58,6 +58,7 @@ interface GymPageProps {
   onAdjustWeight: (delta: number) => void
   onMarkPain: () => void
   onClearRestTimer: () => void
+  onExtendRest: (seconds: number) => void
   onEditCompletedSet: (setIndex: number) => void
   onRemoveSet: (setIndex: number) => void
   onUpdateSetWeight: (setIndex: number, weight: string) => void
@@ -176,6 +177,7 @@ export function GymPage(props: GymPageProps) {
           adjustWeight={props.onAdjustWeight}
           markPain={props.onMarkPain}
           clearRestTimer={props.onClearRestTimer}
+          extendRest={props.onExtendRest}
           editCompletedSet={props.onEditCompletedSet}
           removeSet={props.onRemoveSet}
           updateSetWeight={props.onUpdateSetWeight}

@@ -7,9 +7,9 @@ import { useEffect, useRef } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { SessionActions, QuickActions } from './GymActions'
 import { NextSetCoachCard } from './NextSetCoachCard'
-import { RestTimer } from './RestTimer'
+import { CurrentStepCard } from './CurrentStepCard'
 import { WorkoutSetList } from './WorkoutSetList'
-import { MetricPair, ScreenHeader, SectionList } from './ui'
+import { MetricPair, ScreenHeader } from './ui'
 
 type GymScreenProps = {
   activeWorkoutDay: WorkoutDay
@@ -33,6 +33,7 @@ type GymScreenProps = {
   adjustWeight: (delta: number) => void
   markPain: () => void
   clearRestTimer: () => void
+  extendRest: (seconds: number) => void
   editCompletedSet: (setIndex: number) => void
   removeSet: (setIndex: number) => void
   updateSetWeight: (setIndex: number, value: string) => void
@@ -69,6 +70,7 @@ export function GymScreen({
   adjustWeight,
   markPain,
   clearRestTimer,
+  extendRest,
   editCompletedSet,
   removeSet,
   updateSetWeight,
@@ -149,18 +151,25 @@ export function GymScreen({
         </div>
       </div>
 
-      {/* 3. SectionList "Подходы" — large stepper + inline coach hint */}
-      <SectionList title="Подходы">
-        {/* Inline coach recommendation — shown right above the set inputs */}
-        {isInlineRec && rec && (
-          <div className="coach-inline-hint">
-            <span className="coach-inline-hint__label">
-              {rec.action === 'reduce_load' ? '↓ Снизить' : rec.action === 'hold_load' ? '→ Держать' : '▶ Тренер'}
-            </span>
-            <b>{formatWeight(rec.weight)} кг × {rec.reps}</b>
-            <span className="muted">{rec.reason}</span>
-          </div>
-        )}
+      {/* Фаза 3.1: фокусная карточка «что сейчас делать» — работа или отдых */}
+      <CurrentStepCard
+        exercise={activeExercise}
+        activeLog={activeLog}
+        activeSetIndex={activeSetIndex}
+        allSetsCompleted={allSetsCompleted}
+        recommendation={isInlineRec ? rec : null}
+        restRemainingSeconds={restRemainingSeconds}
+        timedExercise={timedExercise}
+        formatWeight={formatWeight}
+        updateSet={updateSet}
+        markSetDone={markSetDone}
+        extendRest={extendRest}
+        skipRest={clearRestTimer}
+      />
+
+      {/* Фаза 3.1: полный список подходов и быстрые действия — в одном тапе */}
+      <details className="all-sets-details">
+        <summary>Все подходы и правки</summary>
         {!timedExercise && (
           <QuickActions
             weightStep={activeExercise.weightStep}
@@ -177,8 +186,6 @@ export function GymScreen({
           </div>
         )}
 
-        <RestTimer restRemainingSeconds={restRemainingSeconds} clearRestTimer={clearRestTimer} />
-
         <WorkoutSetList
           activeExercise={activeExercise}
           activeLog={activeLog}
@@ -194,7 +201,7 @@ export function GymScreen({
         />
 
         <button className="secondary wide" type="button" onClick={addSet}>Добавить подход</button>
-      </SectionList>
+      </details>
 
       {/* 4. Compact "Прошлый раз / Цель" */}
       <MetricPair

@@ -9,6 +9,7 @@ import type { PlannedWorkout } from '../data/programApi'
 import type { ActiveWorkoutDraft } from './useProgramData'
 import type { NextSetHint } from '../components/gymTypes'
 import { formatWeight } from '../lib/format'
+import { requestNotificationPermissionOnce } from './useRestTimer'
 
 export type SetDraft = WorkoutSetInput & { weightInput?: string; repsInput?: string }
 
@@ -380,6 +381,9 @@ export function useWorkoutNavigation({
   }
 
   function beginPreparedWorkout() {
+    // Фаза 3.2: разрешение на уведомления «отдых окончен» запрашивается один
+    // раз, из жеста пользователя (кнопка «Начать тренировку»).
+    requestNotificationPermissionOnce()
     setActiveSessionWorkoutDay(previewWorkoutDay)
     setActiveExerciseIndex(0)
     setRestRemainingSeconds(0)

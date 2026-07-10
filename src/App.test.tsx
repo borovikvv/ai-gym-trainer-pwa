@@ -273,8 +273,10 @@ describe('Coach Timeline workout flow', () => {
     await user.type(reps, '8')
     await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
 
-    expect(screen.getByText(/Отдых:/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /сбросить таймер/i })).toBeInTheDocument()
+    // Фаза 3: отдых показывает фокусная карточка текущего шага
+    expect(screen.getByText('Отдых')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Пропустить' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+30 с' })).toBeInTheDocument()
     expect(screen.getByText(/Подход 1 · 52,5×8/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /редактировать подход 1/i }))
