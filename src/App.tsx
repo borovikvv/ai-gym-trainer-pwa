@@ -226,7 +226,6 @@ function App() {
     visibleNextSetRecommendation,
     getLocalNextSetRecommendation,
     requestServerNextSet,
-    requestLiveStrategy,
   } = useCoachRecommendations({
     activeUserId,
     activeExercise,
@@ -236,6 +235,7 @@ function App() {
     exerciseLibrary: programData.exerciseLibrary,
     availableMinutes: readinessCheckIn.availableMinutes,
     readinessCheckIn,
+    logs,
   })
   const {
     updateSet,
@@ -259,7 +259,6 @@ function App() {
     setCoachNextSetHint,
     getLocalNextSetRecommendation,
     requestServerNextSet,
-    requestLiveStrategy,
     persistWorkoutDraft,
     notify,
   })

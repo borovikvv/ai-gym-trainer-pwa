@@ -94,12 +94,24 @@ export type ProgramExerciseUpdate = {
   coachFocus: string
 }
 
+// Фаза 1 (план развития): everything completed in this session so far — the
+// per-set LLM advisor uses it to see the whole workout, not one exercise.
+export type SessionExerciseSummary = {
+  exerciseId: string
+  exerciseName?: string
+  muscleGroup?: string
+  pain?: boolean
+  sets: Array<{ weight: number; reps: number; rpe: number; completed: boolean }>
+}
+
 export type CoachNextSetRequest = {
   userId: string
+  sessionId?: string | null
   exercise: Pick<ExercisePlan, 'id' | 'name' | 'repMin' | 'repMax' | 'targetWeight' | 'weightStep' | 'restSeconds' | 'muscleGroup'>
   completedSets: Array<{ weight: number; reps: number; rpe: number; completed: boolean }>
   remainingSets: number
   pain?: boolean
+  sessionSoFar?: SessionExerciseSummary[]
         context?: {
                 session?: {
                         activeExerciseIndex?: number
@@ -118,6 +130,10 @@ export type CoachNextSetRecommendation = {
   recommendedReps: number
   recommendedRestSeconds: number
   reason: string
+  // Фаза 1: LLM-decision extras
+  source?: 'llm' | 'rules'
+  detail?: string
+  targetRpe?: number
   remainingSetUpdates?: Array<{
     setOffset: number
     recommendedWeight: number
@@ -228,20 +244,35 @@ export async function saveUserQuestionnaireToApi(
   if (!response.ok) throw new Error(`API questionnaire save failed: ${response.status}`)
 }
 
+// Фаза 1: the server now calls an LLM inside this endpoint, so the client
+// waits a bit longer than a plain rules call (server LLM timeout is 6s).
+const NEXT_SET_TIMEOUT_MS = 7000
+
 export async function requestCoachNextSetFromApi(
   request: CoachNextSetRequest,
   fetcher: typeof fetch = fetch,
   baseUrl: string | undefined = apiBaseUrl,
+  signal?: AbortSignal,
 ): Promise<CoachNextSetRecommendation | null> {
   if (!baseUrl) return null
-  const response = await fetcher(`${baseUrl}/api/coach/next-set`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  })
-  if (!response.ok) throw new Error(`API coach next-set failed: ${response.status}`)
-  const data = await response.json() as { recommendation?: CoachNextSetRecommendation }
-  return data.recommendation ?? null
+  const timeoutController = new AbortController()
+  const timeout = setTimeout(() => timeoutController.abort(), NEXT_SET_TIMEOUT_MS)
+  const combinedSignal = signal && typeof AbortSignal.any === 'function'
+    ? AbortSignal.any([signal, timeoutController.signal])
+    : (signal ?? timeoutController.signal)
+  try {
+    const response = await fetcher(`${baseUrl}/api/coach/next-set`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: combinedSignal,
+    })
+    if (!response.ok) throw new Error(`API coach next-set failed: ${response.status}`)
+    const data = await response.json() as { recommendation?: CoachNextSetRecommendation }
+    return data.recommendation ?? null
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export async function requestCoachLiveStrategyFromApi(

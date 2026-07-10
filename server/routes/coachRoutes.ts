@@ -1,7 +1,7 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
-import { Router } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
 import { pool } from '../db.js'
 import { buildLiveStrategyDecision, requestLlmLiveStrategy } from '../coachBrain.js'
+import { buildNextSetDecision } from '../coachSetAdvisor.js'
 import { buildWorkoutTodayPlan } from '../coachToday.js'
 import { recommendNextSet } from '../coachEngine.js'
 import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecisionLog.js'
@@ -19,7 +19,7 @@ export const coachRoutes = Router()
 // For GET endpoints with :userId param, checks req.params.userId.
 // For POST endpoints, checks req.body.userId.
 // Throws 400 if userId is missing, 403 if not in allowlist.
-function requireAllowedUserId(req, res, next) {
+function requireAllowedUserId(req: Request, _res: Response, next: NextFunction) {
   try {
     const userId = req.params?.userId ?? req.body?.userId
     assertAllowedUserId(userId)
@@ -64,7 +64,7 @@ coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res, next)
       }
     }
 
-    const recommendation = recommendNextSet({
+    const rulesDecision = recommendNextSet({
       userId: body.userId,
       exercise: exercisePayload,
       completedSets,
@@ -72,8 +72,50 @@ coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res, next)
       pain: Boolean(body.pain),
       context: { ...context, coachState },
     })
-    logActivity('coach.next_set', buildCoachNextSetEvent({ body, recommendation, coachState }))
-    res.json({ ok: true, recommendation, coachState })
+
+    // Фаза 1 (план развития): LLM refines the rules baseline on every set,
+    // clamped by user policy; falls back to rulesDecision on any failure.
+    const { decision, prompt, clamped } = await buildNextSetDecision({
+      client: pool,
+      userId: String(body.userId ?? ''),
+      exercise: exercisePayload,
+      completedSets,
+      remainingSets: Number(body.remainingSets ?? 0),
+      pain: Boolean(body.pain),
+      sessionSoFar: Array.isArray(body.sessionSoFar) ? body.sessionSoFar : undefined,
+      session: context.session ?? {},
+      rulesDecision,
+    })
+
+    logActivity('coach.next_set', buildCoachNextSetEvent({ body, recommendation: decision, coachState }))
+    // Per-set decision log: auditable "почему тренер так сказал" + raw material
+    // for per-set training records (Level 4). Non-fatal on failure.
+    try {
+      const logEntry = buildCoachDecisionLogEntry({
+        userId: String(body.userId ?? ''),
+        sessionId: body.sessionId ?? null,
+        decisionType: 'next_set',
+        source: decision.source,
+        inputs: { coachState },
+        decision: {
+          summary: decision.reason,
+          exerciseId: exercisePayload.id ?? null,
+          action: decision.action,
+          recommendedWeight: decision.recommendedWeight,
+          recommendedReps: decision.recommendedReps,
+          recommendedRestSeconds: decision.recommendedRestSeconds,
+          targetRpe: decision.targetRpe ?? null,
+          detail: decision.detail ?? null,
+          prompt,
+          clamped,
+        },
+      })
+      await storeCoachDecisionLog(pool, logEntry)
+    } catch (logError) {
+      console.error('next_set decision log failed (non-fatal):', logError instanceof Error ? logError.message : logError)
+    }
+
+    res.json({ ok: true, recommendation: decision, coachState, source: decision.source })
   } catch (error) {
     next(error)
   }
@@ -81,7 +123,7 @@ coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res, next)
 
 coachRoutes.get('/coach/state/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
-    const coachState = await loadCoachStateForUser(pool, req.params.userId)
+    const coachState = await loadCoachStateForUser(pool, String(req.params.userId))
     res.json({ ok: true, coachState })
   } catch (error) {
     next(error)
@@ -90,7 +132,7 @@ coachRoutes.get('/coach/state/:userId', requireAllowedUserId, async (req, res, n
 
 coachRoutes.get('/coach/memory/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
-    const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, req.params.userId)
+    const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, String(req.params.userId))
     res.json({ ok: true, coachMemory, coachState })
   } catch (error) {
     next(error)
@@ -136,10 +178,16 @@ coachRoutes.post('/coach/workout-today', requireAllowedUserId, async (req, res, 
       loadUserWorkoutDays(pool, userId),
       loadExerciseLibrary(pool),
       loadCoachStateForUser(pool, userId),
-            ])
-            const plan = buildWorkoutTodayPlan({ profile, workoutDays, exerciseLibrary, coachState, now: new Date() })
-            logActivity('coach.workout_today', buildWorkoutTodayEvent({ userId, plan, coachState }))
-            res.json({ ok: true, plan })
+    ])
+    const plan = buildWorkoutTodayPlan({
+      profile,
+      workoutDays: workoutDays as Parameters<typeof buildWorkoutTodayPlan>[0]['workoutDays'],
+      exerciseLibrary: exerciseLibrary as Parameters<typeof buildWorkoutTodayPlan>[0]['exerciseLibrary'],
+      coachState,
+      now: new Date(),
+    })
+    logActivity('coach.workout_today', buildWorkoutTodayEvent({ userId, plan, coachState }))
+    res.json({ ok: true, plan })
   } catch (error) {
     next(error)
   }
@@ -148,7 +196,7 @@ coachRoutes.post('/coach/workout-today', requireAllowedUserId, async (req, res, 
 // Issue #84: AI Level 2 — progress analysis (with daily caching)
 coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
-    const userId = req.params.userId
+    const userId = String(req.params.userId)
     const now = new Date()
 
     // Check cache: progress_analysis from last 24 hours
@@ -208,7 +256,7 @@ coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async 
 // Issue #85: AI Level 3 — program review (with weekly caching)
 coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
-    const userId = req.params.userId
+    const userId = String(req.params.userId)
     const now = new Date()
 
     // Check cache: is there a program_review from this ISO week?
@@ -241,7 +289,7 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, async (re
     const review = await reviewProgram({
       userId,
       history,
-      programDays,
+      programDays: programDays as Parameters<typeof reviewProgram>[0]['programDays'],
       coachState,
       coachMemory,
       profile: {
@@ -275,7 +323,7 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, async (re
 // Issue #86: AI Level 4 — training record status + export
 coachRoutes.get('/coach/training-records/:userId', requireAllowedUserId, async (req, res, next) => {
   try {
-    const userId = req.params.userId
+    const userId = String(req.params.userId)
     const count = await countTrainingRecords(pool, userId)
     const ready = count >= 50
     res.json({ ok: true, count, readyForFineTuning: ready, minRequired: 50 })
@@ -286,7 +334,7 @@ coachRoutes.get('/coach/training-records/:userId', requireAllowedUserId, async (
 
 coachRoutes.get('/coach/training-records/:userId/export', requireAllowedUserId, async (req, res, next) => {
   try {
-    const userId = req.params.userId
+    const userId = String(req.params.userId)
     const jsonl = await exportTrainingRecords(pool, userId)
     res.setHeader('Content-Type', 'application/jsonl')
     res.setHeader('Content-Disposition', `attachment; filename="training-records-${userId}.jsonl"`)
@@ -300,7 +348,7 @@ coachRoutes.get('/coach/training-records/:userId/export', requireAllowedUserId, 
 // frontend can show "what the coach changed" instead of raw analysis text.
 coachRoutes.get('/coach/training-records/:userId/latest', requireAllowedUserId, async (req, res, next) => {
   try {
-    const userId = req.params.userId
+    const userId = String(req.params.userId)
     const result = await pool.query(
       `select body, created_at
        from public.recommendations

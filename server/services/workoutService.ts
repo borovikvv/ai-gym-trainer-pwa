@@ -7,6 +7,7 @@ import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachD
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { regeneratePlannedWorkout } from './plannedWorkoutService.js'
 import { saveTrainingRecord } from '../coachTrainingRecord.js'
+import { invalidateLiveCoachCache } from './liveCoachContext.js'
 // Issue #91: load coachState + profile + exercise library to fill the 12
 // empty fields in training_record (was passing null/''/0 before)
 import { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary, loadRecentHistory } from './programService.js'
@@ -380,6 +381,10 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   } catch (err) {
     console.error('cache invalidation after save (non-fatal):', (err as Error).message)
   }
+
+  // Фаза 1 (план развития): the per-set live coach caches profile/history per
+  // user for the duration of a workout — a saved workout changes both.
+  invalidateLiveCoachCache(sanitizedEntry.userId)
 
   return { coachPlan, debrief }
 }

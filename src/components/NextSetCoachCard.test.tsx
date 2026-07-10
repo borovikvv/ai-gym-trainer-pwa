@@ -155,4 +155,44 @@ describe('NextSetCoachCard', () => {
     await user.click(screen.getByRole('button', { name: /перейти к сохранению/i }))
     expect(onAcceptCoachDecision).toHaveBeenCalledWith(expect.objectContaining({ action: 'finish_workout' }))
   })
+
+  it('shows «Тренер думает…» while the server decision is pending', () => {
+    render(
+      <NextSetCoachCard
+        recommendation={{
+          action: 'local',
+          weight: 60,
+          reps: 8,
+          restSeconds: 120,
+          reason: 'подход под контролем',
+          pending: true,
+        }}
+        allSetsCompleted={false}
+        formatWeight={String}
+      />,
+    )
+    expect(screen.getByText('Тренер думает…')).toBeInTheDocument()
+  })
+
+  it('reveals the LLM detail behind a «почему?» expander', async () => {
+    const user = userEvent.setup()
+    render(
+      <NextSetCoachCard
+        recommendation={{
+          action: 'continue',
+          weight: 62.5,
+          reps: 8,
+          restSeconds: 150,
+          reason: 'добавляем шаг — подход шёл уверенно',
+          detail: 'RPE 7 при растущем e1RM: есть запас на +2.5 кг без риска для техники.',
+          source: 'llm',
+        }}
+        allSetsCompleted={false}
+        formatWeight={String}
+      />,
+    )
+    expect(screen.queryByText('Тренер думает…')).not.toBeInTheDocument()
+    await user.click(screen.getByText('почему?'))
+    expect(screen.getByText(/есть запас на \+2\.5 кг/)).toBeInTheDocument()
+  })
 })

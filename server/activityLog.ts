@@ -146,7 +146,9 @@ interface PlannedWeekEvent {
 
 const PREFIX = 'TRAINER_EVENT'
 
-export function logActivity(event: string, payload: Record<string, unknown> = {}): void {
+// payload is `object` (not Record<string, unknown>) so typed event interfaces
+// like CoachNextSetEvent are accepted without an index signature.
+export function logActivity(event: string, payload: object = {}): void {
   const body = {
     ts: new Date().toISOString(),
     event,

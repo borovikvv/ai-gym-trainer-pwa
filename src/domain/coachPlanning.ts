@@ -1,3 +1,7 @@
+// ВНИМАНИЕ (Фаза 1 плана развития): клиентский recommendNextSet здесь — это
+// ТОЛЬКО офлайн/мгновенный фолбэк. Авторитетное решение по следующему подходу
+// принимает сервер (server/coachSetAdvisor.ts: LLM + кламп + полные правила
+// server/coachEngine.ts). Не расширяйте логику тут — меняйте серверную.
 import type { WorkoutDay  } from '../../shared/types'
 import type { WorkoutSetInput } from './progression'
 import { roundWeight } from '../lib/format'

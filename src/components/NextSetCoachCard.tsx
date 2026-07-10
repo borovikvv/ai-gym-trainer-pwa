@@ -31,6 +31,15 @@ export function NextSetCoachCard({ recommendation, allSetsCompleted, formatWeigh
         <b>Следующий подход: {formatWeight(recommendation.weight)} кг × {recommendation.reps}</b>
       )}
       <div className="muted">{recommendation.reason}</div>
+      {recommendation.pending && (
+        <div className="muted coach-thinking" aria-live="polite">Тренер думает…</div>
+      )}
+      {recommendation.detail && !recommendation.pending && (
+        <details className="coach-detail">
+          <summary>почему?</summary>
+          <div className="muted">{recommendation.detail}</div>
+        </details>
+      )}
       {isExerciseSuggestion && suggestionOptions.length > 0 && onApplySuggestedExercise && (
         <div className="coach-choice-row top-gap">
           {suggestionOptions.map((exercise) => (

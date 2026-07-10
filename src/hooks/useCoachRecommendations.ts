@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ExercisePlan  } from '../../shared/types'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import {
@@ -21,6 +21,8 @@ type UseCoachRecommendationsParams = {
   availableMinutes?: number
   readinessCheckIn?: ReadinessCheckIn
   apiConfigured?: boolean
+  // Фаза 1: все логи сессии — советник видит всю тренировку, не одно упражнение
+  logs?: Record<string, ExerciseLog>
 }
 
 type RequestServerNextSetParams = {
@@ -41,8 +43,13 @@ export function useCoachRecommendations({
   availableMinutes,
   readinessCheckIn,
   apiConfigured = isProgramApiConfigured,
+  logs = {},
 }: UseCoachRecommendationsParams) {
   const [coachNextSetHint, setCoachNextSetHint] = useState<NextSetHint | null>(null)
+  // Фаза 1: держим один живой запрос next-set. Новый завершённый подход
+  // отменяет висящий запрос, чтобы медленный устаревший ответ не затёр
+  // свежую подсказку.
+  const nextSetAbortRef = useRef<AbortController | null>(null)
 
   const getLocalNextSetRecommendation = useCallback(
     (completedSets: WorkoutSetInput[]) => recommendNextSet({
@@ -72,37 +79,65 @@ export function useCoachRecommendations({
   const requestServerNextSet = useCallback(
     async ({ completedSets, remainingSets, pain }: RequestServerNextSetParams) => {
       if (!apiConfigured) return null
-      const serverRecommendation = await requestCoachNextSetFromApi({
-        userId: activeUserId,
-        exercise: {
-          id: activeExercise.id,
-          name: activeExercise.name,
-          muscleGroup: activeExercise.muscleGroup,
-          repMin: activeExercise.repMin,
-          repMax: activeExercise.repMax,
-          targetWeight: activeExercise.targetWeight,
-          weightStep: activeExercise.weightStep,
-          restSeconds: activeExercise.restSeconds,
-        },
-        completedSets: completedSets.map((set) => ({
-          weight: set.weight,
-          reps: set.reps,
-          rpe: set.rpe,
-          completed: Boolean(set.completed),
-        })),
-        remainingSets,
-        pain,
-        context: {
-          session: {
-            activeExerciseIndex,
-            availableMinutes,
-            readinessCheckIn,
-            nextExercise: activeWorkoutDayExercises[activeExerciseIndex + 1] ?? null,
-            workoutExercises: activeWorkoutDayExercises,
-            exerciseLibrary,
+      // Отменяем предыдущий висящий запрос — его ответ уже устарел.
+      nextSetAbortRef.current?.abort()
+      const abortController = new AbortController()
+      nextSetAbortRef.current = abortController
+      // Всё выполненное в этой сессии по другим упражнениям — контекст для LLM.
+      const exercisesById = new Map(activeWorkoutDayExercises.map((exercise) => [exercise.id, exercise]))
+      const sessionSoFar = Object.values(logs)
+        .filter((log) => log.exerciseId !== activeExercise.id && log.sets.some((set) => set.completed && Number(set.reps) > 0))
+        .map((log) => ({
+          exerciseId: log.exerciseId,
+          exerciseName: exercisesById.get(log.exerciseId)?.name,
+          muscleGroup: exercisesById.get(log.exerciseId)?.muscleGroup,
+          pain: Boolean(log.pain),
+          sets: log.sets
+            .filter((set) => set.completed && Number(set.reps) > 0)
+            .map((set) => ({ weight: set.weight, reps: set.reps, rpe: set.rpe, completed: true })),
+        }))
+      let serverRecommendation
+      try {
+        serverRecommendation = await requestCoachNextSetFromApi(
+          {
+            userId: activeUserId,
+            exercise: {
+              id: activeExercise.id,
+              name: activeExercise.name,
+              muscleGroup: activeExercise.muscleGroup,
+              repMin: activeExercise.repMin,
+              repMax: activeExercise.repMax,
+              targetWeight: activeExercise.targetWeight,
+              weightStep: activeExercise.weightStep,
+              restSeconds: activeExercise.restSeconds,
+            },
+            completedSets: completedSets.map((set) => ({
+              weight: set.weight,
+              reps: set.reps,
+              rpe: set.rpe,
+              completed: Boolean(set.completed),
+            })),
+            remainingSets,
+            pain,
+            sessionSoFar,
+            context: {
+              session: {
+                activeExerciseIndex,
+                availableMinutes,
+                readinessCheckIn,
+                nextExercise: activeWorkoutDayExercises[activeExerciseIndex + 1] ?? null,
+                workoutExercises: activeWorkoutDayExercises,
+                exerciseLibrary,
+              },
+            },
           },
-        },
-      })
+          undefined,
+          undefined,
+          abortController.signal,
+        )
+      } finally {
+        if (nextSetAbortRef.current === abortController) nextSetAbortRef.current = null
+      }
       if (!serverRecommendation) return null
       return {
         weight: serverRecommendation.recommendedWeight,
@@ -110,6 +145,8 @@ export function useCoachRecommendations({
         restSeconds: serverRecommendation.recommendedRestSeconds,
         reason: serverRecommendation.reason,
         action: serverRecommendation.action,
+        detail: serverRecommendation.detail,
+        source: serverRecommendation.source,
         remainingSetUpdates: serverRecommendation.remainingSetUpdates,
         suggestedExercise: serverRecommendation.suggestedExercise,
         suggestedExercises: serverRecommendation.suggestedExercises,
@@ -131,6 +168,7 @@ export function useCoachRecommendations({
       availableMinutes,
       readinessCheckIn,
       apiConfigured,
+      logs,
     ],
   )
 

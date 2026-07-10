@@ -387,7 +387,9 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   } catch (err) {
     console.error('volumeLandmarkOverrides save failed (non-fatal):', (err as Error).message)
   }
-  return { coachMemory, coachState }
+  // profile / history / e1rmHistories are already computed here — expose them
+  // so per-set live coach calls (liveCoachContext) don't re-query everything.
+  return { coachMemory, coachState, profile, history, e1rmHistories }
 }
 
 export async function loadRecentCoachDecisionLogs(client: DbClient, userId: string) {

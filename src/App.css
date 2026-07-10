@@ -1919,6 +1919,37 @@ select:disabled {
   margin-bottom: 4px;
 }
 
+/* Фаза 1: индикатор ожидания LLM-советника */
+.coach-thinking {
+  margin-top: 4px;
+  font-size: 12px;
+  animation: coach-thinking-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes coach-thinking-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+/* Фаза 1: раскрывашка «почему?» с объяснением решения */
+.coach-detail {
+  margin-top: 6px;
+}
+
+.coach-detail summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary, #8a8577);
+  text-decoration: underline dotted;
+  width: fit-content;
+}
+
+.coach-detail > div {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .coach-choice-row {
   display: grid;
   grid-template-columns: 1fr;

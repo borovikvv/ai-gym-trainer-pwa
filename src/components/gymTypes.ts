@@ -9,6 +9,11 @@ export type NextSetHint = {
   restSeconds: number
   reason: string
   action: string
+  // Фаза 1: LLM-советник — развёрнутое «почему?» и источник решения
+  detail?: string
+  source?: 'llm' | 'rules'
+  // true пока ждём уточнение от сервера (карточка показывает «Тренер думает…»)
+  pending?: boolean
   remainingSetUpdates?: Array<{
     setOffset: number
     recommendedWeight: number

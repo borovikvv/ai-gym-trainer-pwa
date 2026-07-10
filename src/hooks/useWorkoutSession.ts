@@ -92,7 +92,6 @@ type UseWorkoutSetActionsOptions = {
   setCoachNextSetHint: (hint: NextSetHint | null) => void
   getLocalNextSetRecommendation: (completedSets: SetDraft[]) => LocalNextSetRecommendation | null
   requestServerNextSet: (payload: { completedSets: SetDraft[]; remainingSets: number; pain: boolean }) => Promise<NextSetHint | null>
-  requestLiveStrategy: (payload: { completedSets: SetDraft[]; remainingSets: number; pain: boolean }) => Promise<NextSetHint | null>
   persistWorkoutDraft: (nextLogs: Record<string, ExerciseLog>) => void
   notify: (message: string) => void
 }
@@ -108,7 +107,6 @@ export function useWorkoutSetActions({
   setCoachNextSetHint,
   getLocalNextSetRecommendation,
   requestServerNextSet,
-  requestLiveStrategy,
   persistWorkoutDraft,
   notify,
 }: UseWorkoutSetActionsOptions) {
@@ -194,19 +192,28 @@ export function useWorkoutSetActions({
     })
     const nextLogs = { ...logs, [activeExercise.id]: { ...existing, sets } }
     setLogs(nextLogs)
-    setCoachNextSetHint(recommendation ? { weight: recommendation.weight, reps: recommendation.reps, restSeconds: activeExercise.restSeconds, reason: recommendation.reason, action: 'local' } : null)
+    // Оптимистичная подсказка по локальным правилам; pending=true, пока
+    // сервер (LLM-советник) не уточнит решение.
+    setCoachNextSetHint(recommendation ? { weight: recommendation.weight, reps: recommendation.reps, restSeconds: activeExercise.restSeconds, reason: recommendation.reason, action: 'local', pending: true } : null)
     persistWorkoutDraft(nextLogs)
     setRestRemainingSeconds(activeExercise.restSeconds)
     notify('Подход записан')
 
+    // Фаза 1: единый вызов /coach/next-set — сервер сам решает и следующий
+    // подход, и стратегию на остаток тренировки (LLM с клампом, фолбэк на
+    // правила). Отдельная ветка live-strategy больше не нужна: два
+    // параллельных вызова давали противоречивые подсказки.
     requestServerNextSet({
       completedSets: completedOnly,
       remainingSets: completedSets.slice(setIndex + 1).filter((set) => !set.completed).length,
       pain: Boolean(existing.pain),
     })
       .then((serverRecommendation) => {
-        if (!serverRecommendation) return
-        setCoachNextSetHint(serverRecommendation)
+        if (!serverRecommendation) {
+          setCoachNextSetHint(recommendation ? { weight: recommendation.weight, reps: recommendation.reps, restSeconds: activeExercise.restSeconds, reason: recommendation.reason, action: 'local' } : null)
+          return
+        }
+        setCoachNextSetHint({ ...serverRecommendation, pending: false })
         if (serverRecommendation.action === 'stop_exercise' || serverRecommendation.action === 'suggest_replacement') return
         setLogs((current) => {
           const currentLog = current[activeExercise.id] ?? createExerciseLog(activeExercise)
@@ -223,22 +230,11 @@ export function useWorkoutSetActions({
           setRestRemainingSeconds(serverRecommendation.restSeconds)
         }
       })
-      .catch(() => undefined)
-
-    const completedSet = completedSets[setIndex]
-    const remainingSets = completedSets.slice(setIndex + 1).filter((set) => !set.completed).length
-    const shouldRequestLiveStrategy = Number(completedSet?.rpe ?? 0) >= 9 || Boolean(existing.pain) || remainingSets === 0
-    if (shouldRequestLiveStrategy) {
-      requestLiveStrategy({
-        completedSets: completedOnly,
-        remainingSets,
-        pain: Boolean(existing.pain),
+      .catch(() => {
+        // Сервер не ответил (офлайн/таймаут/отменён) — локальная подсказка
+        // остаётся, просто снимаем индикатор ожидания.
+        setCoachNextSetHint(recommendation ? { weight: recommendation.weight, reps: recommendation.reps, restSeconds: activeExercise.restSeconds, reason: recommendation.reason, action: 'local' } : null)
       })
-        .then((strategyRecommendation) => {
-          if (strategyRecommendation) setCoachNextSetHint(strategyRecommendation)
-        })
-        .catch(() => undefined)
-    }
   }
 
   function adjustWeight(delta: number) {
