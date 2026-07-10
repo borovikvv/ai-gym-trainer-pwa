@@ -254,6 +254,42 @@ export async function createGeneratedPlannedWorkoutForDate(client: DbClient, { u
   return (await loadPlannedWorkouts(client, userId, { includePast: true })).find((workout) => workout.id === id)
 }
 
+// Фаза 2Б.3 (план развития): каскадная перегенерация будущих тренировок.
+// После сохранения тренировки, обнаружения пропуска или переноса даты все
+// будущие сгенерированные тренировки пересобираются по порядку дат — каждая
+// видит фактическую историю и уже перегенерированные предыдущие (тот же
+// принцип цепочки, что в replaceCalendarWeek). Тренировки, составленные
+// пользователем вручную (source='user'), не трогаем.
+export async function cascadeRegenerateFutureWorkouts(
+  client: DbClient,
+  { userId, horizonDays = 14 }: { userId: string; horizonDays?: number },
+): Promise<number> {
+  const future = await client.query(
+    `select id, scheduled_date, source from public.planned_workouts
+     where user_id = $1
+       and status in ('planned', 'generated', 'moved')
+       and scheduled_date >= current_date
+       and scheduled_date <= current_date + ($2 || ' days')::interval
+     order by scheduled_date asc`,
+    [userId, String(Math.max(1, Math.floor(horizonDays)))],
+  )
+  let regenerated = 0
+  for (const row of future.rows as Array<{ id: unknown; scheduled_date: unknown; source: unknown }>) {
+    if (String(row.source) === 'user') continue
+    const scheduledDate = dateToDateOnly(row.scheduled_date as Date)
+    try {
+      // Последовательно по датам: каждая перегенерация читает предыдущие
+      // через loadPreviousGeneratedWorkoutContext и видит свежие изменения.
+      await regeneratePlannedWorkout(client, { plannedWorkoutId: String(row.id), userId, scheduledDate })
+      regenerated += 1
+    } catch (err) {
+      // Неудача одной тренировки не должна валить каскад целиком.
+      console.error(`cascadeRegenerate ${String(row.id)} (non-fatal):`, err instanceof Error ? err.message : err)
+    }
+  }
+  return regenerated
+}
+
 export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkoutId, userId, scheduledDate }: RegeneratePlannedWorkoutParams): Promise<void> {
   const [profile, workoutDays, exerciseLibrary, history] = await Promise.all([
     loadUserProfile(client, userId),

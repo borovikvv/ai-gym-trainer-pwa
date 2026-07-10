@@ -228,6 +228,27 @@ export function CoachHome({
     return () => { cancelled = true }
   }, [activeUserId, userHistory.length])
 
+  // Фаза 2Б: баннер «план пересобран» после пропущенной тренировки.
+  // Показывается, пока пользователь его не закроет (ключ = id пропущенных).
+  const [dismissedMissedKey, setDismissedMissedKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('ai-gym-trainer:v0.1:dismissed-missed') ?? ''
+    } catch {
+      return ''
+    }
+  })
+  const missedWorkouts = plannedWorkouts.filter((workout) => workout.status === 'missed')
+  const missedKey = missedWorkouts.map((workout) => workout.id).sort().join(',')
+  const showMissedBanner = missedWorkouts.length > 0 && missedKey !== dismissedMissedKey
+  function dismissMissedBanner() {
+    setDismissedMissedKey(missedKey)
+    try {
+      localStorage.setItem('ai-gym-trainer:v0.1:dismissed-missed', missedKey)
+    } catch {
+      // localStorage недоступен — баннер просто скроется до перезагрузки
+    }
+  }
+
   return (
     <section className="screen active home-screen">
       <ScreenHeader
@@ -249,6 +270,18 @@ export function CoachHome({
           </div>
         )}
       />
+
+      {showMissedBanner && (
+        <div className="card missed-banner" role="status">
+          <b>План обновлён</b>
+          <div className="muted">
+            {missedWorkouts.length === 1
+              ? `Пропущена тренировка ${formatDateOnly(missedWorkouts[0].scheduledDate)} — тренер пересобрал следующие под фактический перерыв.`
+              : `Пропущено тренировок: ${missedWorkouts.length} — тренер пересобрал следующие под фактический перерыв.`}
+          </div>
+          <button className="secondary compact top-gap" onClick={dismissMissedBanner}>Понятно</button>
+        </div>
+      )}
 
       <HeroStatus
         eyebrow={primaryTimelineItem ? formatDateOnly(primaryTimelineItem.scheduledDate) : 'Следующая'}

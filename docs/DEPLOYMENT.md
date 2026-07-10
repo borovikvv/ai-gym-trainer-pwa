@@ -73,11 +73,16 @@ node server/regeneratePlannedWorkouts.mjs --all-users
 
 | Trigger | What happens |
 |---------|-------------|
-| `POST /api/workout-history` (save workout) | Next planned workout is auto-regenerated |
+| `POST /api/workout-history` (save workout) | ALL future coach/auto workouts cascade-regenerated (Фаза 2Б, 14-day horizon) |
+| `GET /api/planned-workouts` (app open) | Schedule reconciliation: overdue → `missed`, then cascade regeneration |
 | `POST /api/planned-workouts/:id/generate` (manual "Обновить") | Single workout regenerated |
 | `POST /api/planned-workouts/week` (replace calendar week) | All workouts in range regenerated |
-| `PATCH /api/planned-workouts/:id` (move date) | Workout regenerated on new date |
+| `PATCH /api/planned-workouts/:id` (move date) | Moved workout regenerated + cascade for the rest |
 | Code deploy | Run `regeneratePlannedWorkouts.mjs` manually |
+
+Notes (Фаза 2Б): user-composed workouts (`source='user'`) are never touched by
+the cascade. A missed workout is not rescheduled — the future plan is rebuilt
+around the actual gap instead.
 
 ## Backup
 

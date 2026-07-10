@@ -1,7 +1,8 @@
 // @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { Router } from 'express'
 import { pool } from '../db.js'
-import { createGeneratedPlannedWorkoutForDate, ensureDefaultPlannedWorkouts, loadPlannedWorkouts, regeneratePlannedWorkout, replacePlannedTrainingRange } from '../services/plannedWorkoutService.js'
+import { cascadeRegenerateFutureWorkouts, createGeneratedPlannedWorkoutForDate, ensureDefaultPlannedWorkouts, loadPlannedWorkouts, regeneratePlannedWorkout, replacePlannedTrainingRange } from '../services/plannedWorkoutService.js'
+import { reconcileSchedule } from '../services/scheduleReconciliation.js'
 import { dateToDateOnly } from '../utils.js'
 import { buildPlannedWeekEvent, logActivity } from '../activityLog.js'
 import { assertAllowedRowOwner, assertAllowedUserId } from '../privateUsers.js'
@@ -11,9 +12,18 @@ export const plannedWorkoutRoutes = Router()
 plannedWorkoutRoutes.get('/planned-workouts', async (req, res, next) => {
   try {
     const userId = assertAllowedUserId(req.query.userId)
+    // Фаза 2Б: ленивая сверка с реальностью — просроченные без выполнения
+    // помечаются missed, будущие пересобираются каскадом под фактический
+    // перерыв. Сбой сверки не мешает отдать план.
+    let reconciliation = { missedDates: [] as string[], regenerated: 0 }
+    try {
+      reconciliation = await reconcileSchedule(pool, userId)
+    } catch (reconcileErr) {
+      console.error('reconcileSchedule (non-fatal):', reconcileErr instanceof Error ? reconcileErr.message : reconcileErr)
+    }
     await ensureDefaultPlannedWorkouts(pool, userId)
     const plannedWorkouts = await loadPlannedWorkouts(pool, userId)
-    res.json({ ok: true, plannedWorkouts })
+    res.json({ ok: true, plannedWorkouts, reconciliation })
   } catch (error) {
     next(error)
   }
@@ -89,6 +99,9 @@ plannedWorkoutRoutes.patch('/planned-workouts/:id', async (req, res, next) => {
     const userId = assertAllowedRowOwner(result.rows[0])
     if (scheduledDate) {
       await regeneratePlannedWorkout(client, { plannedWorkoutId: id, userId, scheduledDate })
+      // Фаза 2Б.3: перенос даты меняет разрывы между тренировками — все
+      // последующие пересобираются под новое расписание.
+      await cascadeRegenerateFutureWorkouts(client, { userId })
     }
     await client.query('commit')
     const plannedWorkouts = await loadPlannedWorkouts(pool, userId)

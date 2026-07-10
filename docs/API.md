@@ -134,7 +134,7 @@ Update `title` / `status` (`active|achieved|paused|dropped`) / `targetValue` / `
 ## Planned Workouts
 
 ### `GET /planned-workouts?userId=...`
-Returns planned workouts (status ≠ cancelled, date ≥ today - 7 days). Ensures default workouts exist if none.
+Returns planned workouts (status ≠ cancelled, date ≥ today - 7 days). Ensures default workouts exist if none. Фаза 2Б: lazily reconciles the schedule first — overdue uncompleted workouts become `missed` and all future coach workouts are cascade-regenerated around the actual gap. Response includes `reconciliation: { missedDates, regenerated }`.
 ### `POST /planned-workouts`
 Create a single planned workout for a specific date.
 ```json

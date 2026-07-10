@@ -197,7 +197,7 @@ export type PlannedWorkout = {
   id: string
   userId: string
   scheduledDate: string
-  status: 'planned' | 'generated' | 'completed' | 'skipped' | 'moved' | 'cancelled'
+  status: 'planned' | 'generated' | 'completed' | 'skipped' | 'moved' | 'cancelled' | 'missed'
   source: 'user' | 'coach' | 'auto'
   workoutDayId?: string | null
   workoutDayName: string

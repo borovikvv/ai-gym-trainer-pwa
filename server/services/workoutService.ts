@@ -5,7 +5,7 @@ import { groupBy, normalizeProgression, normalizeSet } from '../utils.js'
 import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
-import { regeneratePlannedWorkout } from './plannedWorkoutService.js'
+import { cascadeRegenerateFutureWorkouts } from './plannedWorkoutService.js'
 import { saveTrainingRecord } from '../coachTrainingRecord.js'
 import { invalidateLiveCoachCache } from './liveCoachContext.js'
 // Issue #91: load coachState + profile + exercise library to fill the 12
@@ -191,33 +191,17 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     console.error('planAndApplyNextWorkout after save (non-fatal):', err instanceof Error ? err.message : err)
   }
 
-  // Issue #76: regenerate the NEXT planned workout after saving — the
-  // mesocycle phase may have changed (e.g. entered deload), and the
-  // existing planned_workout was generated with the old phase.
+  // Issue #76 → Фаза 2Б.3: after saving, regenerate ALL future planned
+  // workouts (not just the next one) — the mesocycle phase may have changed
+  // and today's actual load shifts what every following session should be.
+  // The cascade goes date-by-date so each workout sees the fresh history and
+  // the already-regenerated previous ones.
   try {
-    const today = new Date().toISOString().slice(0, 10)
-    const nextPlanned = await client.query(
-      `select id, scheduled_date from public.planned_workouts
-       where user_id = $1
-         and status in ('planned', 'generated')
-         and scheduled_date >= $2::date
-       order by scheduled_date asc
-       limit 1`,
-      [sanitizedEntry.userId, today],
-    )
-    if (nextPlanned.rows.length > 0) {
-      const row = nextPlanned.rows[0]
-      const scheduledDate = (row.scheduled_date as Date)?.toISOString?.()?.slice(0, 10) ?? String(row.scheduled_date).slice(0, 10)
-      await regeneratePlannedWorkout(client, {
-        plannedWorkoutId: String(row.id),
-        userId: sanitizedEntry.userId!,
-        scheduledDate,
-      })
-    }
+    await cascadeRegenerateFutureWorkouts(client, { userId: sanitizedEntry.userId! })
   } catch (err) {
     // Non-fatal — the workout is already saved, planned workout regen
     // can happen on next app open or manual "Обновить".
-    console.error('regeneratePlannedWorkout after save (non-fatal):', (err as Error).message)
+    console.error('cascadeRegenerateFutureWorkouts after save (non-fatal):', (err as Error).message)
   }
 
   // Issue #86: Save training record for future fine-tuning (non-fatal)
@@ -451,16 +435,38 @@ function roundGuardrailNumber(value: unknown): number {
   return Number(Number(value).toFixed(1))
 }
 
-async function markPlannedWorkoutCompleted(client: DbClient, entry: SanitizedEntry): Promise<void> {
-  if (!entry?.userId || !entry?.workoutDayId) return
+// Фаза 2Б.1 (план развития): отметка «выполнено» — фундамент детекции
+// пропусков. Тренировки, стартованные из плана, несут workoutDayId =
+// planned_workouts.id (см. plannedWorkoutService: workoutDay.id = r.id) —
+// прямой матч. Но при старте программного дня (таб «Зал») или «Вне плана»
+// id не совпадает — тогда фолбэк: закрываем запланированную тренировку на
+// дату фактической (пользователь потренировался — план на этот день выполнен,
+// даже если содержимое отличалось).
+export async function markPlannedWorkoutCompleted(client: DbClient, entry: Pick<SanitizedEntry, 'userId' | 'workoutDayId' | 'completedAt'>): Promise<void> {
+  if (!entry?.userId) return
+  if (entry.workoutDayId) {
+    const byId = await client.query(
+      `update public.planned_workouts
+       set status = 'completed',
+           updated_at = now()
+       where id = $1
+         and user_id = $2
+         and status in ('planned', 'generated', 'moved')
+       returning id`,
+      [entry.workoutDayId, entry.userId],
+    )
+    if ((byId.rows ?? []).length > 0) return
+  }
+  const completedDate = String(entry.completedAt ?? new Date().toISOString()).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(completedDate)) return
   await client.query(
     `update public.planned_workouts
      set status = 'completed',
          updated_at = now()
-     where id = $1
-       and user_id = $2
+     where user_id = $1
+       and scheduled_date = $2::date
        and status in ('planned', 'generated', 'moved')`,
-    [entry.workoutDayId, entry.userId],
+    [entry.userId, completedDate],
   )
 }
 

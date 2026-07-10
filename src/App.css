@@ -2013,6 +2013,18 @@ select:disabled {
   color: var(--success, #6b7f3f);
 }
 
+/* Фаза 2Б: баннер «план пересобран» после пропуска */
+.missed-banner {
+  border-color: rgba(255, 159, 10, 0.3);
+  background: rgba(255, 159, 10, 0.08);
+  margin-top: 12px;
+}
+
+.missed-banner b {
+  display: block;
+  margin-bottom: 4px;
+}
+
 .coach-choice-row {
   display: grid;
   grid-template-columns: 1fr;

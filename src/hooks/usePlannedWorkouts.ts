@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import type { WorkoutDay  } from '../../shared/types'
 import {
   createPlannedWorkoutInApi,
@@ -77,6 +77,22 @@ export function usePlannedWorkouts({
   const [weekStartDate, setWeekStartDate] = useState(todayDateInputValue())
   const [editingPlannedWorkoutId, setEditingPlannedWorkoutId] = useState<string | null>(null)
   const [editingPlannedDate, setEditingPlannedDate] = useState('')
+
+  // Фаза 2Б.4: PWA живёт в памяти телефона днями — при возвращении в
+  // приложение перезагружаем план. Сервер при этом лениво сверяет расписание
+  // (пропуски → missed → каскадная пересборка), так что пользователь всегда
+  // стартует тренировку, собранную от фактического «сегодня».
+  useEffect(() => {
+    if (!isProgramApiConfigured) return
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+      loadPlannedWorkoutsFromApi(activeUserId)
+        .then(setPlannedWorkouts)
+        .catch(() => undefined)
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [activeUserId, setPlannedWorkouts])
 
   const nextPlannedWorkout = plannedWorkouts.find((workout) => ['planned', 'generated'].includes(workout.status))
   const weekDateOptions = useMemo(() => buildPlanningHorizonOptions(weekStartDate, 14), [weekStartDate])
