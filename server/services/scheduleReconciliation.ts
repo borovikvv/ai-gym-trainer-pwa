@@ -27,6 +27,11 @@ export async function reconcileSchedule(client: DbClient, userId: string): Promi
      where user_id = $1
        and status in ('planned', 'generated', 'moved')
        and scheduled_date < current_date
+       and not exists (
+         select 1 from public.workout_sessions ws
+         where ws.user_id = $1
+           and ws.completed_at::date = public.planned_workouts.scheduled_date
+       )
      returning scheduled_date`,
     [userId],
   )
