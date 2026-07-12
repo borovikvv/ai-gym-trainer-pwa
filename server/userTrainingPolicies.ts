@@ -116,6 +116,12 @@ export interface ClampNextSetInput {
   lastSet?: { weight?: number; reps?: number; rpe?: number } | null
   weightStep?: number
   pain?: boolean
+  /**
+   * Упражнение на время (планка и т.п.): reps — это СЕКУНДЫ удержания,
+   * а вес всегда 0. Без этого флага LLM, спутавший секунды с килограммами,
+   * проходил кламп (якорный вес 0 не даёт границ).
+   */
+  timed?: boolean
 }
 
 export interface ClampedNextSetDecision {
@@ -142,7 +148,10 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
   if (rawNextSet && !input.pain && actionType !== 'stop_exercise' && actionType !== 'suggest_replacement') {
     let weight = Number(rawNextSet.weight)
     if (!Number.isFinite(weight) || weight < 0) weight = Number.isFinite(lastWeight) ? lastWeight : 0
-    if (Number.isFinite(lastWeight) && lastWeight > 0) {
+    if (input.timed) {
+      // Упражнение на время: веса нет по определению.
+      weight = 0
+    } else if (Number.isFinite(lastWeight) && lastWeight > 0) {
       // Down: at most 2 steps below the last real set. Up: policy-limited
       // (Олег: 1 step), and never up at all right after a near-failure set
       // for no-failure users.
@@ -153,8 +162,17 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
     }
 
     let reps = Math.round(Number(rawNextSet.reps))
-    if (!Number.isFinite(reps)) reps = 8
-    reps = Math.min(20, Math.max(3, reps))
+    if (input.timed) {
+      // reps = секунды удержания: 10–300, и не больше последнего подхода
+      // + 30 сек — прыжок с 60 до 180 сек LLM предложить не может.
+      const lastSeconds = Number(input.lastSet?.reps)
+      if (!Number.isFinite(reps)) reps = Number.isFinite(lastSeconds) && lastSeconds > 0 ? lastSeconds : 30
+      reps = Math.min(300, Math.max(10, reps))
+      if (Number.isFinite(lastSeconds) && lastSeconds > 0) reps = Math.min(reps, Math.round(lastSeconds) + 30)
+    } else {
+      if (!Number.isFinite(reps)) reps = 8
+      reps = Math.min(20, Math.max(3, reps))
+    }
 
     let rest = Math.round(Number(rawNextSet.restSeconds))
     if (!Number.isFinite(rest)) rest = 90

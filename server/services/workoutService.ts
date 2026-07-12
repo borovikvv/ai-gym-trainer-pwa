@@ -178,6 +178,15 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
 
   const debrief = (sanitizedEntry.debrief ?? buildWorkoutDebrief(sanitizedEntry as unknown as Parameters<typeof buildWorkoutDebrief>[0])) as ReturnType<typeof buildWorkoutDebrief>
   sanitizedEntry.qualityScore = debrief.qualityScore
+  // Дебриф считается ПОСЛЕ insert выше — без этого UPDATE колонка
+  // quality_score оставалась NULL у всех сессий (история и readiness по
+  // качеству прошлой тренировки не работали).
+  if (Number.isFinite(Number(debrief.qualityScore))) {
+    await client.query(
+      `update public.workout_sessions set quality_score = $2 where id = $1`,
+      [sanitizedEntry.id, debrief.qualityScore],
+    )
+  }
   await saveWorkoutDebriefRecommendation(client, sanitizedEntry as unknown as Parameters<typeof saveWorkoutDebriefRecommendation>[1], debrief)
   await markPlannedWorkoutCompleted(client, sanitizedEntry)
   // Issue #92: planAndApplyNextWorkout does DB writes + LLM call. If any of

@@ -297,6 +297,91 @@ describe('buildNextSetDecision', () => {
   })
 })
 
+describe('timed exercises (планка): секунды ≠ килограммы', () => {
+  beforeEach(() => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  const PLANK = {
+    id: 'plank',
+    name: 'Планка',
+    muscleGroup: 'Кор',
+    repMin: 40,
+    repMax: 60,
+    weightStep: 0,
+    restSeconds: 60,
+    targetWeight: 0,
+  }
+
+  it('LLM предложил «вес 60» для планки — кламп обнуляет вес и ограничивает секунды', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      // Классическая путаница: LLM принял 60 секунд за 60 кг
+      nextSet: { weight: 60, reps: 16, restSeconds: 60, targetRpe: 7 },
+      strategyAction: { type: 'hold' },
+      reason: 'Продолжаем в том же темпе.',
+    })))
+    const { decision } = await buildNextSetDecision({
+      client: fakeClient,
+      userId: 'vyacheslav',
+      exercise: PLANK,
+      completedSets: [{ weight: 0, reps: 60, rpe: 7, completed: true }],
+      remainingSets: 1,
+      pain: false,
+      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 60, recommendedRestSeconds: 60 },
+    })
+    expect(decision.source).toBe('llm')
+    expect(decision.recommendedWeight).toBe(0)
+    // 16 «повторов» — минимум 10 сек соблюдён, но вес обнулён
+    expect(decision.recommendedReps).toBeGreaterThanOrEqual(10)
+    expect(decision.recommendedReps).toBeLessThanOrEqual(300)
+  })
+
+  it('секунды не могут прыгнуть больше чем на +30 от прошлого удержания', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      nextSet: { weight: 0, reps: 240, restSeconds: 60, targetRpe: 7 },
+      strategyAction: { type: 'hold' },
+      reason: 'Держи дольше!',
+    })))
+    const { decision } = await buildNextSetDecision({
+      client: fakeClient,
+      userId: 'oleg',
+      exercise: PLANK,
+      completedSets: [{ weight: 0, reps: 60, rpe: 7, completed: true }],
+      remainingSets: 1,
+      pain: false,
+      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 60, recommendedRestSeconds: 60 },
+    })
+    expect(decision.recommendedWeight).toBe(0)
+    expect(decision.recommendedReps).toBe(90)
+  })
+
+  it('промпт для планки описывает секунды, а не «0×60»', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      nextSet: { weight: 0, reps: 60, restSeconds: 60, targetRpe: 7 },
+      strategyAction: { type: 'hold' },
+      reason: 'ok',
+    })))
+    const { prompt } = await buildNextSetDecision({
+      client: fakeClient,
+      userId: 'vyacheslav',
+      exercise: PLANK,
+      completedSets: [{ weight: 0, reps: 60, rpe: 7, completed: true }],
+      remainingSets: 1,
+      pain: false,
+      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 60, recommendedRestSeconds: 60 },
+    })
+    expect(prompt).toContain('УПРАЖНЕНИЕ НА ВРЕМЯ')
+    expect(prompt).toContain('60 сек@7')
+    expect(prompt).not.toContain('0×60')
+  })
+})
+
 describe('clampNextSetDecision (direct)', () => {
   it('oleg (no-failure): targetRpe capped at 8, no weight increase after RPE≥8', () => {
     const clamped = clampNextSetDecision(

@@ -17,6 +17,7 @@ import { getUserTrainingPolicy, type UserTrainingPolicy } from '../userTrainingP
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 import { normalizeMuscleGroup } from '../lib/muscleGroups.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
+import { isTimedExercise } from '../../src/domain/exerciseMetrics.js'
 
 // ---------------------------------------------------------------------------
 // Cached per-user data (stable for the duration of a workout)
@@ -132,7 +133,7 @@ export function buildLiveContextPrompt(input: BuildLiveContextPromptInput): stri
   if (exerciseHistory) lines.push(`ИСТОРИЯ УПРАЖНЕНИЯ: ${exerciseHistory}`)
 
   lines.push(`СЕГОДНЯШНЯЯ СЕССИЯ: ${describeSessionSoFar(input)}`)
-  lines.push(`СДЕЛАННЫЕ ПОДХОДЫ ЭТОГО УПРАЖНЕНИЯ: ${describeSets(input.completedSets) || 'ещё не было'}`)
+  lines.push(`СДЕЛАННЫЕ ПОДХОДЫ ЭТОГО УПРАЖНЕНИЯ: ${describeSets(input.completedSets, isCurrentExerciseTimed(exercise)) || 'ещё не было'}`)
   lines.push(`ОСТАЛОСЬ ПОДХОДОВ: ${Math.max(0, input.remainingSets)}${input.pain ? '; ОТМЕЧЕНА БОЛЬ в этом упражнении' : ''}`)
   const remainingPlan = describeRemainingPlan(session)
   if (remainingPlan) lines.push(`ДАЛЬШЕ ПО ПЛАНУ: ${remainingPlan}`)
@@ -220,13 +221,23 @@ function muscleKeyOf(exercise: { muscleGroup?: string; name?: string }): string 
 function describeExercise(exercise: BuildLiveContextPromptInput['exercise']): string {
   const parts: string[] = [exercise.name ?? exercise.id ?? 'упражнение']
   if (exercise.muscleGroup) parts.push(exercise.muscleGroup)
+  const timed = isCurrentExerciseTimed(exercise)
   const repMin = Number(exercise.repMin ?? 0)
   const repMax = Number(exercise.repMax ?? 0)
-  if (repMin > 0 && repMax > 0) parts.push(`план ${repMin}–${repMax} повторов`)
-  if (Number(exercise.targetWeight) > 0) parts.push(`плановый вес ${exercise.targetWeight} кг`)
-  if (Number(exercise.weightStep) > 0) parts.push(`шаг веса ${exercise.weightStep} кг`)
+  if (timed) {
+    parts.push('УПРАЖНЕНИЕ НА ВРЕМЯ (без веса)')
+    if (repMin > 0 && repMax > 0) parts.push(`план удержания ${repMin}–${repMax} секунд`)
+  } else {
+    if (repMin > 0 && repMax > 0) parts.push(`план ${repMin}–${repMax} повторов`)
+    if (Number(exercise.targetWeight) > 0) parts.push(`плановый вес ${exercise.targetWeight} кг`)
+    if (Number(exercise.weightStep) > 0) parts.push(`шаг веса ${exercise.weightStep} кг`)
+  }
   if (Number(exercise.restSeconds) > 0) parts.push(`плановый отдых ${exercise.restSeconds} с`)
   return parts.join(', ')
+}
+
+function isCurrentExerciseTimed(exercise: { id?: string; name?: string; muscleGroup?: string }): boolean {
+  return isTimedExercise({ id: exercise.id ?? '', name: exercise.name ?? '', muscleGroup: exercise.muscleGroup ?? '' })
 }
 
 function describeExerciseHistory(input: BuildLiveContextPromptInput): string {
@@ -235,11 +246,12 @@ function describeExerciseHistory(input: BuildLiveContextPromptInput): string {
   const parts: string[] = []
 
   // Last 3 sessions of this exercise (history is newest-first).
+  const timed = isCurrentExerciseTimed(input.exercise)
   const sessions: string[] = []
   for (const entry of input.userData.history) {
     const match = entry.exercises?.find((ex) => String((ex as { exerciseId?: string }).exerciseId) === String(exerciseId))
     if (!match) continue
-    const sets = describeSets((match as { sets?: SetLike[] }).sets ?? [])
+    const sets = describeSets((match as { sets?: SetLike[] }).sets ?? [], timed)
     if (!sets) continue
     const date = String(entry.completedAt ?? '').slice(0, 10)
     sessions.push(`${date}: ${sets}${(match as { pain?: boolean }).pain ? ' (была боль)' : ''}`)
@@ -270,10 +282,16 @@ function describeSessionSoFar(input: BuildLiveContextPromptInput): string {
     .join(' | ')
 }
 
-function describeSets(sets: SetLike[]): string {
+function describeSets(sets: SetLike[], timed = false): string {
   return sets
     .filter((set) => set.completed !== false && Number(set.reps) > 0)
-    .map((set) => `${Number(set.weight ?? 0)}×${Number(set.reps ?? 0)}${Number(set.rpe) > 0 ? `@${Number(set.rpe)}` : ''}`)
+    .map((set) => {
+      const rpe = Number(set.rpe) > 0 ? `@${Number(set.rpe)}` : ''
+      // Для упражнений на время «0×60» читается как вес×повторы и путает
+      // LLM — пишем явно «60 сек».
+      if (timed) return `${Number(set.reps ?? 0)} сек${rpe}`
+      return `${Number(set.weight ?? 0)}×${Number(set.reps ?? 0)}${rpe}`
+    })
     .join(', ')
 }
 

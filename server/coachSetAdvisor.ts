@@ -23,6 +23,7 @@ import {
   type RulesBaseline,
   type SessionExerciseLog,
 } from './services/liveCoachContext.js'
+import { isTimedExercise } from '../src/domain/exerciseMetrics.js'
 
 const LLM_TIMEOUT_MS = 6000
 
@@ -120,13 +121,24 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
     return { decision: rulesFallback, prompt: null, clamped: null }
   }
 
+  // Упражнение на время (планка): reps = секунды, веса нет. Без явной
+  // пометки LLM путал секунды с килограммами («вес 60» для планки).
+  const timed = isTimedExercise({
+    id: input.exercise.id ?? '',
+    name: input.exercise.name ?? '',
+    muscleGroup: input.exercise.muscleGroup ?? '',
+  })
+  const system = timed
+    ? `${SYSTEM_PROMPT}\nВНИМАНИЕ: текущее упражнение — НА ВРЕМЯ. nextSet.reps — это СЕКУНДЫ удержания, nextSet.weight всегда 0.`
+    : SYSTEM_PROMPT
+
   const proposal = await requestLlmJson<NextSetProposal>({
     tier: 'fast',
     caller: 'coachSetAdvisor',
     timeoutMs: LLM_TIMEOUT_MS,
     temperature: 0.2,
     maxTokens: 400,
-    system: SYSTEM_PROMPT,
+    system,
     prompt,
   })
   if (!proposal) return { decision: rulesFallback, prompt, clamped: null }
@@ -141,6 +153,7 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
     lastSet: lastSet ?? (input.rulesDecision.recommendedWeight > 0 ? { weight: input.rulesDecision.recommendedWeight } : null),
     weightStep: input.exercise.weightStep,
     pain: input.pain,
+    timed,
   })
 
   return { decision: mapClampedToDecision(clamped, input, rulesFallback), prompt, clamped }
