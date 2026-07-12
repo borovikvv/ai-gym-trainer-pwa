@@ -61,7 +61,7 @@ memoryRoutes.post('/coach/memory-facts/:userId', requireAllowedUserId, async (re
   }
 })
 
-memoryRoutes.patch('/coach/memory-facts/:userId/:id', requireAllowedUserId, async (req, res, next) => {
+memoryRoutes.patch('/coach/memory-facts/:userId/:id', requireAllowedUserId, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = String(req.params.userId)
     const id = String(req.params.id)
@@ -90,7 +90,7 @@ memoryRoutes.patch('/coach/memory-facts/:userId/:id', requireAllowedUserId, asyn
 // Goals
 // ---------------------------------------------------------------------------
 
-memoryRoutes.get('/coach/goals/:userId', requireAllowedUserId, async (req, res, next) => {
+memoryRoutes.get('/coach/goals/:userId', requireAllowedUserId, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const status = GOAL_STATUSES.includes(String(req.query.status) as GoalStatus)
       ? (String(req.query.status) as GoalStatus)
@@ -102,7 +102,7 @@ memoryRoutes.get('/coach/goals/:userId', requireAllowedUserId, async (req, res, 
   }
 })
 
-memoryRoutes.post('/coach/goals/:userId', requireAllowedUserId, async (req, res, next) => {
+memoryRoutes.post('/coach/goals/:userId', requireAllowedUserId, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = String(req.params.userId)
     const title = String(req.body?.title ?? '').trim()
@@ -124,7 +124,7 @@ memoryRoutes.post('/coach/goals/:userId', requireAllowedUserId, async (req, res,
   }
 })
 
-memoryRoutes.patch('/coach/goals/:userId/:id', requireAllowedUserId, async (req, res, next) => {
+memoryRoutes.patch('/coach/goals/:userId/:id', requireAllowedUserId, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = String(req.params.userId)
     const id = String(req.params.id)

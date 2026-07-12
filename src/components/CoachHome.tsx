@@ -8,6 +8,7 @@ import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus
 import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
 import { GoalsCard } from './GoalsCard'
 import { useEffect, useState } from 'react'
+import { isTimedExercise } from '../domain/exerciseMetrics'
 import { isProgramApiConfigured } from '../data/programApi'
 
 /**
@@ -201,7 +202,9 @@ export function CoachHome({
   const activeExerciseCount = heroWorkoutDay.exercises.length
   const activeWorkoutMinutes = estimateWorkoutMinutes(heroWorkoutDay)
   const firstExerciseWeight = firstExercise
-    ? formatWeight(nextTargets[firstExercise.id] ?? firstExercise.targetWeight ?? 0)
+    ? isTimedExercise(firstExercise)
+      ? `${firstExercise.repMin}–${firstExercise.repMax} сек`
+      : `${formatWeight(nextTargets[firstExercise.id] ?? firstExercise.targetWeight ?? 0)} кг`
     : null
 
   // Issue #85: AI program review
@@ -297,7 +300,7 @@ export function CoachHome({
             <small>упр.</small>
           </div>
         )}
-        reason={firstExercise && firstExerciseWeight ? `${firstExercise.name}: ${firstExerciseWeight} кг` : undefined}
+        reason={firstExercise && firstExerciseWeight ? `${firstExercise.name}: ${firstExerciseWeight}` : undefined}
         primaryAction={(
           <button className="primary" type="button" aria-label="Открыть тренировку" onClick={() => onStartWorkout(heroWorkoutDay)}>
             <Dumbbell aria-hidden="true" />

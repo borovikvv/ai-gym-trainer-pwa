@@ -8,6 +8,7 @@ import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { ActionMenu, HeroStatus, ScreenHeader, SectionList, WorkoutRow } from './ui'
+import { isTimedExercise } from '../domain/exerciseMetrics'
 
 type WeekDateOption = {
   label: string
@@ -227,7 +228,7 @@ export function PlanCalendar({
             <div className="exercise" key={exercise.id}>
               <div>
                 <b>{exercise.name}</b>
-                <div className="muted">{exercise.setsCount}×{exercise.repMin}–{exercise.repMax} · {formatWeight(exercise.targetWeight)} кг · отдых {exercise.restSeconds} сек</div>
+                <div className="muted">{exercise.setsCount}×{exercise.repMin}–{exercise.repMax}{isTimedExercise(exercise) ? ' сек' : ` · ${formatWeight(exercise.targetWeight)} кг`} · отдых {exercise.restSeconds} сек</div>
               </div>
               <button className="secondary compact" type="button" onClick={() => onStartEditExercise(exercise)} aria-label={`Редактировать ${exercise.name}`}>править</button>
             </div>

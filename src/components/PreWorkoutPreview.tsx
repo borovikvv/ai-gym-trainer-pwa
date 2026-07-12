@@ -7,6 +7,7 @@ import {
 } from '../domain/readinessCheckIn'
 import { exerciseGuideImageSrc } from './ExerciseGuideModal'
 import { InfoHint } from './ui'
+import { isTimedExercise } from '../domain/exerciseMetrics'
 
 const soreMuscleGroupOptions = ['Грудь', 'Спина', 'Ноги', 'Плечи', 'Руки', 'Кор']
 const painAreaOptions = ['Плечо', 'Локоть/рука', 'Спина', 'Колено/нога', 'Другое']
@@ -216,7 +217,7 @@ export function PreWorkoutPreview({
               <img src={exerciseGuideImageSrc(exercise.id.replace(/-(light|very_light|heavy)$/u, ''))} alt="" />
               <div>
                 <b>{index + 1}. {exercise.name}</b>
-                <div className="muted">{exercise.muscleGroup} · {exercise.setsCount}×{exercise.repMin}–{exercise.repMax} · {formatWeight(exercise.targetWeight)} кг</div>
+                <div className="muted">{exercise.muscleGroup} · {exercise.setsCount}×{exercise.repMin}–{exercise.repMax}{isTimedExercise(exercise) ? ' сек' : ` · ${formatWeight(exercise.targetWeight)} кг`}</div>
                 <div className="muted">{toHumanCoachText(exercise.coachFocus)}</div>
               </div>
             </div>
