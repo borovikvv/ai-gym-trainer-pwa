@@ -13,6 +13,7 @@ import {
 type GoalExerciseOption = {
   id: string
   name: string
+  muscleGroup?: string
 }
 
 type GoalsCardProps = {
@@ -122,8 +123,12 @@ export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
         <div className="goal-add top-gap">
           <select aria-label="Упражнение цели" value={draftExerciseId} onChange={(event) => setDraftExerciseId(event.target.value)}>
             <option value="">Упражнение (для e1RM-цели)</option>
-            {exerciseOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.name}</option>
+            {groupByMuscle(exerciseOptions).map(([muscleGroup, options]) => (
+              <optgroup key={muscleGroup} label={muscleGroup}>
+                {options.map((option) => (
+                  <option key={option.id} value={option.id}>{option.name}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <input
@@ -161,4 +166,15 @@ export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
       )}
     </div>
   )
+}
+
+function groupByMuscle(options: GoalExerciseOption[]): Array<[string, GoalExerciseOption[]]> {
+  const groups = new Map<string, GoalExerciseOption[]>()
+  for (const option of options) {
+    const key = option.muscleGroup ?? 'Другое'
+    const list = groups.get(key) ?? []
+    list.push(option)
+    groups.set(key, list)
+  }
+  return [...groups.entries()]
 }

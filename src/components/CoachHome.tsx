@@ -85,6 +85,9 @@ type CoachHomeProps = {
   coachTodaySummary: string
   userHistory: WorkoutHistoryEntry[]
   nextTargets: Record<string, number>
+  // Фаза 2: полная библиотека упражнений для визарда целей — цель можно
+  // поставить на любое упражнение, не только на те, что сейчас в программе
+  exerciseLibrary?: Array<{ id: string; name: string; muscleGroup?: string }>
   coachMemory: CoachMemory | null
   coachState: CoachState | null
   onSelectUser: (userId: string) => void
@@ -160,6 +163,7 @@ export function CoachHome({
   coachTodaySummary: _coachTodaySummary,
   userHistory,
   nextTargets,
+  exerciseLibrary = [],
   coachMemory,
   coachState,
   onSelectUser,
@@ -332,7 +336,7 @@ export function CoachHome({
       />
 
       {/* Фаза 2: многонедельные цели — тренер ведёт к ним через макроцикл */}
-      <GoalsCard userId={activeUserId} exerciseOptions={goalExerciseOptions(allUserWorkoutDays)} />
+      <GoalsCard userId={activeUserId} exerciseOptions={goalExerciseOptions(exerciseLibrary, allUserWorkoutDays)} />
 
       {/* Issue #85: AI weekly program review — Issue #104: collapsed into review-row */}
       {programReview && programReview.changes.length > 0 && (
@@ -420,16 +424,30 @@ export function CoachHome({
   )
 }
 
-// Фаза 2: уникальные упражнения программы для визарда целей (e1RM-цель
-// привязывается к конкретному упражнению).
-function goalExerciseOptions(workoutDays: WorkoutDay[]): Array<{ id: string; name: string }> {
-  const seen = new Map<string, string>()
-  for (const day of workoutDays) {
-    for (const exercise of day.exercises ?? []) {
-      if (exercise.id && !seen.has(exercise.id)) seen.set(exercise.id, exercise.name)
+// Фаза 2: упражнения для визарда целей — вся библиотека (цель можно ставить
+// на жим лёжа или присед, даже если их сейчас нет в программе), плюс
+// упражнения программы как фолбэк, если библиотека не загрузилась.
+// Сгруппировано по мышечным группам и отсортировано по алфавиту.
+function goalExerciseOptions(
+  library: Array<{ id: string; name: string; muscleGroup?: string }>,
+  workoutDays: WorkoutDay[],
+): Array<{ id: string; name: string; muscleGroup: string }> {
+  const seen = new Map<string, { id: string; name: string; muscleGroup: string }>()
+  for (const exercise of library) {
+    if (exercise.id && !seen.has(exercise.id)) {
+      seen.set(exercise.id, { id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup ?? 'Другое' })
     }
   }
-  return [...seen.entries()].map(([id, name]) => ({ id, name }))
+  for (const day of workoutDays) {
+    for (const exercise of day.exercises ?? []) {
+      if (exercise.id && !seen.has(exercise.id)) {
+        seen.set(exercise.id, { id: exercise.id, name: exercise.name, muscleGroup: exercise.muscleGroup ?? 'Другое' })
+      }
+    }
+  }
+  return [...seen.values()].sort((a, b) =>
+    a.muscleGroup === b.muscleGroup ? a.name.localeCompare(b.name, 'ru') : a.muscleGroup.localeCompare(b.muscleGroup, 'ru'),
+  )
 }
 
 // Issue #104: shortTitle — first ~40 chars up to the first period, for

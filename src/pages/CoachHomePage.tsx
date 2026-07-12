@@ -90,6 +90,7 @@ export function CoachHomePage(props: CoachHomePageProps) {
       coachTodaySummary={hookCoachTodaySummary}
       userHistory={program.userHistory}
       nextTargets={program.nextTargets}
+      exerciseLibrary={program.exerciseLibrary}
       coachMemory={coach.coachMemory}
       coachState={coach.coachState}
       onSelectUser={props.onSelectUser}
