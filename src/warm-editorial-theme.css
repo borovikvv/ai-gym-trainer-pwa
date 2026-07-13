@@ -16,14 +16,15 @@
   --font-ui: 'Space Grotesk', system-ui, sans-serif;
   --warm-editorial: 1;  /* cache buster — не удалять */
 
-  /* Поверхности — тёплая «бумага» вместо системно-серого iOS */
-  --app-bg: #E9E2D4;
+  /* Поверхности — тёплая «бумага» вместо системно-серого iOS.
+     Значения сведены к прототипу (README «Prototype LIGHT values»). */
+  --app-bg: #E4DCCB;
   --bg: #F1E9DB;
   --surface: #FFFDF9;
   --surface-solid: #FFFDF9;
   --surface-muted: #EAE0CF;
   --border: rgba(34, 32, 27, 0.12);
-  --separator: rgba(34, 32, 27, 0.12);
+  --separator: rgba(34, 32, 27, 0.09);
 
   /* Текст — тёплый near-black */
   --text-primary: #22201B;
@@ -41,9 +42,10 @@
 
   /* Тёмная hero-карточка — тёплый эспрессо вместо чёрного */
   --hero-bg: #2A2018;
+  --hero-2: #3A2C20;            /* второй уровень hero (градиенты, вложенные блоки) */
   --hero-text: #F1E9DB;
-  --hero-text-muted: rgba(241, 233, 219, 0.78);
-  --hero-text-tertiary: rgba(241, 233, 219, 0.58);
+  --hero-text-muted: rgba(241, 233, 219, 0.72);
+  --hero-text-tertiary: rgba(241, 233, 219, 0.5);
 
   --shadow-soft: 0 18px 44px rgba(60, 40, 20, 0.12);
   color-scheme: light;
@@ -191,17 +193,120 @@
 /* Тёмная тема (data-theme="dark") — тёплый вариант, при желании оставьте
    существующий iOS-dark. Здесь минимальный тёплый сдвиг: */
 :root[data-theme="dark"] {
-  --app-bg: #17130E;
-  --bg: #211B14;
-  --surface: rgba(42, 32, 24, 0.9);
-  --surface-solid: #2A2018;
-  --surface-muted: #33291F;
-  --separator: rgba(241, 233, 219, 0.16);
+  /* Прототип DARK (README «Prototype DARK values»). */
+  --app-bg: #0B0805;
+  --bg: #171209;
+  --surface: #221A11;
+  --surface-solid: #221A11;
+  --surface-muted: #2E2417;
+  --border: rgba(241, 233, 219, 0.13);
+  --separator: rgba(241, 233, 219, 0.09);
   --text-primary: #F1E9DB;
   --text-secondary: rgba(241, 233, 219, 0.7);
-  --text-tertiary: rgba(241, 233, 219, 0.45);
-  --accent: #E86A3E;
+  --text-tertiary: rgba(241, 233, 219, 0.44);
+  --accent: #EC6C3F;
   --accent-pressed: #DA5326;
-  --success: #6B9A78;
-  --hero-bg: #2A2018;
+  --success: #7CA98A;
+  --success-pressed: #5E8C6B;
+  --warning: #D89A54;
+  --danger: #DE6B58;
+  --hero-bg: #251C13;
+  --hero-2: #31251A;
+  --hero-text: #F4EDE0;
+  --hero-text-muted: rgba(244, 237, 224, 0.72);
+  --hero-text-tertiary: rgba(244, 237, 224, 0.5);
+}
+
+/* =====================================================================
+   ПРИМИТИВЫ UI KIT (issue #115) — Stepper / SegmentedControl / Pill.
+   Используются на нескольких экранах; стили живут здесь, рядом с токенами.
+   ===================================================================== */
+
+/* --- Stepper: `− [value] +`. Компактный ряд по умолчанию. --- */
+.stepper { display: block; }
+.stepper__label {
+  display: block;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.stepper__row {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center; gap: 10px; margin-top: 8px;
+}
+.stepper__btn {
+  height: 48px; border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--text-primary);
+  font-size: 24px; font-weight: 400; line-height: 1;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.stepper__btn--plus {
+  border: 0; background: var(--hero-bg); color: var(--hero-text);
+}
+.stepper__btn:active { transform: scale(0.97); }
+.stepper__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.stepper__value {
+  text-align: center; font-variant-numeric: tabular-nums;
+  font-family: var(--font-display, inherit);
+  font-size: 38px; font-weight: 500; line-height: 1;
+  color: var(--text-primary);
+}
+
+/* big — повторяет прототип зального логгера (56px кнопки, 60px сериф). */
+.stepper--big .stepper__row {
+  grid-template-columns: 58px 1fr 58px;
+}
+.stepper--big .stepper__btn { height: 56px; font-size: 28px; }
+.stepper--big .stepper__value { font-size: 60px; }
+
+/* --- SegmentedControl: пилюля переключателей. --- */
+.segmented {
+  display: inline-flex; gap: 3px;
+  padding: 4px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.segmented--rounded { border-radius: 14px; }
+.segmented__option {
+  border: 0; border-radius: 999px;
+  padding: 7px 15px;
+  background: transparent; color: var(--text-secondary);
+  font: 600 12px var(--font-ui);
+  transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.segmented__option--active {
+  background: var(--text-primary); color: var(--bg);
+}
+.segmented__option:active { transform: scale(0.97); }
+.segmented--rounded .segmented__option { border-radius: 11px; }
+
+/* --- Pill: капсула-метка. Тоны через --pill-*. --- */
+.pill--button {
+  border: 0; cursor: pointer;
+  transition: transform 120ms ease;
+}
+.pill--button:active { transform: scale(0.96); }
+.pill--neutral { color: var(--text-secondary); background: var(--surface-muted); }
+.pill--accent { color: var(--accent-pressed); background: rgba(218, 83, 38, 0.12); }
+.pill--success { color: var(--success-pressed); background: rgba(78, 122, 91, 0.14); }
+.pill--warning { color: var(--warning); background: rgba(198, 122, 46, 0.14); }
+.pill--danger { color: var(--danger); background: rgba(194, 59, 46, 0.12); }
+.pill--on-hero {
+  color: var(--hero-text-muted);
+  background: color-mix(in srgb, var(--hero-text) 12%, transparent);
+}
+/* В тёмной теме акцент/тон-на-хиро держат тёплый контраст. */
+:root[data-theme="dark"] .pill--accent {
+  color: var(--accent); background: rgba(236, 108, 63, 0.16);
+}
+:root[data-theme="dark"] .pill--success {
+  color: var(--success); background: rgba(124, 169, 138, 0.16);
+}
+:root[data-theme="dark"] .pill--warning {
+  color: var(--warning); background: rgba(216, 154, 84, 0.16);
+}
+:root[data-theme="dark"] .pill--danger {
+  color: var(--danger); background: rgba(222, 107, 88, 0.16);
 }
