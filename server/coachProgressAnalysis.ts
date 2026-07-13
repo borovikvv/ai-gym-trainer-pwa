@@ -72,8 +72,6 @@ export interface ProgressAnalysis {
   globalFlags: GlobalAnalysisFlags
 }
 
-const LLM_TIMEOUT_MS = 5000
-
 /**
  * Analyze workout progress using LLM (if available) or rules (fallback).
  */
@@ -81,7 +79,6 @@ export async function analyzeProgress(input: ProgressAnalysisInput): Promise<Pro
   const parsed = await requestLlmJson<Partial<ProgressAnalysis>>({
     tier: 'smart',
     caller: 'coachProgressAnalysis',
-    timeoutMs: LLM_TIMEOUT_MS,
     temperature: 0.3,
     maxTokens: 500,
     system:

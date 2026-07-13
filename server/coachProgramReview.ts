@@ -60,8 +60,6 @@ export interface ProgramReview {
   nextWeekFocus: string
 }
 
-const LLM_TIMEOUT_MS = 5000
-
 /**
  * Review the training program and suggest changes.
  */
@@ -69,7 +67,6 @@ export async function reviewProgram(input: ProgramReviewInput): Promise<ProgramR
   const parsed = await requestLlmJson<ProgramReview>({
     tier: 'smart',
     caller: 'coachProgramReview',
-    timeoutMs: LLM_TIMEOUT_MS,
     temperature: 0.3,
     maxTokens: 500,
     system:

@@ -29,9 +29,9 @@ interface LlmResponseBody {
 }
 
 const DEFAULT_TIMEOUT_MS: Record<LlmTier, number> = {
-  fast: 6000,
-  mid: 8000,
-  smart: 12000,
+  fast: Number(process.env.LLM_TIMEOUT_FAST) || 6000,
+  mid: Number(process.env.LLM_TIMEOUT_MID) || 8000,
+  smart: Number(process.env.LLM_TIMEOUT_SMART) || 12000,
 }
 
 function baseModel(): string {
