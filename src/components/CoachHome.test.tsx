@@ -229,13 +229,14 @@ describe('CoachHome — profile avatar dropdown (#116)', () => {
   })
 })
 
-describe('MesocycleIndicator', () => {
-  it('renders deload variant with "Разгрузка" text and trigger reason', () => {
+describe('MesocycleCard', () => {
+  it('renders deload variant with "разгрузка" text', () => {
     const coachState = makeCoachState({
       mesocycle: makeMesocycleState({
         phase: 'deload',
         phaseDescription: 'Разгрузочная неделя — снижение объёма и интенсивности',
         weekInCycle: 5,
+        cycleLength: 5,
         isDeload: true,
         deloadScheduled: false,
         triggerReason: 'Запланированная разгрузка по календарю мезоцикла.',
@@ -244,66 +245,35 @@ describe('MesocycleIndicator', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Разгрузка')).toBeInTheDocument()
-    expect(screen.getByText('Запланированная разгрузка по календарю мезоцикла.')).toBeInTheDocument()
+    expect(screen.getByText('Мезоцикл · разгрузка')).toBeInTheDocument()
+    expect(screen.getByText('неделя 5 / 5')).toBeInTheDocument()
   })
 
-  it('renders loading variant on week 1 of 4', () => {
+  it('renders loading variant on week 1 of 5', () => {
     const coachState = makeCoachState({
       mesocycle: makeMesocycleState({
         phase: 'loading',
         weekInCycle: 1,
-        loadingWeeks: 4,
+        cycleLength: 5,
+        phaseDescription: 'Накопление — первая неделя',
       }),
     })
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Нед 1/5')).toBeInTheDocument()
+    expect(screen.getByText('Мезоцикл · Накопление — первая неделя')).toBeInTheDocument()
+    expect(screen.getByText('неделя 1 / 5')).toBeInTheDocument()
   })
 
-  it('renders intensification variant on the last loading week', () => {
-    const coachState = makeCoachState({
-      mesocycle: makeMesocycleState({
-        phase: 'intensification',
-        weekInCycle: 4,
-        loadingWeeks: 4,
-        phaseDescription: 'Интенсификация — пик нагрузки мезоцикла',
-      }),
-    })
-
-    render(<CoachHome {...baseProps} coachState={coachState} />)
-
-    expect(screen.getByText('Нед 4/5')).toBeInTheDocument()
-    expect(screen.getByText('Интенсификация — пик нагрузки мезоцикла')).toBeInTheDocument()
-  })
-
-  it('renders scheduled variant when deloadScheduled is true (last loading week, not yet deload)', () => {
-    const coachState = makeCoachState({
-      mesocycle: makeMesocycleState({
-        phase: 'intensification',
-        weekInCycle: 4,
-        loadingWeeks: 4,
-        isDeload: false,
-        deloadScheduled: true,
-        phaseDescription: 'Интенсификация — пик нагрузки мезоцикла',
-      }),
-    })
-
-    render(<CoachHome {...baseProps} coachState={coachState} />)
-
-    expect(screen.getByText('Нед 4/5')).toBeInTheDocument()
-  })
-
-  it('hides indicator when mesocycle is null', () => {
+  it('hides card when mesocycle is null', () => {
     const coachState = makeCoachState({ mesocycle: null })
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.queryByText(/Нед \d\/\d/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Разгрузка')).not.toBeInTheDocument()
+    expect(screen.queryByText(/неделя \d/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Мезоцикл/)).not.toBeInTheDocument()
   })
 
-  it('hides indicator when phase is "idle" (new user, no history)', () => {
+  it('hides card when phase is "idle" (new user, no history)', () => {
     const coachState = makeCoachState({
       mesocycle: makeMesocycleState({
         phase: 'idle',
@@ -314,7 +284,7 @@ describe('MesocycleIndicator', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.queryByText(/Нед \d\/\d/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Ожидание первой тренировки')).not.toBeInTheDocument()
+    expect(screen.queryByText(/неделя \d/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Ожидание/)).not.toBeInTheDocument()
   })
 })

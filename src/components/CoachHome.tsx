@@ -1,4 +1,4 @@
-import { BookOpen, Dumbbell, RotateCcw, ClipboardList } from 'lucide-react'
+import { BookOpen, Dumbbell, ClipboardList } from 'lucide-react'
 import type { UserProfile, WorkoutDay  } from '../../shared/types'
 import type { CoachMemory, CoachState, MesocycleState, PlannedWorkout } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
@@ -105,46 +105,26 @@ type CoachHomeProps = {
   todayDateInputValue: () => string
 }
 
-function mesocycleBadge(mesocycle: MesocycleState | null | undefined): { text: string; variant: 'deload' | 'scheduled' | 'loading' | 'intensification' } | null {
-  if (!mesocycle) return null
-  // Don't render a badge for users with no workout history yet — 'idle' phase.
-  if (mesocycle.phase === 'idle') return null
-  if (mesocycle.isDeload) {
-    return { text: 'Разгрузка', variant: 'deload' }
-  }
-  // Display weekInCycle/cycleLength (total cycle weeks including deload).
-  // Previously used loadingWeeks as denominator, which caused confusing
-  // displays like "Нед 4/3" when deload was delayed (weekInCycle exceeded
-  // loadingWeeks). Using cycleLength ensures numerator ≤ denominator always.
-  // Example for teen (3 loading + 1 deload = 4 total):
-  //   Week 1: "Нед 1/4" (loading)
-  //   Week 2: "Нед 2/4" (accumulation)
-  //   Week 3: "Нед 3/4" (intensification, deload next)
-  //   Week 4: "Разгрузка" (deload, handled above)
-  const weekLabel = `Нед ${mesocycle.weekInCycle}/${mesocycle.cycleLength}`
-  if (mesocycle.deloadScheduled) {
-    return { text: weekLabel, variant: 'scheduled' }
-  }
-  return { text: weekLabel, variant: mesocycle.phase === 'intensification' ? 'intensification' : 'loading' }
-}
+function MesocycleCard({ mesocycle }: { mesocycle: MesocycleState | null | undefined }) {
+  if (!mesocycle || mesocycle.phase === 'idle') return null
 
-function MesocycleIndicator({ mesocycle }: { mesocycle: MesocycleState | null | undefined }) {
-  const badge = mesocycleBadge(mesocycle)
-  if (!badge) return null
-
-  const phaseLabel = mesocycle?.phaseDescription ?? ''
-  const isDeload = badge.variant === 'deload'
+  const weekLabel = `неделя ${mesocycle.weekInCycle} / ${mesocycle.cycleLength}`
+  const phaseLabel = mesocycle.isDeload ? 'разгрузка' : (mesocycle.phaseDescription || mesocycle.phase)
+  // N-segment progress bar: past weeks filled with success, current + future muted.
+  const segments = mesocycle.cycleLength
+  const doneWeeks = mesocycle.isDeload ? segments : Math.min(mesocycle.weekInCycle, segments)
 
   return (
-    <div className={`mesocycle-indicator mesocycle-indicator--${badge.variant}`} role="status" aria-label={phaseLabel}>
-      <RotateCcw size={14} aria-hidden="true" className={isDeload ? 'spin-icon' : ''} />
-      <span className="mesocycle-indicator__badge">{badge.text}</span>
-      {isDeload && mesocycle?.triggerReason && (
-        <span className="mesocycle-indicator__reason">{mesocycle.triggerReason}</span>
-      )}
-      {!isDeload && phaseLabel && (
-        <span className="mesocycle-indicator__phase">{phaseLabel}</span>
-      )}
+    <div className="mesocycle-card" role="status" aria-label={phaseLabel}>
+      <div className="mesocycle-card__head">
+        <span className="mesocycle-card__phase">Мезоцикл · {phaseLabel}</span>
+        <span className="mesocycle-card__weeks">{weekLabel}</span>
+      </div>
+      <div className="mesocycle-card__bar" aria-hidden="true">
+        {Array.from({ length: segments }, (_, i) => (
+          <div key={i} className={`mesocycle-card__seg ${i < doneWeeks ? 'mesocycle-card__seg--done' : ''}`} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -310,7 +290,7 @@ export function CoachHome({
         )}
       />
 
-      <MesocycleIndicator mesocycle={coachState?.mesocycle} />
+      <MesocycleCard mesocycle={coachState?.mesocycle} />
 
       {extraDayPickerOpen && (
         <SectionList title="Вне плана">
@@ -329,8 +309,8 @@ export function CoachHome({
 
       <MetricPair
         metrics={[
-          { label: 'Подряд', value: computeStreakFromHistory(userHistory) },
-          { label: 'Тренировок', value: coachMemory ? `${coachMemory.weeklyBalance.completedWorkoutsLast7Days}/${coachMemory.weeklyBalance.plannedWorkoutsPerWeek}` : '—' },
+          { label: 'Серия', value: computeStreakFromHistory(userHistory) },
+          { label: 'На неделе', value: coachMemory ? `${coachMemory.weeklyBalance.completedWorkoutsLast7Days}/${coachMemory.weeklyBalance.plannedWorkoutsPerWeek}` : '—' },
         ]}
       />
 

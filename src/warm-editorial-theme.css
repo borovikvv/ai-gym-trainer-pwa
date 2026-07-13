@@ -404,3 +404,51 @@
   font-variant-numeric: tabular-nums;
   font-size: 22px; font-weight: 500; color: var(--hero-text);
 }
+
+/* --- Mesocycle card (issue #118). --- */
+.mesocycle-card {
+  margin-top: 14px;
+  padding: 15px 17px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.mesocycle-card__head {
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.mesocycle-card__phase {
+  font: 600 12px var(--font-ui);
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.mesocycle-card__weeks {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.mesocycle-card__bar {
+  display: flex; gap: 5px; margin-top: 11px;
+}
+.mesocycle-card__seg {
+  flex: 1; height: 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 26%, transparent);
+}
+.mesocycle-card__seg--done {
+  background: var(--success);
+}
+
+/* --- Section headers — serif 22px (прототип). --- */
+.section-list__header h2 {
+  font-family: var(--font-display, inherit);
+  font-size: 22px; font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+/* --- Metric cards — serif 28px values (прототип). --- */
+.metric-card span {
+  font: 600 12px var(--font-ui);
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.metric-card b {
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px; font-weight: 500; line-height: 1.05;
+}
