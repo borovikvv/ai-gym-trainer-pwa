@@ -4,12 +4,15 @@ All 12 tasks for matching the app to the prototype. Read
 [`README.md`](./README.md) first — it holds the token map, RPE↔RIR mapping, UI-kit
 list, Definition of Done, and the verify recipe that every task relies on.
 
-Work order: **#1 first**, then by number. Commit directly on
+Work order: **task 1 first**, then by number. Commit directly on
 `feat/warm-editorial-prototype` with `Closes #N`.
+
+**GitHub issues:** task N → issue **#(114 + N)** (task 1 = #115 … task 12 = #126).
+Tracking checklist: **#127**. Use the real issue number in each `Closes #N`.
 
 ---
 
-## 1 — Foundations: token parity + shared primitives
+## 1 · #115 — Foundations: token parity + shared primitives
 
 **Files:** `src/warm-editorial-theme.css`, `src/App.css` (reconcile, don't
 duplicate), `src/components/ui/*`, `src/components/ui/index.ts`, `src/components/ui/ui.test.tsx`.
@@ -30,7 +33,7 @@ duplicate), `src/components/ui/*`, `src/components/ui/index.ts`, `src/components
 
 ---
 
-## 2 — Home: profile avatar + dropdown menu
+## 2 · #116 — Home: profile avatar + dropdown menu
 
 **Files:** `src/components/CoachHome.tsx` (the `ScreenHeader` `trailing` block),
 `src/components/CoachHome.test.tsx`, `warm-editorial-theme.css`.
@@ -49,7 +52,7 @@ duplicate), `src/components/ui/*`, `src/components/ui/index.ts`, `src/components
 
 ---
 
-## 3 — Home: hero card
+## 3 · #117 — Home: hero card
 
 **Files:** `src/components/ui/HeroStatus.tsx` (extend), `src/components/CoachHome.tsx`,
 `warm-editorial-theme.css`. Note `HeroStatus` is reused by Plan/Progress — keep them working.
@@ -68,7 +71,7 @@ duplicate), `src/components/ui/*`, `src/components/ui/index.ts`, `src/components
 
 ---
 
-## 4 — Home: mesocycle card + metric labels + section polish
+## 4 · #118 — Home: mesocycle card + metric labels + section polish
 
 **Files:** `src/components/CoachHome.tsx`, `src/components/GoalsCard.tsx` (verify),
 `warm-editorial-theme.css`.
@@ -88,7 +91,7 @@ duplicate), `src/components/ui/*`, `src/components/ui/index.ts`, `src/components
 
 ---
 
-## 5 — Plan: header + horizon toggle (Неделя / Мезоцикл)
+## 5 · #119 — Plan: header + horizon toggle (Неделя / Мезоцикл)
 
 **Files:** `src/components/PlanCalendar.tsx`, `src/components/PlanCalendar.test.tsx`,
 `warm-editorial-theme.css`.
@@ -105,7 +108,7 @@ duplicate), `src/components/ui/*`, `src/components/ui/index.ts`, `src/components
 
 ---
 
-## 6 — Plan: week strip + readiness note + schedule (Week view)
+## 6 · #120 — Plan: week strip + readiness note + schedule (Week view)
 
 **Files:** `src/components/PlanCalendar.tsx`, `src/components/PlanCalendar.test.tsx`,
 `warm-editorial-theme.css`.
@@ -125,7 +128,7 @@ duplicate), `src/components/ui/*`, `src/components/ui/index.ts`, `src/components
 
 ---
 
-## 7 — Plan: Mesocycle view
+## 7 · #121 — Plan: Mesocycle view
 
 **Files:** `src/components/PlanCalendar.tsx` (+ read mesocycle via context/prop if
 needed), `warm-editorial-theme.css`.
@@ -142,7 +145,7 @@ needed), `warm-editorial-theme.css`.
 
 ---
 
-## 8 — Gym: slim top bar + set chips + sticky actions
+## 8 · #122 — Gym: slim top bar + set chips + sticky actions
 
 **Files:** `src/components/GymScreen.tsx`, `src/components/GymActions.tsx`,
 `src/components/CurrentStepCard.tsx` (rest mode), `src/components/GymScreen.test.tsx`,
@@ -165,7 +168,7 @@ needed), `warm-editorial-theme.css`.
 
 ---
 
-## 9 — Gym: logger with ± steppers + RIR scale + coach hint
+## 9 · #123 — Gym: logger with ± steppers + RIR scale + coach hint
 
 **Files:** `src/components/CurrentStepCard.tsx`, `src/components/gymTypes.ts`
 (reuse `difficultyOptions`), `src/components/GymScreen.tsx` /
@@ -189,7 +192,7 @@ needed), `warm-editorial-theme.css`.
 
 ---
 
-## 10 — Progress: focus tags + strength section
+## 10 · #124 — Progress: focus tags + strength section
 
 **Files:** `src/components/ProgressScreen.tsx`, `src/components/ProgressScreen.test.tsx`,
 `warm-editorial-theme.css`.
@@ -206,7 +209,7 @@ needed), `warm-editorial-theme.css`.
 
 ---
 
-## 11 — Review: redesign the debrief screen
+## 11 · #125 — Review: redesign the debrief screen
 
 **Files:** `src/components/WorkoutReviewScreen.tsx`,
 `src/components/WorkoutReviewScreen.test.tsx`, `warm-editorial-theme.css`.
@@ -224,7 +227,7 @@ needed), `warm-editorial-theme.css`.
 
 ---
 
-## 12 — Sheets: unified bottom-sheet style
+## 12 · #126 — Sheets: unified bottom-sheet style
 
 **Files:** `src/components/ExerciseGuideModal.tsx`, `src/components/ReplacementSheet.tsx`,
 `src/components/ExercisePickerSheet.tsx`, `src/components/GoalsCard.tsx`,
