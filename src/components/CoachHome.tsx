@@ -287,22 +287,25 @@ export function CoachHome({
         eyebrow={primaryTimelineItem ? formatDateOnly(primaryTimelineItem.scheduledDate) : 'Следующая'}
         title={heroWorkoutDay.label}
         metadata={`${activeExerciseCount} упр · ~${activeWorkoutMinutes} мин`}
-        metric={(
-          <div className="status-ring" aria-hidden="true">
-            <span>{activeExerciseCount}</span>
-            <small>упр.</small>
+        metadataAsPill
+        info={firstExercise && firstExerciseWeight ? (
+          <div className="hero-status__start">
+            <span className="hero-status__start-dot" aria-hidden="true" />
+            <span className="hero-status__start-label">
+              Начинаем с <b>{firstExercise.name}</b>
+            </span>
+            <span className="hero-status__start-weight">{firstExerciseWeight}</span>
           </div>
-        )}
-        reason={firstExercise && firstExerciseWeight ? `${firstExercise.name}: ${firstExerciseWeight}` : undefined}
+        ) : undefined}
         primaryAction={(
-          <button className="primary" type="button" aria-label="Открыть тренировку" onClick={() => onStartWorkout(heroWorkoutDay)}>
+          <button className="primary" type="button" aria-label="Начать тренировку" onClick={() => onStartWorkout(heroWorkoutDay)}>
             <Dumbbell aria-hidden="true" />
-            <span>Начать</span>
+            <span>Начать тренировку</span>
           </button>
         )}
         secondaryAction={(
           <button className="secondary hero-status__secondary" type="button" onClick={onRequestWorkoutToday}>
-            Вне плана
+            Тренировка вне плана
           </button>
         )}
       />
