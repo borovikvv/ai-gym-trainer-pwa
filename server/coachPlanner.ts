@@ -333,14 +333,27 @@ export function clampCoachPlanToNextWorkout({
     if (rawChange.exerciseId && !replacement) {
       warnings.push(`Замена ${rawChange.exerciseId} не найдено в библиотеке — оставлено текущее упражнение.`)
     }
+    // Issue #114: clamped-значения выводим заранее, чтобы вывести из них же
+    // todayGoal. Раньше строка цели бралась как есть из ответа LLM — отдельной
+    // сырой строкой, которая не гарантированно совпадала со склампленным весом
+    // (например, LLM прислал targetWeight 999 → после клампа 54.5, а todayGoal
+    // оставался «999×8»). Теперь цель детерминированно выводится из факта.
+    const clampedTargetWeight = clampNumber(
+      Number(rawChange?.targetWeight),
+      Math.max(0, Number(base.targetWeight ?? 0) - Number(base.weightStep ?? 0) * 2),
+      Number(base.targetWeight ?? 0) + Number(base.weightStep ?? 0) * 2,
+      Number(base.targetWeight ?? 0),
+    )
+    const clampedSetsCount = Math.round(clampNumber(Number(rawChange?.setsCount), 1, 4, Number(base.setsCount ?? 0)))
+    const clampedRepMin = Math.round(clampNumber(Number(rawChange?.repMin), 6, 15, Number(base.repMin ?? 0)))
     const change: CoachPlanChange = {
       programExerciseId: base.programExerciseId,
-      targetWeight: clampNumber(Number(rawChange?.targetWeight), Math.max(0, Number(base.targetWeight ?? 0) - Number(base.weightStep ?? 0) * 2), Number(base.targetWeight ?? 0) + Number(base.weightStep ?? 0) * 2, Number(base.targetWeight ?? 0)),
-      setsCount: Math.round(clampNumber(Number(rawChange?.setsCount), 1, 4, Number(base.setsCount ?? 0))),
-      repMin: Math.round(clampNumber(Number(rawChange?.repMin), 6, 15, Number(base.repMin ?? 0))),
+      targetWeight: clampedTargetWeight,
+      setsCount: clampedSetsCount,
+      repMin: clampedRepMin,
       repMax: Math.round(clampNumber(Number(rawChange?.repMax), 6, 15, Number(base.repMax ?? 0))),
       restSeconds: Math.round(clampNumber(Number(rawChange?.restSeconds), 45, 240, Number(base.restSeconds ?? 0))),
-      todayGoal: String(rawChange?.todayGoal || formatTodayGoal(Number(base.targetWeight ?? 0), Number(base.setsCount ?? 0), Number(base.repMin ?? 0))).slice(0, 140),
+      todayGoal: formatTodayGoal(clampedTargetWeight, clampedSetsCount, clampedRepMin).slice(0, 140),
       coachFocus: String(rawChange?.coachFocus || `${base.name}: держим технику и не работаем в отказ.`).slice(0, 500),
     }
     if (replacement) {

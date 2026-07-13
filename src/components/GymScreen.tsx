@@ -120,6 +120,25 @@ export function GymScreen({
   const isInlineRec = rec && ['continue', 'hold_load', 'reduce_load'].includes(rec.action) && !allSetsCompleted
   const isCardRec = rec && !['continue', 'hold_load', 'reduce_load'].includes(rec.action)
 
+  // Issue #114: один источник правды для «какой вес делать прямо сейчас».
+  // Карточка «Цель» раньше всегда показывала статичный activeExercise.todayGoal
+  // (план цикла), а поле ввода заполнялось живой рекомендацией тренера — веса
+  // расходились и было непонятно, что поднимать. Теперь «Цель» показывает живую
+  // рекомендацию (когда она есть), совпадая с инпутом; статичный план цикла
+  // уходит в приглушённый подпись и виден только когда он отличается от того,
+  // что тренер советует прямо сейчас.
+  const liveGoal = isInlineRec && rec.weight > 0
+    ? (timedExercise
+        ? `${rec.reps || activeExercise.repMin} сек`
+        : `${formatWeight(rec.weight)} кг × ${rec.reps || activeExercise.repMin}`)
+    : null
+  const plannedWeight = activeExercise.targetWeight
+  const differsFromPlan = isInlineRec && rec.weight > 0 && !timedExercise
+    && Math.abs(rec.weight - plannedWeight) >= 0.05
+  const cyclePlanTrend = differsFromPlan
+    ? `план цикла ${formatWeight(plannedWeight)} кг`
+    : undefined
+
   return (
     <section className="screen active session-screen">
       {/* 1. session-header */}
@@ -203,11 +222,13 @@ export function GymScreen({
         <button className="secondary wide" type="button" onClick={addSet}>Добавить подход</button>
       </details>
 
-      {/* 4. Compact "Прошлый раз / Цель" */}
+      {/* 4. Compact "Прошлый раз / Цель". Issue #114: «Цель» отражает живого
+          тренера (совпадает с полем ввода), план цикла — приглушённо, если
+          отличается. */}
       <MetricPair
         metrics={[
           { label: 'Прошлый раз', value: previousSetsSummary },
-          { label: 'Цель', value: activeExercise.todayGoal },
+          { label: 'Цель', value: liveGoal ?? activeExercise.todayGoal, trend: cyclePlanTrend },
         ]}
       />
       <span className="sr-only">Прошлый раз: {previousSetsSummary}</span>

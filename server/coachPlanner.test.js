@@ -194,6 +194,51 @@ describe('post-workout coach planner', () => {
     expect(safe.warnings.join(' ')).toContain('не найдено в библиотеке')
     expect(safe.warnings.join(' ')).toContain('отклонено')
   })
+
+  // Issue #114: рассинхрон в плане — todayGoal должен выводиться из
+  // склампленного targetWeight, а не из сырой строки LLM. До фикса LLM мог
+  // прислать targetWeight 100 + todayGoal «100×8»: после клампа вес падал к
+  // 18, а цель оставалась «100×8» — текст и число расходились ещё до старта
+  // тренировки (поле ввода сидит на targetWeight, «Цель» показывала todayGoal).
+  it('derives todayGoal from the clamped targetWeight, not the raw LLM string', () => {
+    const llmPlan = {
+      source: 'llm',
+      summary: 'test',
+      nextWorkoutDayId: 'vyacheslav-main-day-b',
+      changes: [
+        // pe-incline: база 14, шаг 2 → кламп до [10, 18]. LLM прислал 100.
+        { programExerciseId: 'pe-incline', targetWeight: 100, setsCount: 3, repMin: 8, repMax: 10, restSeconds: 90, todayGoal: '100×8', coachFocus: 'гоним вес' },
+      ],
+      warnings: [],
+    }
+
+    const safe = clampCoachPlanToNextWorkout({ plan: llmPlan, nextWorkoutDay: workoutDays[1] })
+
+    const change = safe.changes[0]
+    expect(change.targetWeight).toBe(18)
+    // Ключевая проверка: цель выведена из склампленного веса, а не из «100×8».
+    expect(change.todayGoal).toBe('18×8/18×8/18×8')
+    expect(change.todayGoal).not.toContain('100')
+  })
+
+  it('keeps todayGoal in sync with targetWeight for an in-range LLM weight', () => {
+    const llmPlan = {
+      source: 'llm',
+      summary: 'test',
+      nextWorkoutDayId: 'vyacheslav-main-day-b',
+      changes: [
+        // pe-incline: база 14, шаг 2 → кламп до [10, 18]. 15 — в пределах.
+        { programExerciseId: 'pe-incline', targetWeight: 15, setsCount: 2, repMin: 9, repMax: 12, restSeconds: 90, todayGoal: 'что угодно от LLM' },
+      ],
+      warnings: [],
+    }
+
+    const safe = clampCoachPlanToNextWorkout({ plan: llmPlan, nextWorkoutDay: workoutDays[1] })
+
+    const change = safe.changes[0]
+    expect(change.targetWeight).toBe(15)
+    expect(change.todayGoal).toBe('15×9/15×9')
+  })
 })
 
 // ---------------------------------------------------------------------------
