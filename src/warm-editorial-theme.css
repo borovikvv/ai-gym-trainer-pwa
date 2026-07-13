@@ -310,3 +310,53 @@
 :root[data-theme="dark"] .pill--danger {
   color: var(--danger); background: rgba(222, 107, 88, 0.16);
 }
+
+/* --- ProfileMenu: единая кнопка-аватар с выпадающим списком (issue #116). --- */
+.profile-menu { position: relative; flex: 0 0 auto; }
+.profile-menu__avatar {
+  width: 44px; height: 44px; border: 0;
+  border-radius: 14px;
+  background: var(--hero-bg); color: var(--hero-text);
+  display: grid; place-items: center;
+  font: 700 15px var(--font-ui);
+  transition: transform 120ms ease;
+}
+.profile-menu__avatar:active { transform: scale(0.96); }
+.profile-menu__popover {
+  position: absolute; top: 100%; right: 0; margin-top: 8px; z-index: 30;
+  min-width: 210px; padding: 6px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 40px rgba(60, 40, 20, 0.22);
+  animation: pop .16s ease both;
+}
+@keyframes pop { 0% { transform: scale(0.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.profile-menu__heading {
+  padding: 8px 10px 4px;
+  font: 600 10px var(--font-ui);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.profile-menu__list { display: flex; flex-direction: column; gap: 2px; }
+.profile-menu__item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 12px;
+  background: transparent; text-align: left;
+  transition: background-color 120ms ease;
+}
+.profile-menu__item:active { background: var(--surface-muted); }
+.profile-menu__mini {
+  width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
+  background: var(--hero-bg); color: var(--hero-text);
+  display: grid; place-items: center;
+  font: 700 13px var(--font-ui);
+}
+.profile-menu__name {
+  flex: 1; min-width: 0;
+  font: 600 14px var(--font-ui); color: var(--text-primary);
+}
+.profile-menu__check {
+  flex: 0 0 auto;
+  color: var(--accent); font-weight: 700; font-size: 15px;
+}

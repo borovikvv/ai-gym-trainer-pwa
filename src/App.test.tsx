@@ -28,7 +28,10 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByRole('button', { name: /все группы/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Тренер' }))
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    // #116: avatar dropdown — open it, then tap the active user to open the
+    // questionnaire (the old direct "Профиль" button is gone).
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     expect(screen.getByText('Анкета пользователя')).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toBeInTheDocument()
   })
@@ -291,7 +294,8 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     const workoutsInput = screen.getByLabelText('Тренировок в неделю')
     await user.clear(workoutsInput)
     await user.type(workoutsInput, '2')
@@ -429,8 +433,10 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    expect(screen.getByRole('option', { name: 'Вячеслав' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Олег' })).toBeInTheDocument()
+    // #116: users live behind the avatar dropdown now.
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    expect(screen.getByRole('menuitemradio', { name: /Вячеслав/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('menuitemradio', { name: /Олег/ })).toHaveAttribute('aria-checked', 'false')
 
     await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
@@ -445,7 +451,9 @@ describe('Coach Timeline workout flow', () => {
     // Issue #57: history simplified — no more "X кг дальше" text
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Пользователь'), 'oleg')
+    // Switch to Oleg via the avatar dropdown.
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
     expect(screen.queryByRole('heading', { name: 'История' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
@@ -457,7 +465,10 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    // #116: open the avatar dropdown, then tap the active user to open the
+    // questionnaire (was a direct "Профиль" button).
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     expect(screen.getByText('Анкета пользователя')).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toHaveValue('3')
 
@@ -475,8 +486,13 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText(/Программа обновлена: 4 тренировки\/нед/i)).toBeInTheDocument()
     expect(screen.getAllByText(/4 тренировки\/нед/i).length).toBeGreaterThan(0)
 
-    await user.selectOptions(screen.getByLabelText('Пользователь'), 'oleg')
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    // Switch to Oleg via the avatar dropdown (back on the home screen) and
+    // re-open his questionnaire.
+    await user.click(screen.getByRole('button', { name: 'Тренер' }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
+    await user.click(screen.getByRole('button', { name: /профиль олег/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
     expect(screen.getByLabelText('Тренировок в неделю')).toHaveValue('3')
   })
 
@@ -484,7 +500,8 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     await user.click(screen.getByRole('button', { name: '2×/нед' }))
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))
 
@@ -506,7 +523,8 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     await user.click(screen.getByRole('button', { name: 'Четверг' }))
     await user.click(screen.getByRole('button', { name: 'Воскресенье' }))
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))

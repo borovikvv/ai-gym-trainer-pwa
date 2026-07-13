@@ -5,7 +5,7 @@ import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { toHumanCoachText } from '../domain/coachCopy'
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
-import { HeroStatus, MetricPair, ScreenHeader, SectionList, WorkoutRow } from './ui'
+import { HeroStatus, MetricPair, ProfileMenu, ScreenHeader, SectionList, WorkoutRow } from './ui'
 import { GoalsCard } from './GoalsCard'
 import { useEffect, useState } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
@@ -151,7 +151,6 @@ function MesocycleIndicator({ mesocycle }: { mesocycle: MesocycleState | null | 
 
 export function CoachHome({
   users,
-  activeUser,
   activeUserId,
   activeWorkoutDay,
   manualWorkoutDaySelected,
@@ -162,6 +161,7 @@ export function CoachHome({
   extraExercisesByDay,
   extraDayPickerOpen,
   coachTodaySummary: _coachTodaySummary,
+  activeUser: _activeUser,
   userHistory,
   nextTargets,
   exerciseLibrary = [],
@@ -259,22 +259,15 @@ export function CoachHome({
   return (
     <section className="screen active home-screen">
       <ScreenHeader
-        eyebrow="Сегодня"
+        eyebrow={todayEyebrow()}
         title="Тренер"
         trailing={(
-          <div className="profile-control">
-            <label className="user-select">
-              <span className="sr-only">Пользователь</span>
-              <select aria-label="Пользователь" value={activeUserId} onChange={(event) => onSelectUser(event.target.value)}>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>{user.name}</option>
-                ))}
-              </select>
-            </label>
-            <button className="icon-button home-profile-action" type="button" onClick={onOpenProfile} aria-label={`Профиль ${activeUser.name}`}>
-              {activeUser.initials}
-            </button>
-          </div>
+          <ProfileMenu
+            users={users}
+            activeUserId={activeUserId}
+            onSelectUser={onSelectUser}
+            onOpenProfile={onOpenProfile}
+          />
         )}
       />
 
@@ -425,6 +418,18 @@ export function CoachHome({
       )}
     </section>
   )
+}
+
+// Issue #116: eyebrow «Сегодня · DD месяц» — локализованная дата в шапке.
+const MONTHS_RU = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+]
+function todayEyebrow(): string {
+  const now = new Date()
+  const day = now.getDate()
+  const month = MONTHS_RU[now.getMonth()]
+  return `Сегодня · ${day} ${month}`
 }
 
 // Фаза 2: упражнения для визарда целей — вся библиотека (цель можно ставить
