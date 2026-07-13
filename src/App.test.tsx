@@ -530,7 +530,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))
 
     await user.click(screen.getByRole('button', { name: 'План' }))
-    expect(screen.getByText('План тренировок')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^План$/ })).toBeInTheDocument()
     expect(screen.getByText('Даты')).toBeInTheDocument()
     expect(screen.getAllByText(/3 тренировки\/нед/i).length).toBeGreaterThan(0)
     await user.click(screen.getAllByRole('button', { name: /запланировать тренировку вт,/i })[0])

@@ -7,7 +7,7 @@ import type { TrainingCalendarItem } from '../domain/coachPlanning'
 import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
-import { ActionMenu, HeroStatus, ScreenHeader, SectionList, WorkoutRow } from './ui'
+import { ActionMenu, HeroStatus, ScreenHeader, SectionList, SegmentedControl, WorkoutRow } from './ui'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 
 type WeekDateOption = {
@@ -72,6 +72,7 @@ export function PlanCalendar({
   todayDateInputValue,
 }: PlanCalendarProps) {
   const [actionWorkoutId, setActionWorkoutId] = useState<string | null>(null)
+  const [horizon, setHorizon] = useState<'week' | 'mesocycle'>('week')
   const actionablePlannedWorkouts = visibleActionablePlannedWorkouts(plannedWorkouts, userHistory)
   const plannedItems = plannedWorkouts.length > 0
     ? actionablePlannedWorkouts
@@ -97,9 +98,20 @@ export function PlanCalendar({
     <section className="screen active plan-screen">
       <ScreenHeader
         eyebrow={`${activeProfile.workoutsPerWeek} тренировки/нед`}
-        title="План тренировок"
-        trailing={<span className="badge">{selectedDatesLabel}</span>}
+        title="План"
       />
+
+      <div className="plan-horizon-toggle">
+        <SegmentedControl
+          options={[
+            { value: 'week', label: 'Неделя' },
+            { value: 'mesocycle', label: 'Мезоцикл · 4 нед' },
+          ]}
+          value={horizon}
+          onChange={setHorizon}
+          aria-label="Горизонт планирования"
+        />
+      </div>
 
       {nextWorkout && (
         <HeroStatus

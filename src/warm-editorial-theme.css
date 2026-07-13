@@ -187,8 +187,11 @@
 .plan-card { display: flex; flex-direction: column; }
 .plan-card__actions { display: flex; gap: 8px; margin-top: 12px; }
 
-/* 5d: Safe-area — отступ сверху под статус-бар */
-.screen { padding-top: max(16px, env(safe-area-inset-top)); }
+/* 5d: Safe-area — отступ сверху под статус-бар и справа под theme toggle */
+.screen {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-right: max(16px, 52px);  /* theme-toggle: 36px + 16px gap */
+}
 
 /* Тёмная тема (data-theme="dark") — тёплый вариант, при желании оставьте
    существующий iOS-dark. Здесь минимальный тёплый сдвиг: */
@@ -440,6 +443,13 @@
   font-size: 22px; font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text-primary);
+}
+
+/* --- Plan horizon toggle (issue #119). --- */
+.plan-horizon-toggle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
 }
 
 /* --- Metric cards — serif 28px values (прототип). --- */
