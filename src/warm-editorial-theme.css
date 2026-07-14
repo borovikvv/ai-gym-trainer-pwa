@@ -128,13 +128,9 @@
 .set-collapsed .set-actions { flex-wrap: nowrap; width: 100%; }
 .set-collapsed .set-actions .secondary.compact { flex: 0 0 auto; white-space: nowrap; }
 
-/* 2) Наезд: в режиме зала прячем фиксированную кнопку смены темы —
-   во время тренировки она не нужна и перекрывает «удалить». */
-.app-shell--gym .theme-toggle,
-.phone.gym-mode .theme-toggle { display: none; }
-
-/* 3) Компактная «шапка упражнения» над степпером (см. патч в GymScreen).
-   Название — крупным серивом, «Техника/Замена» — мелкими нейтральными. */
+/* =====================================================================
+   ФИКСЫ ПО СКРИНШОТУ (v2) — компактная шапка упражнения
+   ===================================================================== */
 .gym-exercise-head {
   display: flex;
   align-items: flex-start;
@@ -187,10 +183,10 @@
 .plan-card { display: flex; flex-direction: column; }
 .plan-card__actions { display: flex; gap: 8px; margin-top: 12px; }
 
-/* 5d: Safe-area — отступ сверху под статус-бар и справа под theme toggle */
+/* 5d: Safe-area — отступ сверху под статус-бар */
 .screen {
   padding-top: max(16px, env(safe-area-inset-top));
-  padding-right: max(16px, 52px);  /* theme-toggle: 36px + 16px gap */
+  padding-right: max(16px, env(safe-area-inset-right));
 }
 
 /* Тёмная тема (data-theme="dark") — тёплый вариант, при желании оставьте

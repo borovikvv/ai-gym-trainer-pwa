@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { ThemeToggle } from './ThemeToggle'
 
 type AppShellProps = {
   children: ReactNode
@@ -9,7 +8,6 @@ type AppShellProps = {
 export function AppShell({ children, mode = 'default' }: AppShellProps) {
   return (
     <main className={`app-shell ${mode === 'gym' ? 'app-shell--gym' : ''}`}>
-      <ThemeToggle />
       {children}
     </main>
   )

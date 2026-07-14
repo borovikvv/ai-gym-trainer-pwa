@@ -2635,45 +2635,7 @@ select:disabled {
   }
 }
 
-/* Theme toggle button (Phase 3 dark theme) */
-.theme-toggle {
-  position: fixed;
-  top: max(12px, env(safe-area-inset-top, 0px));
-  right: 16px;
-  z-index: 100;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--separator);
-  border-radius: var(--radius-sm);
-  background: var(--surface-solid);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.1s ease;
-}
-
-.theme-toggle:hover {
-  background: var(--surface-muted);
-}
-
-.theme-toggle:active {
-  transform: scale(0.95);
-}
-
-.theme-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* In gym mode, the toggle should not overlap the back button */
-.app-shell--gym .theme-toggle {
-  top: 56px;
-}
-
-/* Onboarding screen (Phase 3) */
+/* Issue #84: AI progress analysis card */
 .onboarding-screen {
   min-height: 100vh;
   display: flex;
