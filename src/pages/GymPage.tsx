@@ -3,7 +3,6 @@ import type { ExerciseLog } from '../domain/workoutHistory'
 import type { NextSetHint } from '../components/gymTypes'
 import type { ExerciseAddSuggestion } from '../domain/exerciseSuggestion'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
-import { useMemo } from 'react'
 import type { Screen } from '../contexts/NavigationContext'
 import { useProgram } from '../contexts/ProgramContext'
 import { PreWorkoutPreview } from '../components/PreWorkoutPreview'
@@ -101,23 +100,6 @@ interface GymPageProps {
 export function GymPage(props: GymPageProps) {
   const program = useProgram()
 
-  // Issue #82: compute workout progress (completed sets / total sets)
-  const { completedSets, totalSets, progressPercent } = useMemo(() => {
-    let completed = 0
-    let total = 0
-    for (const exercise of props.activeWorkoutDay.exercises) {
-      const log = props.logs[exercise.id]
-      const plannedSets = log?.sets.length ?? exercise.setsCount
-      total += plannedSets
-      completed += (log?.sets ?? []).filter((s) => s.completed).length
-    }
-    return {
-      completedSets: completed,
-      totalSets: total,
-      progressPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
-    }
-  }, [props.activeWorkoutDay, props.logs])
-
   // Modal state is owned by App.tsx (because useWorkoutNavigation hook
   // triggers setExerciseGuideOpen/setExercisePickerOpen). GymPage just
   // renders the modals using the passed-in state + setters.
@@ -131,14 +113,6 @@ export function GymPage(props: GymPageProps) {
 
   return (
     <>
-      {/* Issue #82: workout progress bar — shows during session */}
-      {screen === 'session' && totalSets > 0 && (
-        <div className="workout-progress-bar" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100} aria-label={`Прогресс: ${completedSets} из ${totalSets} подходов`}>
-          <div className="workout-progress-bar__fill" style={{ width: `${progressPercent}%` }} />
-          <span className="workout-progress-bar__label">{completedSets}/{totalSets}</span>
-        </div>
-      )}
-
       {screen === 'preview' && (
         <PreWorkoutPreview
           workoutDay={props.previewWorkoutDay}

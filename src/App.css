@@ -2251,41 +2251,6 @@ select:disabled {
   opacity: 0.82;
 }
 
-/* Issue #82: workout progress bar */
-.workout-progress-bar {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 4px;
-  background: var(--surface-muted);
-  border-radius: 0;
-  overflow: visible;
-}
-
-.workout-progress-bar__fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 0;
-  transition: width 300ms ease;
-}
-
-.workout-progress-bar__label {
-  position: absolute;
-  right: var(--space-3);
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  background: var(--surface-solid);
-  padding: 2px 6px;
-  border-radius: 999px;
-  line-height: 1;
-  white-space: nowrap;
-}
 
 /* Issue: coach recommendation inline in «Подходы» section */
 .coach-inline-hint {
@@ -2635,7 +2600,7 @@ select:disabled {
   }
 }
 
-/* Issue #84: AI progress analysis card */
+/* Onboarding screen (Phase 3) */
 .onboarding-screen {
   min-height: 100vh;
   display: flex;
