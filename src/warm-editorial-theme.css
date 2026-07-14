@@ -434,6 +434,7 @@
   font: 600 12px var(--font-ui);
   letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mesocycle-card__weeks {
   font-size: 13px; font-weight: 600; color: var(--text-primary);
@@ -1287,6 +1288,9 @@
 .badge,
 .pill {
   font-weight: 600;
+}
+
+/* =====================================================================
    POLISH PASS — PreWorkoutPreview + Gym session + general improvements
    Приводит оставшиеся экраны в соответствие с прототипом.
    ===================================================================== */
