@@ -386,9 +386,11 @@
 /* Boxed «Начинаем с <b>упражнение</b>  ·  вес». */
 .hero-status__info {
   margin-top: 16px;
-  display: flex; align-items: center; gap: 10px;
   padding: 12px 14px; border-radius: 14px;
   background: color-mix(in srgb, var(--hero-text) 8%, transparent);
+}
+.hero-status__start {
+  display: flex; align-items: center; gap: 10px; width: 100%;
 }
 .hero-status__start-dot {
   width: 8px; height: 8px; border-radius: 999px;
@@ -406,6 +408,21 @@
   font-family: var(--font-display, inherit);
   font-variant-numeric: tabular-nums;
   font-size: 22px; font-weight: 500; color: var(--hero-text);
+}
+/* Compact stacked «56 / мин» metric for the Plan hero — keeps the metric
+   narrow so a long title («Следующая тренировка») no longer breaks mid-word. */
+.hero-metric-mins {
+  display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+}
+.hero-metric-mins b {
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-hero); font-weight: 600;
+}
+.hero-metric-mins small {
+  margin-top: 2px;
+  font-size: 11px; font-weight: 600;
+  color: var(--hero-text-tertiary);
 }
 
 /* --- Mesocycle card (issue #118). --- */
@@ -716,17 +733,6 @@
   font-weight: 600;
   cursor: pointer;
 }
-.gym-action-bar__skip {
-  flex: 0 0 auto;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 12px);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-}
-
 /* --- Dashed "Добавить упражнение" + danger "Удалить" --- */
 .gym-add-exercise-btn {
   width: 100%;
@@ -807,64 +813,78 @@
 .current-step--logger {
   padding: 16px;
 }
+/* Prototype stacks weight and reps as two full-width rows (side-by-side does
+   not fit two 58px-button steppers on a 375px screen — the reps «+» clips). */
 .current-step__steppers {
   display: flex;
+  flex-direction: column;
   gap: 16px;
   margin: 12px 0 16px;
 }
 .current-step__steppers .stepper {
-  flex: 1;
-}
-.current-step__steppers .stepper--big .stepper__value {
-  font-size: 32px;
-  font-family: var(--font-display);
-  font-weight: 500;
+  width: 100%;
 }
 
 /* --- RIR scale --- */
 .rir-scale {
-  margin: 16px 0;
+  margin: 18px 0 4px;
 }
 .rir-scale__label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-tertiary);
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
-.rir-scale__dots {
+/* Dots-on-a-line (prototype): a track behind 4 circles, value below each,
+   «запас» / «отказ» captions at the ends. */
+.rir-track { position: relative; padding: 0 4px; }
+.rir-track__line {
+  position: absolute; top: 13px; left: 16px; right: 16px;
+  height: 2px; background: var(--separator);
+}
+.rir-track__dots {
+  position: relative;
   display: flex;
-  gap: 6px;
+  justify-content: space-between;
 }
 .rir-dot {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 10px 4px;
-  border-radius: 12px;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
+  gap: 7px;
+  background: transparent;
+  border: 0;
+  padding: 0;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.rir-dot--active {
-  background: rgba(78, 122, 91, 0.12);
-  border-color: var(--success);
-  color: var(--success-pressed);
+.rir-dot__circle {
+  width: 26px; height: 26px; border-radius: 999px;
+  display: grid; place-items: center;
+  border: 2px solid var(--text-tertiary);
+  background: var(--bg);
+  transition: border-color 0.15s, background 0.15s;
 }
+.rir-dot__inner { width: 9px; height: 9px; border-radius: 999px; background: transparent; }
 .rir-dot__value {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 13px; font-weight: 600;
   font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
-.rir-dot__hint {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.7;
+.rir-dot--active.rir-dot--success .rir-dot__circle { border-color: var(--success); background: var(--success); }
+.rir-dot--active.rir-dot--warning .rir-dot__circle { border-color: var(--warning); background: var(--warning); }
+.rir-dot--active.rir-dot--danger .rir-dot__circle { border-color: var(--danger); background: var(--danger); }
+.rir-dot--active .rir-dot__inner { background: #fff; }
+.rir-dot--active.rir-dot--success .rir-dot__value { color: var(--success); }
+.rir-dot--active.rir-dot--warning .rir-dot__value { color: var(--warning); }
+.rir-dot--active.rir-dot--danger .rir-dot__value { color: var(--danger); }
+.rir-track__ends {
+  display: flex; justify-content: space-between; margin-top: 4px;
+}
+.rir-track__ends span {
+  font-size: 10px; font-weight: 500; color: var(--text-tertiary);
 }
 
 /* --- Coach hint line (green left border) --- */
@@ -899,6 +919,38 @@
 .current-step__done:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Compact inline «Прошлый раз / Цель» (prototype), replaces the big MetricPair. */
+.gym-prevgoal {
+  display: flex;
+  gap: 26px;
+  padding: 0 2px;
+  margin: 14px 0 4px;
+}
+.gym-prevgoal__label {
+  display: block;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.gym-prevgoal__value {
+  font-size: 15px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.gym-prevgoal__value--goal { color: var(--success); }
+.gym-prevgoal__trend {
+  display: block;
+  font-size: 11px; color: var(--text-tertiary); margin-top: 2px;
+}
+
+/* Subtle one-line autosave reassurance (replaces the 3-line card). */
+.autosave-line {
+  margin: 12px 0 0;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-tertiary);
+  text-align: center;
 }
 
 /* =====================================================================
@@ -1239,4 +1291,255 @@
 .badge,
 .pill {
   font-weight: 600;
+   POLISH PASS — PreWorkoutPreview + Gym session + general improvements
+   Приводит оставшиеся экраны в соответствие с прототипом.
+   ===================================================================== */
+
+/* --- PreWorkoutPreview: тёплая editorial-стилизация --- */
+.preview-screen .back {
+  font-family: var(--font-ui);
+  font-size: 14px; font-weight: 600;
+  color: var(--text-secondary);
+  background: none; border: 0;
+  padding: 4px 0 12px;
+  cursor: pointer;
+}
+.preview-screen > .top {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.preview-screen > .top .kicker {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.preview-screen > .top .title {
+  font-family: var(--font-display);
+  font-size: 32px; font-weight: 500; line-height: 1.02;
+  color: var(--text-primary);
+  margin: 4px 0 0;
+}
+.preview-screen > .top .badge {
+  flex: 0 0 auto;
+  font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 999px;
+  background: var(--surface-muted); color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* hero card on preview — dark espresso like home */
+.preview-screen .preworkout-hero {
+  margin-top: 14px;
+  padding: 20px 22px;
+  border-radius: 24px;
+  background: var(--hero-bg);
+  color: var(--hero-text);
+}
+.preview-screen .preworkout-hero .label {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--hero-text-tertiary);
+}
+.preview-screen .preworkout-hero h1 {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: 20px; font-weight: 500; line-height: 1.3;
+  color: var(--hero-text);
+}
+
+/* cards on preview screen */
+.preview-screen .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: none;
+}
+.preview-screen .card h3 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 15px; font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* checkin grid buttons — warm pill style */
+.preview-screen .checkin-panel {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+}
+.preview-screen .checkin-grid button,
+.preview-screen .checkin-choice-row button {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px; font-weight: 600;
+  color: var(--text-primary);
+  min-height: 40px;
+}
+.preview-screen .checkin-grid button.active,
+.preview-screen .checkin-choice-row button.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent-pressed);
+}
+.preview-screen .checkin-grid button.danger.active,
+.preview-screen .checkin-choice-row button.danger.active {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--danger);
+}
+
+/* readiness grid — larger option cards */
+.preview-screen .readiness-grid button {
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 80px;
+}
+.preview-screen .readiness-grid button b {
+  font-family: var(--font-ui);
+  font-size: 15px; font-weight: 700;
+}
+.preview-screen .readiness-grid button span {
+  font-size: 12px; font-weight: 500;
+  color: var(--text-secondary);
+}
+.preview-screen .readiness-grid button.active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.preview-screen .readiness-grid button.active b {
+  color: var(--accent-pressed);
+}
+
+/* exercise list on preview */
+.preview-screen .preview-exercise {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--separator);
+}
+.preview-screen .preview-exercise:last-child { border-bottom: 0; }
+.preview-screen .preview-exercise img {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.preview-screen .preview-exercise > div { min-width: 0; }
+.preview-screen .preview-exercise b {
+  font-family: var(--font-display);
+  font-size: 15px; font-weight: 500;
+  color: var(--text-primary);
+}
+.preview-screen .preview-exercise .muted {
+  font-size: 12px; color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+/* CTA button on preview */
+.preview-screen > .primary {
+  width: 100%;
+  margin-top: 16px;
+  padding: 16px;
+  border: 0; border-radius: 16px;
+  background: var(--accent); color: #fff;
+  font: 600 16px var(--font-ui);
+  box-shadow: 0 12px 26px rgba(218, 83, 38, 0.22);
+  cursor: pointer;
+}
+
+/* --- GymScreen session-header: progress bar + clean exit --- */
+.session-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 12px;
+}
+.session-header .back {
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 600;
+  color: var(--text-secondary);
+  background: none; border: 0;
+  display: flex; align-items: center; gap: 4px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  padding: 4px 0;
+}
+.session-header .back::before {
+  content: '←';
+  font-size: 16px;
+}
+/* hide the ScreenHeader badge in the session-header — replaced by progress bar */
+.session-header .screen-header { display: none; }
+
+/* progress bar between exit and counter */
+.session-progress {
+  flex: 1; min-width: 0;
+  height: 6px; border-radius: 999px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+.session-progress__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+.session-counter {
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Gym exercise head: finer serif title --- */
+.gym-exercise-head__copy h2 {
+  font-family: var(--font-display);
+  font-size: 26px; font-weight: 500; line-height: 1.05;
+  color: var(--text-primary);
+}
+
+/* --- Stepper big value: serif --- */
+.stepper--big .stepper__value {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- InfoHint: warm styling --- */
+.preview-screen .info-hint-row,
+.preview-screen .card .info-hint-row {
+  margin-top: 10px;
+}
+
+/* --- General: ensure .card on all screens uses warm surface --- */
+.preview-screen .card,
+.plan-screen .card,
+.progress-screen .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+}
+
+/* --- All-sets details: warm styling --- */
+.all-sets-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--separator);
+  padding-top: 12px;
+}
+.all-sets-details > summary {
+  font-family: var(--font-ui);
+  font-size: 14px; font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px 0;
+  list-style: none;
+}
+.all-sets-details > summary::-webkit-details-marker { display: none; }
+.all-sets-details > summary::before {
+  content: '▸ ';
+  color: var(--text-tertiary);
+}
+.all-sets-details[open] > summary::before {
+  content: '▾ ';
 }

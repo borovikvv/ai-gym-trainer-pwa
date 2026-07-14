@@ -118,12 +118,12 @@ export function CurrentStepCard({
   const currentReps = activeSet?.reps ?? exercise.repMin ?? 0
   const weightStep = exercise.weightStep > 0 ? exercise.weightStep : 2.5
 
-  // RIR dots: short labels for the 4 options
+  // RIR dots: short labels + tone for the 4 options (запас → отказ)
   const rirDots = [
-    { rpe: 6, label: '4+', hint: 'Легко' },
-    { rpe: 7, label: '3', hint: 'Норм' },
-    { rpe: 8, label: '1–2', hint: 'Тяж' },
-    { rpe: 10, label: '0', hint: 'Макс' },
+    { rpe: 6, label: '4+', hint: 'Легко', tone: 'success' },
+    { rpe: 7, label: '3', hint: 'Норм', tone: 'success' },
+    { rpe: 8, label: '1–2', hint: 'Тяж', tone: 'warning' },
+    { rpe: 10, label: '0', hint: 'Макс', tone: 'danger' },
   ]
 
   return (
@@ -154,23 +154,30 @@ export function CurrentStepCard({
         />
       </div>
 
-      {/* Issue #123: RIR scale — 4 dots */}
+      {/* Issue #123: RIR scale — dots on a line (запас → отказ), как в прототипе */}
       <div className="rir-scale" role="group" aria-label="Сколько ещё сделаешь?">
         <span className="rir-scale__label">Сколько ещё сделаешь?</span>
-        <div className="rir-scale__dots">
-          {rirDots.map((dot) => (
-            <button
-              key={dot.rpe}
-              type="button"
-              className={`rir-dot ${selectedRir === dot.rpe ? 'rir-dot--active' : ''}`}
-              onClick={() => pickRir(dot.rpe)}
-              aria-label={`${dot.hint} — ${dot.label} в запасе`}
-              aria-pressed={selectedRir === dot.rpe}
-            >
-              <span className="rir-dot__value">{dot.label}</span>
-              <span className="rir-dot__hint">{dot.hint}</span>
-            </button>
-          ))}
+        <div className="rir-track">
+          <div className="rir-track__line" aria-hidden="true" />
+          <div className="rir-track__dots">
+            {rirDots.map((dot) => (
+              <button
+                key={dot.rpe}
+                type="button"
+                className={`rir-dot rir-dot--${dot.tone} ${selectedRir === dot.rpe ? 'rir-dot--active' : ''}`}
+                onClick={() => pickRir(dot.rpe)}
+                aria-label={`${dot.hint} — ${dot.label} в запасе`}
+                aria-pressed={selectedRir === dot.rpe}
+              >
+                <span className="rir-dot__circle"><span className="rir-dot__inner" /></span>
+                <span className="rir-dot__value">{dot.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="rir-track__ends">
+            <span>запас</span>
+            <span>отказ</span>
+          </div>
         </div>
       </div>
 

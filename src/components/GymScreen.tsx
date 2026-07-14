@@ -8,7 +8,6 @@ import { isTimedExercise } from '../domain/exerciseMetrics'
 import { NextSetCoachCard } from './NextSetCoachCard'
 import { CurrentStepCard } from './CurrentStepCard'
 import { WorkoutSetList } from './WorkoutSetList'
-import { MetricPair } from './ui'
 import { QuickActions } from './GymActions'
 import { Plus, Trash2 } from 'lucide-react'
 
@@ -173,6 +172,37 @@ export function GymScreen({
         </div>
       </div>
 
+      {/* Фаза 3.1: фокусная карточка «что сейчас делать» — работа или отдых.
+          Логгер (степперы + RIR + Готово) — первым, как в прототипе. */}
+      <CurrentStepCard
+        exercise={activeExercise}
+        activeLog={activeLog}
+        activeSetIndex={activeSetIndex}
+        allSetsCompleted={allSetsCompleted}
+        recommendation={isInlineRec ? rec : null}
+        restRemainingSeconds={restRemainingSeconds}
+        timedExercise={timedExercise}
+        formatWeight={formatWeight}
+        updateSet={updateSet}
+        markSetDone={markSetDone}
+        extendRest={extendRest}
+        skipRest={clearRestTimer}
+      />
+
+      {/* Compact "Прошлый раз / Цель" — инлайн, как в прототипе (не большие карточки).
+          Issue #114: «Цель» отражает живого тренера; план цикла — приглушённо. */}
+      <div className="gym-prevgoal">
+        <div>
+          <span className="gym-prevgoal__label">Прошлый раз</span>
+          <b className="gym-prevgoal__value">{previousSetsSummary}</b>
+        </div>
+        <div>
+          <span className="gym-prevgoal__label">Цель</span>
+          <b className="gym-prevgoal__value gym-prevgoal__value--goal">{liveGoal ?? activeExercise.todayGoal}</b>
+          {cyclePlanTrend && <span className="gym-prevgoal__trend">{cyclePlanTrend}</span>}
+        </div>
+      </div>
+
       {/* Issue #122: set chips row — done / current / upcoming */}
       <div className="set-chips" role="tablist" aria-label="Подходы">
         {activeLog.sets.map((set, i) => {
@@ -196,23 +226,56 @@ export function GymScreen({
         })}
       </div>
 
-      {/* Фаза 3.1: фокусная карточка «что сейчас делать» — работа или отдых */}
-      <CurrentStepCard
-        exercise={activeExercise}
-        activeLog={activeLog}
-        activeSetIndex={activeSetIndex}
-        allSetsCompleted={allSetsCompleted}
-        recommendation={isInlineRec ? rec : null}
-        restRemainingSeconds={restRemainingSeconds}
-        timedExercise={timedExercise}
-        formatWeight={formatWeight}
-        updateSet={updateSet}
-        markSetDone={markSetDone}
-        extendRest={extendRest}
-        skipRest={clearRestTimer}
-      />
+      {/* «Дальше» — только когда все подходы сделаны (как в прототипе). */}
+      {allSetsCompleted && (
+        <div className="next-card session-next-card">
+          <div>
+            <div className="muted">{nextExercise ? 'Дальше' : 'Финиш'}</div>
+            <b>{nextExercise ? nextExercise.name : 'Все упражнения пройдены'}</b>
+            {nextExercise && <div className="muted">{nextExercise.prescription}</div>}
+          </div>
+        </div>
+      )}
 
-      {/* Фаза 3.1: полный список подходов и быстрые действия — в одном тапе */}
+      {/* Issue #122: dashed "Добавить упражнение" + danger "Удалить" */}
+      <button className="gym-add-exercise-btn" type="button" onClick={openExercisePicker}>
+        <Plus size={16} aria-hidden="true" /> Добавить упражнение
+      </button>
+      <button className="gym-remove-exercise-btn" type="button" onClick={removeCurrentExercise}>
+        <Trash2 size={14} aria-hidden="true" /> Удалить текущее упражнение
+      </button>
+
+      {/* Coach card — only for stop/replace/skip/finish actions. */}
+      {isCardRec && (
+        <NextSetCoachCard
+          recommendation={visibleNextSetRecommendation}
+          allSetsCompleted={allSetsCompleted}
+          formatWeight={formatWeight}
+          onApplySuggestedExercise={applyCoachExerciseSuggestion}
+          onAcceptCoachDecision={acceptCoachDecision}
+        />
+      )}
+
+      {exerciseAddSuggestion && (
+        <div className="card coach-add-exercise">
+          <div>
+            <div className="label">Тренер предлагает добавить</div>
+            <b>{exerciseAddSuggestion.exercise.name}</b>
+            <div className="muted">{exerciseAddSuggestion.reason}</div>
+          </div>
+          <button
+            className="secondary compact"
+            onClick={addSuggestedExercise}
+            aria-label={`Добавить предложенное упражнение: ${exerciseAddSuggestion.exercise.name}`}
+          >
+            добавить
+          </button>
+        </div>
+      )}
+
+      {/* Мощные функции (ручная правка/боль/добавить подход) — свёрнуты, ниже
+          основного потока. Правка выполненного подхода доступна и по тапу на
+          чип, поэтому это резервный путь. */}
       <details className="all-sets-details">
         <summary>Все подходы и правки</summary>
         {!timedExercise && (
@@ -248,83 +311,29 @@ export function GymScreen({
         <button className="secondary wide" type="button" onClick={addSet}>Добавить подход</button>
       </details>
 
-      {/* 4. Compact "Прошлый раз / Цель". Issue #114: «Цель» отражает живого
-          тренера (совпадает с полем ввода), план цикла — приглушённо, если
-          отличается. */}
-      <MetricPair
-        metrics={[
-          { label: 'Прошлый раз', value: previousSetsSummary },
-          { label: 'Цель', value: liveGoal ?? activeExercise.todayGoal, trend: cyclePlanTrend },
-        ]}
-      />
+      {draftStatus && (
+        <p className="autosave-line" role="status">{draftStatus}</p>
+      )}
       <span className="sr-only">Прошлый раз: {previousSetsSummary}</span>
 
-      {/* Issue #122: dashed "Добавить упражнение" + danger "Удалить" */}
-      <button className="gym-add-exercise-btn" type="button" onClick={openExercisePicker}>
-        <Plus size={16} aria-hidden="true" /> Добавить упражнение
-      </button>
-      <button className="gym-remove-exercise-btn" type="button" onClick={removeCurrentExercise}>
-        <Trash2 size={14} aria-hidden="true" /> Удалить текущее упражнение
-      </button>
-
-      {exerciseAddSuggestion && (
-        <div className="card coach-add-exercise">
-          <div>
-            <div className="label">Тренер предлагает добавить</div>
-            <b>{exerciseAddSuggestion.exercise.name}</b>
-            <div className="muted">{exerciseAddSuggestion.reason}</div>
-          </div>
-          <button
-            className="secondary compact"
-            onClick={addSuggestedExercise}
-            aria-label={`Добавить предложенное упражнение: ${exerciseAddSuggestion.exercise.name}`}
-          >
-            добавить
-          </button>
-        </div>
-      )}
-
-      {draftStatus && (
-        <div className="autosave-status" role="status">
-          <b>Прогресс защищён</b>
-          <span>{draftStatus}</span>
-          <small>После обновления страницы тренировка восстановится.</small>
-        </div>
-      )}
-
-      {/* Coach card — only for stop/replace/skip/finish actions. */}
-      {isCardRec && (
-        <NextSetCoachCard
-          recommendation={visibleNextSetRecommendation}
-          allSetsCompleted={allSetsCompleted}
-          formatWeight={formatWeight}
-          onApplySuggestedExercise={applyCoachExerciseSuggestion}
-          onAcceptCoachDecision={acceptCoachDecision}
-        />
-      )}
-
-      <div className="next-card session-next-card">
-        <div>
-          <div className="muted">{nextExercise ? 'Дальше' : 'Финиш'}</div>
-          <b>{nextExercise ? nextExercise.name : 'Все упражнения пройдены'}</b>
-          {nextExercise && <div className="muted">{nextExercise.prescription}</div>}
-        </div>
-      </div>
-
-      {/* Issue #122: sticky action bar — Пропустить / Следующее → + Финиш */}
+      {/* Issue #122: sticky action bar — one state-labeled primary
+          (Пропустить → / Следующее → / К разбору →) + компактный Финиш,
+          как в прототипе (nextCta + Финиш). */}
       <div className="gym-action-bar">
-        {nextExercise ? (
-          <>
-            <button className="gym-action-bar__skip" type="button" onClick={goToNextExercise} aria-label="Пропустить упражнение">
-              Пропустить
-            </button>
-            <button className="primary" type="button" onClick={goToNextExercise} aria-label="Перейти к следующему упражнению">
-              Следующее →
-            </button>
-          </>
-        ) : null}
+        <button
+          className="primary"
+          type="button"
+          onClick={nextExercise ? goToNextExercise : () => navigate('review')}
+          aria-label={
+            !allSetsCompleted ? 'Пропустить упражнение'
+              : nextExercise ? 'Перейти к следующему упражнению'
+                : 'К разбору тренировки'
+          }
+        >
+          {!allSetsCompleted ? 'Пропустить →' : nextExercise ? 'Следующее →' : 'К разбору →'}
+        </button>
         <button className="gym-action-bar__finish" type="button" onClick={() => navigate('review')} aria-label="Завершить всю тренировку">
-          Завершить тренировку
+          Финиш
         </button>
       </div>
     </section>

@@ -99,7 +99,7 @@ describe('GymScreen', () => {
       recommendation: { weight: 52, reps: 8, restSeconds: 90, reason: 'снизил старт', action: 'reduce_load' },
     })
 
-    const goalCard = screen.getByText('Цель').closest('.metric-card')!
+    const goalCard = screen.getByText('Цель').closest('div')!
     // Основное число (в <b>) — рекомендация тренера; todayGoal (54.5×8/…) в
     // основном числе не показывается (он может быть лишь в приглушённой подписи).
     const goalValue = goalCard.querySelector('b')!
@@ -110,7 +110,7 @@ describe('GymScreen', () => {
   it('fallback на статичный todayGoal, когда живой рекомендации нет', () => {
     renderGym({ recommendation: null })
 
-    const goalCard = screen.getByText('Цель').closest('.metric-card')!
+    const goalCard = screen.getByText('Цель').closest('div')!
     expect(goalCard).toHaveTextContent('54.5×8/54.5×8/54.5×8')
   })
 
@@ -119,7 +119,7 @@ describe('GymScreen', () => {
       recommendation: { weight: 52, reps: 8, restSeconds: 90, reason: 'снизил старт', action: 'reduce_load' },
     })
 
-    const goalCard = screen.getByText('Цель').closest('.metric-card')!
+    const goalCard = screen.getByText('Цель').closest('div')!
     expect(goalCard).toHaveTextContent(/план цикла 54\.5 кг/i)
   })
 
@@ -128,7 +128,7 @@ describe('GymScreen', () => {
       recommendation: { weight: 54.5, reps: 8, restSeconds: 90, reason: 'идём по плану', action: 'continue' },
     })
 
-    const goalCard = screen.getByText('Цель').closest('.metric-card')!
+    const goalCard = screen.getByText('Цель').closest('div')!
     expect(goalCard).not.toHaveTextContent(/план цикла/i)
   })
 
@@ -181,8 +181,8 @@ describe('GymScreen', () => {
       />,
     )
 
-    expect(screen.getAllByRole('status').some(el => /прогресс защищён/i.test(el.textContent ?? ''))).toBe(true)
-    expect(screen.getByText(/после обновления страницы тренировка восстановится/i)).toBeInTheDocument()
+    // Subtle one-line reassurance replaces the old verbose card.
+    expect(screen.getByText('Черновик сохранён · 07.06, 22:45')).toBeInTheDocument()
   })
 
   it('lets the user remove the current exercise from the active workout', async () => {
