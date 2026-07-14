@@ -827,48 +827,64 @@
 
 /* --- RIR scale --- */
 .rir-scale {
-  margin: 16px 0;
+  margin: 18px 0 4px;
 }
 .rir-scale__label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-tertiary);
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
-.rir-scale__dots {
+/* Dots-on-a-line (prototype): a track behind 4 circles, value below each,
+   «запас» / «отказ» captions at the ends. */
+.rir-track { position: relative; padding: 0 4px; }
+.rir-track__line {
+  position: absolute; top: 13px; left: 16px; right: 16px;
+  height: 2px; background: var(--separator);
+}
+.rir-track__dots {
+  position: relative;
   display: flex;
-  gap: 6px;
+  justify-content: space-between;
 }
 .rir-dot {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 10px 4px;
-  border-radius: 12px;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
+  gap: 7px;
+  background: transparent;
+  border: 0;
+  padding: 0;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.rir-dot--active {
-  background: rgba(78, 122, 91, 0.12);
-  border-color: var(--success);
-  color: var(--success-pressed);
+.rir-dot__circle {
+  width: 26px; height: 26px; border-radius: 999px;
+  display: grid; place-items: center;
+  border: 2px solid var(--text-tertiary);
+  background: var(--bg);
+  transition: border-color 0.15s, background 0.15s;
 }
+.rir-dot__inner { width: 9px; height: 9px; border-radius: 999px; background: transparent; }
 .rir-dot__value {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 13px; font-weight: 600;
   font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
-.rir-dot__hint {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.7;
+.rir-dot--active.rir-dot--success .rir-dot__circle { border-color: var(--success); background: var(--success); }
+.rir-dot--active.rir-dot--warning .rir-dot__circle { border-color: var(--warning); background: var(--warning); }
+.rir-dot--active.rir-dot--danger .rir-dot__circle { border-color: var(--danger); background: var(--danger); }
+.rir-dot--active .rir-dot__inner { background: #fff; }
+.rir-dot--active.rir-dot--success .rir-dot__value { color: var(--success); }
+.rir-dot--active.rir-dot--warning .rir-dot__value { color: var(--warning); }
+.rir-dot--active.rir-dot--danger .rir-dot__value { color: var(--danger); }
+.rir-track__ends {
+  display: flex; justify-content: space-between; margin-top: 4px;
+}
+.rir-track__ends span {
+  font-size: 10px; font-weight: 500; color: var(--text-tertiary);
 }
 
 /* --- Coach hint line (green left border) --- */
@@ -903,6 +919,38 @@
 .current-step__done:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Compact inline «Прошлый раз / Цель» (prototype), replaces the big MetricPair. */
+.gym-prevgoal {
+  display: flex;
+  gap: 26px;
+  padding: 0 2px;
+  margin: 14px 0 4px;
+}
+.gym-prevgoal__label {
+  display: block;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.gym-prevgoal__value {
+  font-size: 15px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.gym-prevgoal__value--goal { color: var(--success); }
+.gym-prevgoal__trend {
+  display: block;
+  font-size: 11px; color: var(--text-tertiary); margin-top: 2px;
+}
+
+/* Subtle one-line autosave reassurance (replaces the 3-line card). */
+.autosave-line {
+  margin: 12px 0 0;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-tertiary);
+  text-align: center;
 }
 
 /* =====================================================================
@@ -1386,13 +1434,6 @@
   font-family: var(--font-display);
   font-size: 26px; font-weight: 500; line-height: 1.05;
   color: var(--text-primary);
-}
-
-/* --- RIR dot values: serif to match prototype --- */
-.rir-dot__value {
-  font-family: var(--font-display);
-  font-size: 18px; font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 /* --- Stepper big value: serif --- */
