@@ -424,6 +424,7 @@
 /* --- Mesocycle card (issue #118). --- */
 .mesocycle-card {
   margin-top: 14px;
+  margin-bottom: 12px;
   padding: 15px 17px; border-radius: 18px;
   background: var(--surface); border: 1px solid var(--border);
 }
