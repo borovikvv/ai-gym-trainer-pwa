@@ -109,7 +109,15 @@ function MesocycleCard({ mesocycle }: { mesocycle: MesocycleState | null | undef
   if (!mesocycle || mesocycle.phase === 'idle') return null
 
   const weekLabel = `неделя ${mesocycle.weekInCycle} / ${mesocycle.cycleLength}`
-  const phaseLabel = mesocycle.isDeload ? 'разгрузка' : (mesocycle.phase || mesocycle.phaseDescription)
+  const PHASE_RU: Record<string, string> = {
+    loading: 'загрузка',
+    accumulation: 'накопление',
+    intensification: 'интенсификация',
+    deload: 'разгрузка',
+  }
+  const phaseLabel = mesocycle.isDeload
+    ? 'разгрузка'
+    : (PHASE_RU[mesocycle.phase] || mesocycle.phaseDescription)
   // N-segment progress bar: past weeks filled with success, current + future muted.
   const segments = mesocycle.cycleLength
   const doneWeeks = mesocycle.isDeload ? segments : Math.min(mesocycle.weekInCycle, segments)
