@@ -93,11 +93,12 @@ describe('ProgressScreen', () => {
     expect(details).not.toHaveAttribute('open')
   })
 
-  it('hides e1RM section when histories are empty', () => {
+  it('shows empty state for e1RM section when histories are empty', () => {
     render(<ProgressScreen progressDashboard={dashboard} />)
 
-    // SectionList title 'Сила (e1RM)' should not appear when e1RMHistories is []
-    expect(screen.queryByRole('heading', { name: 'Сила (e1RM)' })).not.toBeInTheDocument()
+    // Issue #124: section now always shows with a clean empty state
+    expect(screen.getByRole('heading', { name: 'Сила (e1RM)' })).toBeInTheDocument()
+    expect(screen.getByText(/нужно 2\+ тренировки/i)).toBeInTheDocument()
   })
 
   it('renders e1RM sparklines and trend text when histories are non-empty', () => {
@@ -149,9 +150,11 @@ describe('ProgressScreen', () => {
     expect(screen.getByText('75 кг')).toBeInTheDocument()
     expect(screen.getByText('60 кг')).toBeInTheDocument()
 
-    // Trend text is rendered
-    expect(screen.getByText('+1,5 кг/нед')).toBeInTheDocument()
-    expect(screen.getByText('стабильно')).toBeInTheDocument()
+    // Trend text + delta is rendered in combined element
+    // bench: delta = 75 - 70 = +5, trendText = '+1,5 кг/нед'
+    expect(screen.getByText(/\+5 .*·.* \+1,5 кг\/нед/)).toBeInTheDocument()
+    // lat-pulldown: delta = 60 - 58 = +2, trendText = 'стабильно'
+    expect(screen.getByText(/\+2 .*·.* стабильно/)).toBeInTheDocument()
 
     // SVG path is rendered (sparkline chart)
     expect(document.querySelector('svg path')).toBeInTheDocument()

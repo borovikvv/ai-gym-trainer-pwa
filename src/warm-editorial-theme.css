@@ -900,3 +900,41 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* =====================================================================
+   Issue #124 — Progress: focus tags + strength section polish
+   ===================================================================== */
+
+/* --- Focus tags (color-coded by status) --- */
+.focus-tag {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.focus-tag--success {
+  background: rgba(78, 122, 91, 0.14);
+  color: var(--success-pressed);
+}
+.focus-tag--warning {
+  background: rgba(198, 122, 46, 0.14);
+  color: var(--warning);
+}
+.focus-tag--danger {
+  background: rgba(194, 59, 46, 0.14);
+  color: var(--danger);
+}
+.focus-tag--neutral {
+  background: var(--surface-muted);
+  color: var(--text-tertiary);
+}
+
+/* --- Strength section: e1RM cards polish --- */
+.e1rm-sparkline-card__footer small.e1rm-trend--up,
+.e1rm-sparkline-card__footer small.e1rm-trend--down {
+  font-weight: 600;
+}
+.e1rm-trend--up { color: var(--success); }
+.e1rm-trend--down { color: var(--danger); }

@@ -213,59 +213,78 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
           </div>
         ) : (
           <div className="progress-task-list">
-            {focusItems.map((item, index) => (
-              <article className="progress-task" key={item.exerciseId}>
-                <div className="progress-task__index">{index + 1}</div>
-                <div>
-                  <b>{item.exerciseName}</b>
-                  <div className="muted">{item.text}</div>
-                </div>
-                <span className="badge">{item.status}</span>
-              </article>
-            ))}
+            {focusItems.map((item, index) => {
+              // Issue #124: color-coded tag based on status
+              const tagClass = item.status === 'растёт' || item.status === 'можно повысить'
+                ? 'focus-tag focus-tag--success'
+                : item.status === 'закрепляем' || item.status === 'застой'
+                  ? 'focus-tag focus-tag--warning'
+                  : item.status === 'перегрузка' || item.status === 'была боль'
+                    ? 'focus-tag focus-tag--danger'
+                    : 'focus-tag focus-tag--neutral'
+              return (
+                <article className="progress-task" key={item.exerciseId}>
+                  <div className="progress-task__index">{index + 1}</div>
+                  <div>
+                    <b>{item.exerciseName}</b>
+                    <div className="muted">{item.text}</div>
+                  </div>
+                  <span className={tagClass}>{item.status}</span>
+                </article>
+              )
+            })}
           </div>
         )}
       </SectionList>
 
-      {/* e1RM Sparklines — Strength Trends.
-          Issue #55: only show exercises with >= 2 data points.
-          Exercises with 1 or 0 points have no useful visualization. */}
-      {progressDashboard.e1RMHistories.filter((ex) => ex.sparkline.length >= 2).length > 0 && (
-        <SectionList title="Сила (e1RM)">
+      {/* Issue #124: Strength section — e1RM sparklines + delta.
+          Only show exercises with >= 2 data points (need a trend).
+          Clean empty state when no data. */}
+      <SectionList title="Сила (e1RM)">
+        {progressDashboard.e1RMHistories.filter((ex) => ex.sparkline.length >= 2).length > 0 ? (
           <div className="e1rm-sparkline-grid">
             {progressDashboard.e1RMHistories
               .filter((ex) => ex.sparkline.length >= 2)
-              .map((ex) => (
-              <article className="e1rm-sparkline-card" key={ex.exerciseId}>
-                <div className="e1rm-sparkline-card__header">
-                  <b>{ex.exerciseName}</b>
-                  <span className="e1rm-sparkline-card__best">{formatKg(ex.currentBest)}</span>
-                </div>
-                <div className="e1rm-sparkline-card__chart">
-                  <SparklineSVG
-                    points={ex.sparkline}
-                    trendDirection={ex.trendDirection}
-                    width={140}
-                    height={36}
-                  />
-                </div>
-                <div className="e1rm-sparkline-card__footer">
-                  <small className="e1rm-sparkline-card__muscle">{ex.muscleGroup}</small>
-                  {ex.trendDirection !== 'insufficient_data' && (
-                    <small className={
-                      ex.trendDirection === 'up' ? 'e1rm-trend--up'
-                      : ex.trendDirection === 'down' ? 'e1rm-trend--down'
-                      : 'muted'
-                    }>
-                      {ex.trendText}
-                    </small>
-                  )}
-                </div>
-              </article>
-            ))}
+              .map((ex) => {
+                // Issue #124: compute delta from sparkline first → last
+                const points = ex.sparkline
+                const firstY = points[0]?.y ?? 0
+                const lastY = points[points.length - 1]?.y ?? 0
+                const delta = lastY - firstY
+                const deltaText = delta > 0 ? `+${formatKg(delta)}` : delta < 0 ? `−${formatKg(Math.abs(delta))}` : '0'
+                const deltaClass = delta > 0 ? 'e1rm-trend--up' : delta < 0 ? 'e1rm-trend--down' : 'muted'
+                return (
+                  <article className="e1rm-sparkline-card" key={ex.exerciseId}>
+                    <div className="e1rm-sparkline-card__header">
+                      <b>{ex.exerciseName}</b>
+                      <span className="e1rm-sparkline-card__best">{formatKg(ex.currentBest)}</span>
+                    </div>
+                    <div className="e1rm-sparkline-card__chart">
+                      <SparklineSVG
+                        points={ex.sparkline}
+                        trendDirection={ex.trendDirection}
+                        width={140}
+                        height={36}
+                      />
+                    </div>
+                    <div className="e1rm-sparkline-card__footer">
+                      <small className="e1rm-sparkline-card__muscle">{ex.muscleGroup}</small>
+                      {ex.trendDirection !== 'insufficient_data' && (
+                        <small className={deltaClass}>
+                          {deltaText} кг · {ex.trendText}
+                        </small>
+                      )}
+                    </div>
+                  </article>
+                )
+              })}
           </div>
-        </SectionList>
-      )}
+        ) : (
+          <div className="muted" style={{ padding: '1rem 0', textAlign: 'center' }}>
+            Нужно 2+ тренировки для графика силы
+          </div>
+        )}
+      </SectionList>
 
       {/* Secondary sections — collapsed by default (issue #47) */}
       <details className="progress-details">
