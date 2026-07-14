@@ -5,11 +5,12 @@ import type { WorkoutSetInput } from '../domain/progression'
 import type { NextSetHint } from './gymTypes'
 import { useEffect, useRef } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
-import { SessionActions, QuickActions } from './GymActions'
 import { NextSetCoachCard } from './NextSetCoachCard'
 import { CurrentStepCard } from './CurrentStepCard'
 import { WorkoutSetList } from './WorkoutSetList'
-import { MetricPair, ScreenHeader } from './ui'
+import { MetricPair } from './ui'
+import { QuickActions } from './GymActions'
+import { Plus, Trash2 } from 'lucide-react'
 
 type GymScreenProps = {
   activeWorkoutDay: WorkoutDay
@@ -139,26 +140,28 @@ export function GymScreen({
     ? `план цикла ${formatWeight(plannedWeight)} кг`
     : undefined
 
+  // Issue #122: progress fraction for slim top bar
+  const totalExercises = activeWorkoutDay.exercises.length
+  const progressFraction = totalExercises > 0 ? (activeExerciseIndex + 1) / totalExercises : 0
+
   return (
     <section className="screen active session-screen">
-      {/* 1. session-header */}
-      <div className="session-header">
-        <span className="sr-only">Вкладка «Зал» · {activeWorkoutDay.name}</span>
-        <span className="sr-only">Сейчас · {activeExerciseIndex + 1} из {activeWorkoutDay.exercises.length}</span>
-        <ScreenHeader
-          eyebrow={activeWorkoutDay.name}
-          title="Зал"
-          trailing={<span className="badge">{activeExerciseIndex + 1} из {activeWorkoutDay.exercises.length}</span>}
-          variant="compact"
-        />
-        <button className="back" type="button" onClick={() => {
+      {/* Issue #122: slim top bar — ← Выйти · progress · i/N */}
+      <div className="session-top-bar">
+        <button className="session-top-bar__back" type="button" onClick={() => {
           if (window.confirm('Выйти из тренировки? Несохранённый прогресс будет потерян.')) {
             navigate('home')
           }
         }}>← Выйти</button>
+        <div className="session-top-bar__progress" aria-hidden="true">
+          <div className="session-top-bar__progress-fill" style={{ width: `${progressFraction * 100}%` }} />
+        </div>
+        <span className="session-top-bar__counter">{activeExerciseIndex + 1} / {totalExercises}</span>
       </div>
+      <span className="sr-only">Вкладка «Зал» · {activeWorkoutDay.name}</span>
+      <span className="sr-only">Сейчас · {activeExerciseIndex + 1} из {totalExercises}</span>
 
-      {/* 2. Compact exercise header — над SectionList */}
+      {/* Issue #122: exercise header */}
       <div className="gym-exercise-head">
         <div className="gym-exercise-head__copy">
           <span className="eyebrow">{activeExercise.prescription}</span>
@@ -168,6 +171,29 @@ export function GymScreen({
           <button className="secondary compact" type="button" onClick={openExerciseGuide} aria-label={`Открыть описание упражнения: ${activeExercise.name}`}>Техника</button>
           <button className="secondary compact" type="button" onClick={openReplacementSheet}>Замена</button>
         </div>
+      </div>
+
+      {/* Issue #122: set chips row — done / current / upcoming */}
+      <div className="set-chips" role="tablist" aria-label="Подходы">
+        {activeLog.sets.map((set, i) => {
+          const isDone = set.completed
+          const isCurrent = i === activeSetIndex && !isDone && !allSetsCompleted
+          const chipClass = isDone ? 'set-chip--done' : isCurrent ? 'set-chip--current' : 'set-chip--upcoming'
+          const label = isDone
+            ? (timedExercise ? `${set.reps} сек` : set.weight > 0 ? `${formatWeight(set.weight)}×${set.reps}` : `${set.reps}`)
+            : isCurrent ? 'сейчас' : `${i + 1}`
+          return (
+            <button
+              key={i}
+              className={`set-chip ${chipClass}`}
+              onClick={() => isDone && editCompletedSet(i)}
+              aria-label={`Подход ${i + 1}${isDone ? ': выполнен' : isCurrent ? ': текущий' : ''}`}
+            >
+              <span className="set-chip__num">{i + 1}</span>
+              <span className="set-chip__value">{label}</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Фаза 3.1: фокусная карточка «что сейчас делать» — работа или отдых */}
@@ -233,8 +259,13 @@ export function GymScreen({
       />
       <span className="sr-only">Прошлый раз: {previousSetsSummary}</span>
 
-      {/* 5. Session actions, coach cards, next card, action bar */}
-      <SessionActions activeExerciseName={activeExercise.name} openReplacementSheet={openReplacementSheet} openExercisePicker={openExercisePicker} removeCurrentExercise={removeCurrentExercise} />
+      {/* Issue #122: dashed "Добавить упражнение" + danger "Удалить" */}
+      <button className="gym-add-exercise-btn" type="button" onClick={openExercisePicker}>
+        <Plus size={16} aria-hidden="true" /> Добавить упражнение
+      </button>
+      <button className="gym-remove-exercise-btn" type="button" onClick={removeCurrentExercise}>
+        <Trash2 size={14} aria-hidden="true" /> Удалить текущее упражнение
+      </button>
 
       {exerciseAddSuggestion && (
         <div className="card coach-add-exercise">
@@ -261,9 +292,7 @@ export function GymScreen({
         </div>
       )}
 
-      {/* Coach card — only for stop/replace/skip/finish actions.
-          For continue/hold/reduce, the recommendation is shown inline
-          in the "Подходы" section + auto-filled into inputs. */}
+      {/* Coach card — only for stop/replace/skip/finish actions. */}
       {isCardRec && (
         <NextSetCoachCard
           recommendation={visibleNextSetRecommendation}
@@ -282,24 +311,19 @@ export function GymScreen({
         </div>
       </div>
 
-      {/* Sticky action bar — always visible during workout */}
+      {/* Issue #122: sticky action bar — Пропустить / Следующее → + Финиш */}
       <div className="gym-action-bar">
-        {nextExercise && (
-          <button
-            className="primary"
-            type="button"
-            onClick={goToNextExercise}
-            aria-label="Перейти к следующему упражнению"
-          >
-            Следующее →
-          </button>
-        )}
-        <button
-          className="finish"
-          type="button"
-          onClick={() => navigate('review')}
-          aria-label="Завершить всю тренировку"
-        >
+        {nextExercise ? (
+          <>
+            <button className="gym-action-bar__skip" type="button" onClick={goToNextExercise} aria-label="Пропустить упражнение">
+              Пропустить
+            </button>
+            <button className="primary" type="button" onClick={goToNextExercise} aria-label="Перейти к следующему упражнению">
+              Следующее →
+            </button>
+          </>
+        ) : null}
+        <button className="gym-action-bar__finish" type="button" onClick={() => navigate('review')} aria-label="Завершить всю тренировку">
           Завершить тренировку
         </button>
       </div>

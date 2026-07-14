@@ -237,7 +237,7 @@ describe('GymScreen', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: /удалить упражнение жим лёжа/i }))
+    await user.click(screen.getByRole('button', { name: /удалить текущее упражнение/i }))
 
     expect(removeCurrentExercise).toHaveBeenCalledTimes(1)
   })
