@@ -1,8 +1,8 @@
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { useState } from 'react'
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
-import type { CoachState, PlannedWorkout, UserQuestionnaire } from '../data/programApi'
+import type { CoachState, MesocycleState, PlannedWorkout, UserQuestionnaire } from '../data/programApi'
 import type { TrainingCalendarItem } from '../domain/coachPlanning'
 import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
@@ -43,6 +43,97 @@ type PlanCalendarProps = {
   formatDateOnly: (dateOnly: string) => string
   formatWeight: (weight: number) => string
   todayDateInputValue: () => string
+}
+
+/**
+ * Issue #121: Mesocycle view — intro note + список недель мезоцикла.
+ * Derives per-week rows from MesocycleState (cycleLength, weekInCycle,
+ * loadingWeeks, deloadWeeks, phase). Falls back to a representative
+ * 4-week cycle when no mesocycle is available yet.
+ */
+function MesocycleView({ mesocycle, workoutsPerWeek }: { mesocycle: MesocycleState | null; workoutsPerWeek: number }) {
+  const weeks = mesocycle
+    ? buildMesoWeeks(mesocycle, workoutsPerWeek)
+    : buildMesoWeeksFallback(workoutsPerWeek)
+
+  if (weeks.length === 0) {
+    return (
+      <div className="plan-meso-empty muted">
+        Мезоцикл ещё не сформирован — тренер построит его после первой тренировки.
+      </div>
+    )
+  }
+
+  return (
+    <div className="plan-meso-view">
+      <div className="plan-meso-intro">
+        <CheckCircle aria-hidden="true" />
+        <span>Тренер планирует на весь мезоцикл, а не на неделю — объём и интенсивность меняются по фазам.</span>
+      </div>
+      {weeks.map((w) => (
+        <div key={w.key} className={`plan-meso-week plan-meso-week--${w.state}`}>
+          <span className="plan-meso-week__dot" aria-hidden="true" />
+          <div className="plan-meso-week__copy">
+            <div className="plan-meso-week__label">{w.label}</div>
+            <div className="plan-meso-week__days">{w.days}</div>
+          </div>
+          <div className="plan-meso-week__side">
+            <span className={`plan-meso-week__tag plan-meso-week__tag--${w.state}`}>{w.tag}</span>
+            <div className="plan-meso-week__vol">{w.vol}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+type MesoWeek = {
+  key: string
+  label: string
+  days: string
+  tag: string
+  vol: string
+  state: 'done' | 'now' | 'plan'
+}
+
+function buildMesoWeeks(m: MesocycleState, wpw: number): MesoWeek[] {
+  const wpwLabel = `${wpw} тренировок`
+  const result: MesoWeek[] = []
+  for (let i = 1; i <= m.cycleLength; i++) {
+    const isDeloadWeek = i > m.loadingWeeks
+    const phaseName = isDeloadWeek ? 'разгрузка' : phaseNameForWeek(i, m.loadingWeeks)
+    const state: MesoWeek['state'] = m.isDeload && i === m.weekInCycle
+      ? 'now'
+      : i < m.weekInCycle ? 'done'
+      : i === m.weekInCycle ? 'now'
+      : 'plan'
+    const tag = state === 'done' ? 'пройдена' : state === 'now' ? 'сейчас' : 'план'
+    result.push({
+      key: `wk-${i}`,
+      label: `Неделя ${i} · ${phaseName}`,
+      days: `${wpwLabel} · RPE ${isDeloadWeek ? '6' : i >= m.loadingWeeks ? '8–9' : i <= 1 ? '7' : '8'}`,
+      tag,
+      vol: state === 'done' ? 'выполнено' : state === 'now' ? 'текущая' : isDeloadWeek ? 'объём ниже' : 'объём растёт',
+      state,
+    })
+  }
+  return result
+}
+
+function phaseNameForWeek(week: number, loadingWeeks: number): string {
+  if (week === 1) return 'втягивание'
+  if (week >= loadingWeeks) return 'пик'
+  return 'накопление'
+}
+
+function buildMesoWeeksFallback(wpw: number): MesoWeek[] {
+  const wpwLabel = `${wpw} тренировок`
+  return [
+    { key: 'wk-1', label: 'Неделя 1 · втягивание', days: `${wpwLabel} · RPE 7`, tag: 'план', vol: 'объём растёт', state: 'plan' },
+    { key: 'wk-2', label: 'Неделя 2 · накопление', days: `${wpwLabel} · RPE 8`, tag: 'план', vol: 'объём растёт', state: 'plan' },
+    { key: 'wk-3', label: 'Неделя 3 · пик', days: `${wpwLabel} · RPE 8–9`, tag: 'план', vol: 'объём растёт', state: 'plan' },
+    { key: 'wk-4', label: 'Неделя 4 · разгрузка', days: `${wpw} тренировок · RPE 6`, tag: 'план', vol: 'объём ниже', state: 'plan' },
+  ]
 }
 
 /**
@@ -270,6 +361,11 @@ export function PlanCalendar({
             ))}
           </SectionList>
         </>
+      )}
+
+      {/* Issue #121: Mesocycle view — intro note + список недель мезоцикла. */}
+      {horizon === 'mesocycle' && (
+        <MesocycleView mesocycle={coachState?.mesocycle ?? null} workoutsPerWeek={activeProfile.workoutsPerWeek} />
       )}
 
       {plannedItems.map((workout) => (

@@ -540,3 +540,58 @@
   font-family: var(--font-ui); font-size: 14px;
   color: var(--text-tertiary); font-weight: 500;
 }
+
+/* --- Plan Mesocycle view (issue #121). --- */
+.plan-meso-view { margin-top: 6px; }
+.plan-meso-intro {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-radius: 16px;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 26%, transparent);
+  margin-bottom: 14px;
+  font-size: 13px; line-height: 1.4; color: var(--text-secondary);
+}
+.plan-meso-intro svg { flex: 0 0 auto; color: var(--success); }
+.plan-meso-week {
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 2px; border-bottom: 1px solid var(--separator);
+}
+.plan-meso-week__dot {
+  width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto;
+}
+.plan-meso-week--done .plan-meso-week__dot { background: var(--success); }
+.plan-meso-week--now .plan-meso-week__dot { background: var(--accent); }
+.plan-meso-week--plan .plan-meso-week__dot {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.plan-meso-week__copy { flex: 1; min-width: 0; }
+.plan-meso-week__label {
+  font-family: var(--font-display, inherit);
+  font-size: 16px; font-weight: 500; color: var(--text-primary);
+}
+.plan-meso-week__days {
+  font-size: 13px; color: var(--text-secondary); margin-top: 1px;
+}
+.plan-meso-week__side { text-align: right; flex: 0 0 auto; }
+.plan-meso-week__tag {
+  font: 600 11px var(--font-ui);
+  padding: 4px 9px; border-radius: 999px;
+}
+.plan-meso-week__tag--done {
+  background: var(--surface-muted); color: var(--text-secondary);
+}
+.plan-meso-week__tag--now {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.plan-meso-week__tag--plan {
+  background: var(--surface-muted); color: var(--text-tertiary);
+}
+.plan-meso-week__vol {
+  font-size: 12px; color: var(--text-tertiary); margin-top: 5px;
+}
+.plan-meso-empty {
+  margin-top: 16px; padding: 18px;
+  border-radius: 16px; background: var(--surface);
+  border: 1px solid var(--border);
+}
