@@ -817,8 +817,8 @@ select:disabled {
 }
 
 .workout-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
 }
@@ -827,6 +827,11 @@ select:disabled {
 .workout-row__side {
   min-width: 0;
 }
+
+/* Copy keeps priority; a wide action cluster (badge + primary + «…») wraps to
+   its own line instead of starving the title into per-letter wrapping. */
+.workout-row__copy { flex: 1 1 55%; }
+.workout-row__side { flex: 0 1 auto; margin-left: auto; }
 
 .workout-row__copy h3,
 .workout-row__copy p {
@@ -1015,6 +1020,14 @@ select:disabled {
 
 .progress-screen .hero-status__main {
   align-items: center;
+}
+
+/* Prototype's progress hero uses a smaller title than the Home hero — keeps
+   long copy («Стартуем с первой тренировки») from breaking mid-word next to
+   the ring. */
+.progress-screen .hero-status h2 {
+  font-size: 24px;
+  line-height: 1.12;
 }
 
 .progress-screen .hero-status__metric {

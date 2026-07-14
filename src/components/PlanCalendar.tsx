@@ -244,7 +244,12 @@ export function PlanCalendar({
           eyebrow={formatDateOnly(nextWorkout.scheduledDate)}
           title="Следующая тренировка"
           metadata={`${nextWorkout.workoutDayName} · ${nextWorkout.workoutDay.exercises.length} упр`}
-          metric={`~${estimateWorkoutMinutes(nextWorkout.workoutDay)} мин`}
+          metric={(
+            <span className="hero-metric-mins">
+              <b>{estimateWorkoutMinutes(nextWorkout.workoutDay)}</b>
+              <small>мин</small>
+            </span>
+          )}
           reason={toHumanCoachText(nextWorkout.coachReason || nextWorkout.goal)}
           primaryAction={(
             <button className="primary compact-action" type="button" onClick={() => onStartWorkout(nextWorkout.workoutDay)}>
@@ -259,6 +264,7 @@ export function PlanCalendar({
         />
       )}
 
+      {horizon === 'week' && (
       <SectionList
         title="Даты"
         action={<span className="badge">{selectedDatesLabel}</span>}
@@ -305,7 +311,7 @@ export function PlanCalendar({
                 aria-label={`${d.formatted} · ${d.state === 'rest' ? 'отдых' : 'тренировка'}`}
               >
                 <span className="plan-week-day__wd">{d.label}</span>
-                <span className="plan-week-day__num">{d.formatted.replace(/^..,\s*/, '').replace(/^\d+\./, '')}</span>
+                <span className="plan-week-day__num">{d.formatted.replace(/^..,\s*/, '').replace(/\..*$/, '')}</span>
                 <span className="plan-week-day__dot" aria-hidden="true" />
               </button>
             )
@@ -318,6 +324,7 @@ export function PlanCalendar({
           </div>
         )}
       </SectionList>
+      )}
 
       {/* Issue #120: Готовность + Расписание (Week view only). */}
       {horizon === 'week' && (

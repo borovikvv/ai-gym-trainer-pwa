@@ -386,9 +386,11 @@
 /* Boxed «Начинаем с <b>упражнение</b>  ·  вес». */
 .hero-status__info {
   margin-top: 16px;
-  display: flex; align-items: center; gap: 10px;
   padding: 12px 14px; border-radius: 14px;
   background: color-mix(in srgb, var(--hero-text) 8%, transparent);
+}
+.hero-status__start {
+  display: flex; align-items: center; gap: 10px; width: 100%;
 }
 .hero-status__start-dot {
   width: 8px; height: 8px; border-radius: 999px;
@@ -406,6 +408,21 @@
   font-family: var(--font-display, inherit);
   font-variant-numeric: tabular-nums;
   font-size: 22px; font-weight: 500; color: var(--hero-text);
+}
+/* Compact stacked «56 / мин» metric for the Plan hero — keeps the metric
+   narrow so a long title («Следующая тренировка») no longer breaks mid-word. */
+.hero-metric-mins {
+  display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+}
+.hero-metric-mins b {
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-hero); font-weight: 600;
+}
+.hero-metric-mins small {
+  margin-top: 2px;
+  font-size: 11px; font-weight: 600;
+  color: var(--hero-text-tertiary);
 }
 
 /* --- Mesocycle card (issue #118). --- */
@@ -716,17 +733,6 @@
   font-weight: 600;
   cursor: pointer;
 }
-.gym-action-bar__skip {
-  flex: 0 0 auto;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 12px);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-}
-
 /* --- Dashed "Добавить упражнение" + danger "Удалить" --- */
 .gym-add-exercise-btn {
   width: 100%;
@@ -807,18 +813,16 @@
 .current-step--logger {
   padding: 16px;
 }
+/* Prototype stacks weight and reps as two full-width rows (side-by-side does
+   not fit two 58px-button steppers on a 375px screen — the reps «+» clips). */
 .current-step__steppers {
   display: flex;
+  flex-direction: column;
   gap: 16px;
   margin: 12px 0 16px;
 }
 .current-step__steppers .stepper {
-  flex: 1;
-}
-.current-step__steppers .stepper--big .stepper__value {
-  font-size: 32px;
-  font-family: var(--font-display);
-  font-weight: 500;
+  width: 100%;
 }
 
 /* --- RIR scale --- */

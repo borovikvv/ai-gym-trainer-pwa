@@ -103,7 +103,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByLabelText('Вес, подход 2')).toBeInTheDocument()
     expect(screen.queryByLabelText('Вес, подход 3')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /перейти к следующему упражнению/i }))
+    await user.click(screen.getByRole('button', { name: /пропустить упражнение/i }))
     expect(screen.getByText('Сейчас · 2 из 5')).toBeInTheDocument()
     expect(screen.getByText('Тяга верхнего блока')).toBeInTheDocument()
 
@@ -129,7 +129,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText('Присед со штангой')).toBeInTheDocument()
     expect(screen.getByText('Сейчас · 1 из 4')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /перейти к следующему упражнению/i }))
+    await user.click(screen.getByRole('button', { name: /пропустить упражнение/i }))
     expect(screen.getByText('Румынская тяга')).toBeInTheDocument()
     expect(screen.getByText('Сейчас · 2 из 4')).toBeInTheDocument()
   })

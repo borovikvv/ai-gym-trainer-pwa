@@ -311,20 +311,24 @@ export function GymScreen({
         </div>
       </div>
 
-      {/* Issue #122: sticky action bar — Пропустить / Следующее → + Финиш */}
+      {/* Issue #122: sticky action bar — one state-labeled primary
+          (Пропустить → / Следующее → / К разбору →) + компактный Финиш,
+          как в прототипе (nextCta + Финиш). */}
       <div className="gym-action-bar">
-        {nextExercise ? (
-          <>
-            <button className="gym-action-bar__skip" type="button" onClick={goToNextExercise} aria-label="Пропустить упражнение">
-              Пропустить
-            </button>
-            <button className="primary" type="button" onClick={goToNextExercise} aria-label="Перейти к следующему упражнению">
-              Следующее →
-            </button>
-          </>
-        ) : null}
+        <button
+          className="primary"
+          type="button"
+          onClick={nextExercise ? goToNextExercise : () => navigate('review')}
+          aria-label={
+            !allSetsCompleted ? 'Пропустить упражнение'
+              : nextExercise ? 'Перейти к следующему упражнению'
+                : 'К разбору тренировки'
+          }
+        >
+          {!allSetsCompleted ? 'Пропустить →' : nextExercise ? 'Следующее →' : 'К разбору →'}
+        </button>
         <button className="gym-action-bar__finish" type="button" onClick={() => navigate('review')} aria-label="Завершить всю тренировку">
-          Завершить тренировку
+          Финиш
         </button>
       </div>
     </section>
