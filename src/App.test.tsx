@@ -108,11 +108,11 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText('Тяга верхнего блока')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
-    expect(screen.getByText('Разбор тренировки')).toBeInTheDocument()
-    expect(screen.getByText(/Что меняем дальше/i)).toBeInTheDocument()
+    expect(screen.getByText('Отличная работа')).toBeInTheDocument()
+    expect(screen.getByText(/сохранить и на главную/i)).toBeInTheDocument()
 
     await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: 'Прогресс' }))
-    expect(screen.getByText('Разбор тренировки')).toBeInTheDocument()
+    expect(screen.getByText('Отличная работа')).toBeInTheDocument()
     expect(screen.getByText(/Сначала сохрани тренировку/i)).toBeInTheDocument()
   })
 
@@ -348,7 +348,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
     expect(screen.getByText(/Жим лёжа: все подходы/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
     // Issue #57: history simplified — name + date in <b>, volume in <div class="muted">
     expect(screen.getByText(/День A · \d{2}\.\d{2}, \d{2}:\d{2}/i)).toBeInTheDocument()
@@ -447,7 +447,7 @@ describe('Coach Timeline workout flow', () => {
       await user.click(screen.getByRole('button', { name: `Записать подход ${index}` }))
     }
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
-    await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
     // Issue #57: history simplified — no more "X кг дальше" text
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
 
