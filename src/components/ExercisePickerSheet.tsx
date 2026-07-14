@@ -35,9 +35,12 @@ export function ExercisePickerSheet({ exerciseLibrary, activeExercises, onAddExe
   return (
     <>
       <div className="overlay show" onClick={onClose} />
-      <div className="sheet show">
-        <div className="kicker">Добавить упражнение</div>
-        <h2>Выбери упражнение на сегодня</h2>
+      <div className="sheet show" role="dialog" aria-modal="true" aria-label="Добавить упражнение">
+        <div className="sheet-handle" aria-hidden="true" />
+        <div className="sheet-header">
+          <h2>Добавить упражнение</h2>
+          <button className="sheet-close" type="button" onClick={onClose} aria-label="Закрыть">×</button>
+        </div>
 
         {/* Issue #102: search input with autofocus */}
         <input
@@ -83,7 +86,7 @@ export function ExercisePickerSheet({ exerciseLibrary, activeExercises, onAddExe
             </div>
           ))
         )}
-        <button className="secondary wide" onClick={onClose}>Отмена</button>
+        <button className="secondary wide" type="button" onClick={onClose}>Отмена</button>
       </div>
     </>
   )
