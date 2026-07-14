@@ -181,7 +181,7 @@ describe('GymScreen', () => {
       />,
     )
 
-    expect(screen.getByRole('status')).toHaveTextContent(/прогресс защищён/i)
+    expect(screen.getAllByRole('status').some(el => /прогресс защищён/i.test(el.textContent ?? ''))).toBe(true)
     expect(screen.getByText(/после обновления страницы тренировка восстановится/i)).toBeInTheDocument()
   })
 

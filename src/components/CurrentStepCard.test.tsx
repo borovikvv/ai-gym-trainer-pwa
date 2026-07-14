@@ -51,23 +51,34 @@ function baseProps(overrides = {}) {
 }
 
 describe('CurrentStepCard', () => {
-  it('режим работы: показывает цель подхода, счётчик и кнопку «Готово»', () => {
+  it('показывает счётчик подхода, steppers и кнопку Готово (disabled)', () => {
     render(<CurrentStepCard {...baseProps()} />)
     expect(screen.getByText(/подход 2 из 3/i)).toBeInTheDocument()
-    expect(screen.getByText('60 кг × 8')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /подход 2 выполнен/i })).toBeInTheDocument()
+    // Stepper for weight — value 60 is shown
+    expect(screen.getByText('60')).toBeInTheDocument()
+    // Готово is disabled (no RIR selected yet)
+    const doneBtn = screen.getByRole('button', { name: /подход 2 выполнен/i })
+    expect(doneBtn).toBeDisabled()
   })
 
-  it('«Готово» открывает быстрый выбор RPE; выбор пишет rpe и завершает подход', async () => {
+  it('выбор RIR активирует Готово; тап пишет rpe и завершает подход', async () => {
     const user = userEvent.setup()
     const updateSet = vi.fn()
     const markSetDone = vi.fn()
     render(<CurrentStepCard {...baseProps({ updateSet, markSetDone })} />)
 
-    await user.click(screen.getByRole('button', { name: /подход 2 выполнен/i }))
-    expect(screen.getByText('Как прошёл подход?')).toBeInTheDocument()
+    // Готово disabled until RIR chosen
+    const doneBtn = screen.getByRole('button', { name: /подход 2 выполнен/i })
+    expect(doneBtn).toBeDisabled()
 
-    await user.click(screen.getByRole('button', { name: /^Тяжело/i }))
+    // Select RIR = 8 (Тяж)
+    await user.click(screen.getByRole('button', { name: /тяж.*1.*2/i }))
+
+    // Now Готово is enabled
+    expect(doneBtn).not.toBeDisabled()
+
+    // Tap Готово
+    await user.click(doneBtn)
     expect(updateSet).toHaveBeenCalledWith(1, { rpe: 8 })
     expect(markSetDone).toHaveBeenCalledWith(1)
   })
@@ -104,7 +115,7 @@ describe('CurrentStepCard', () => {
     expect(skipRest).toHaveBeenCalled()
   })
 
-  it('секундное упражнение показывает секунды вместо веса', () => {
+  it('секундное упражнение: stepper для секунд без веса', () => {
     render(
       <CurrentStepCard
         {...baseProps({
@@ -115,11 +126,33 @@ describe('CurrentStepCard', () => {
         })}
       />,
     )
-    expect(screen.getByText('45 сек')).toBeInTheDocument()
+    // Stepper shows 45 (seconds), no weight stepper
+    expect(screen.getByText('45')).toBeInTheDocument()
+    // No "Вес (кг)" label for timed exercises
+    expect(screen.queryByText('Вес (кг)')).not.toBeInTheDocument()
+    // "Секунды" label is present
+    expect(screen.getByText('Секунды')).toBeInTheDocument()
   })
 
   it('скрывается, когда все подходы выполнены', () => {
     const { container } = render(<CurrentStepCard {...baseProps({ allSetsCompleted: true })} />)
     expect(container.firstChild).toBeNull()
+  })
+
+  it('Issue #123: coach hint показывает тег ИИ для LLM рекомендаций', () => {
+    render(
+      <CurrentStepCard
+        {...baseProps({
+          recommendation: {
+            weight: 62.5, reps: 8, restSeconds: 120,
+            reason: 'LLM советует +2.5 кг',
+            action: 'continue',
+            source: 'llm',
+          },
+        })}
+      />,
+    )
+    expect(screen.getByText('ИИ')).toBeInTheDocument()
+    expect(screen.getByText(/LLM советует/)).toBeInTheDocument()
   })
 })
