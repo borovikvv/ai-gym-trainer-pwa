@@ -36,9 +36,14 @@ function humanDate(dateStr: string): string {
   }
 }
 
-function shortNote(note: string | null | undefined, max = 60): string {
+function shortNote(note: string | null | undefined): string {
   if (!note) return ''
-  return note.length > max ? note.slice(0, max) + '…' : note
+  // Классифицируем AI-прогресс в короткий статус для пользователя
+  if (note.includes('цель достигнута')) return 'достигнуто'
+  if (note.includes('отстаём') || note.includes('срок прошёл')) return 'отстаём'
+  if (note.includes('в графике') || note.includes('опережаем')) return 'по плану'
+  if (note.startsWith('e1RM')) return 'по плану'
+  return note.length > 40 ? note.slice(0, 40) + '…' : note
 }
 
 export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
