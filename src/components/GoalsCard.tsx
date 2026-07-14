@@ -21,6 +21,26 @@ type GoalsCardProps = {
   exerciseOptions: GoalExerciseOption[]
 }
 
+const MONTHS_RU = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+]
+
+function humanDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    return `${d.getDate()} ${MONTHS_RU[d.getMonth()]}`
+  } catch {
+    return dateStr
+  }
+}
+
+function shortNote(note: string | null | undefined, max = 60): string {
+  if (!note) return ''
+  return note.length > max ? note.slice(0, max) + '…' : note
+}
+
 export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
   const [goals, setGoals] = useState<CoachGoal[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -47,7 +67,6 @@ export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
   if (!isProgramApiConfigured) return null
 
   const activeGoals = goals.filter((goal) => goal.status === 'active')
-  const achievedGoals = goals.filter((goal) => goal.status === 'achieved')
 
   async function addGoal() {
     const exercise = exerciseOptions.find((option) => option.id === draftExerciseId)
@@ -85,42 +104,55 @@ export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
 
   if (!adding && goals.length === 0 && !error) {
     return (
-      <div className="card top-gap goals-card">
-        <b>Цели</b>
-        <div className="muted">Поставь цель — тренер построит путь к ней и будет отслеживать прогресс каждую неделю.</div>
-        <button className="secondary compact top-gap" onClick={() => setAdding(true)}>+ Поставить цель</button>
+      <div className="goals-section">
+        <div className="goals-header">
+          <h2 className="goals-title">Цели</h2>
+        </div>
+        <div className="goals-empty">
+          <p className="muted">Поставь цель — тренер построит путь к ней и будет отслеживать прогресс каждую неделю.</p>
+          <button className="goals-add-btn" onClick={() => setAdding(true)}>+ Поставить цель</button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="card top-gap goals-card">
-      <b>Цели</b>
-      {error && <div className="muted">{error}</div>}
-      <ul className="goals-list">
-        {activeGoals.map((goal) => (
-          <li key={goal.id} className="goal-item">
-            <div className="goal-title-row">
-              <span className="goal-title">{goal.title}</span>
-              <button className="secondary compact" onClick={() => dropGoal(goal)} aria-label={`Убрать цель ${goal.title}`}>убрать</button>
+    <div className="goals-section">
+      <div className="goals-header">
+        <h2 className="goals-title">Цели</h2>
+        {!adding && (
+          <button className="goals-header-add" onClick={() => setAdding(true)}>+ Поставить</button>
+        )}
+      </div>
+
+      {error && <p className="muted">{error}</p>}
+
+      {activeGoals.length > 0 && (
+        <div className="goals-list">
+          {activeGoals.map((goal) => (
+            <div key={goal.id} className="goal-card">
+              <div className="goal-card__body">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="goal-card__icon" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <circle cx="12" cy="12" r="4.5" />
+                  <circle cx="12" cy="12" r="0.6" fill="var(--accent)" />
+                </svg>
+                <div className="goal-card__info">
+                  <div className="goal-card__title">{goal.title}</div>
+                  <div className="goal-card__meta">
+                    {goal.targetDate ? `к ${humanDate(goal.targetDate)}` : ''}
+                    {goal.progressNote ? ` · ${shortNote(goal.progressNote)}` : ''}
+                  </div>
+                </div>
+                <button className="goal-card__remove" onClick={() => dropGoal(goal)} aria-label={`Убрать цель ${goal.title}`}>убрать</button>
+              </div>
             </div>
-            <div className="muted goal-meta">
-              {goal.targetDate ? `к ${goal.targetDate}` : 'без срока'}
-              {goal.progressNote ? ` · ${goal.progressNote}` : ' · тренер оценит прогресс после ближайших тренировок'}
-            </div>
-          </li>
-        ))}
-        {achievedGoals.map((goal) => (
-          <li key={goal.id} className="goal-item goal-achieved">
-            <div className="goal-title-row">
-              <span className="goal-title">✓ {goal.title}</span>
-            </div>
-            {goal.progressNote && <div className="muted goal-meta">{goal.progressNote}</div>}
-          </li>
-        ))}
-      </ul>
+          ))}
+        </div>
+      )}
+
       {adding ? (
-        <div className="goal-add top-gap">
+        <div className="goal-add">
           <select aria-label="Упражнение цели" value={draftExerciseId} onChange={(event) => setDraftExerciseId(event.target.value)}>
             <option value="">Упражнение (для e1RM-цели)</option>
             {groupByMuscle(exerciseOptions).map(([muscleGroup, options]) => (
@@ -152,7 +184,7 @@ export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
           />
           <div className="goal-add-actions">
             <button
-              className="primary compact"
+              className="primary compact-action"
               onClick={addGoal}
               disabled={draftTitle.trim().length < 3 && !(draftExerciseId && Number(draftTarget.replace(',', '.')) > 0)}
             >
@@ -161,9 +193,7 @@ export function GoalsCard({ userId, exerciseOptions }: GoalsCardProps) {
             <button className="secondary compact" onClick={() => setAdding(false)}>Отмена</button>
           </div>
         </div>
-      ) : (
-        <button className="secondary compact top-gap" onClick={() => setAdding(true)}>+ Поставить цель</button>
-      )}
+      ) : null}
     </div>
   )
 }
