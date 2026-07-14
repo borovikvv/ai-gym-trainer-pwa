@@ -584,6 +584,7 @@ function App() {
             weekDateOptions={weekDateOptions}
             editingPlannedWorkoutId={editingPlannedWorkoutId}
             editingPlannedDate={editingPlannedDate}
+            coachState={coachState}
             onShiftPlanningWeek={shiftPlanningWeek}
             onResetPlanningStart={resetPlanningStart}
             onToggleWeekDate={toggleWeekDate}

@@ -1,8 +1,8 @@
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
-import type { PlannedWorkout, UserQuestionnaire } from '../data/programApi'
+import type { CoachState, PlannedWorkout, UserQuestionnaire } from '../data/programApi'
 import type { TrainingCalendarItem } from '../domain/coachPlanning'
 import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
@@ -27,6 +27,7 @@ type PlanCalendarProps = {
   activeWorkoutDay: WorkoutDay
   editingPlannedWorkoutId: string | null
   editingPlannedDate: string
+  coachState: CoachState | null
   onShiftPlanningWeek: (deltaWeeks: number) => void
   onResetPlanningStart: () => void
   onToggleWeekDate: (date: string) => void
@@ -44,6 +45,29 @@ type PlanCalendarProps = {
   todayDateInputValue: () => string
 }
 
+/**
+ * Issue #120: classify a week-strip day into a visual state.
+ * - today  — the current calendar day
+ * - done   — a planned workout already completed on this date
+ * - next   — the first upcoming planned workout after today
+ * - plan   — a future planned workout (not the next one)
+ * - rest   — no workout planned
+ */
+function weekDayState(
+  date: string,
+  todayIso: string,
+  plannedWorkouts: PlannedWorkout[],
+  nextWorkoutDate: string | undefined,
+): 'today' | 'done' | 'next' | 'plan' | 'rest' {
+  const completed = plannedWorkouts.some((w) => w.scheduledDate === date && w.status === 'completed')
+  if (completed) return 'done'
+  const planned = plannedWorkouts.some((w) => w.scheduledDate === date && w.status !== 'cancelled')
+  if (date === todayIso) return 'today'
+  if (planned && date === nextWorkoutDate) return 'next'
+  if (planned) return 'plan'
+  return 'rest'
+}
+
 export function PlanCalendar({
   activeProfile,
   selectedWeekDates,
@@ -55,6 +79,7 @@ export function PlanCalendar({
   activeWorkoutDay,
   editingPlannedWorkoutId,
   editingPlannedDate,
+  coachState,
   onShiftPlanningWeek,
   onResetPlanningStart,
   onToggleWeekDate,
@@ -73,6 +98,7 @@ export function PlanCalendar({
 }: PlanCalendarProps) {
   const [actionWorkoutId, setActionWorkoutId] = useState<string | null>(null)
   const [horizon, setHorizon] = useState<'week' | 'mesocycle'>('week')
+  const [dayNote, setDayNote] = useState<string>('')
   const actionablePlannedWorkouts = visibleActionablePlannedWorkouts(plannedWorkouts, userHistory)
   const plannedItems = plannedWorkouts.length > 0
     ? actionablePlannedWorkouts
@@ -93,6 +119,15 @@ export function PlanCalendar({
   const selectedWorkout = plannedItems.find((workout) => workout.id === actionWorkoutId) ?? null
   const selectedDatesLabel = selectedWeekDates.length > 0 ? `${selectedWeekDates.length} в календаре` : 'нет дат'
   const activeWorkoutFocus = toHumanCoachText(activeWorkoutDay.description) || activeWorkoutDay.label
+
+  // Issue #120: compact 7-day week strip (first week of the planning horizon).
+  const todayIso = todayDateInputValue()
+  const nextDate = nextWorkout?.scheduledDate
+  const weekStrip = weekDateOptions.slice(0, 7).map((option) => {
+    const state = weekDayState(option.date, todayIso, plannedWorkouts, nextDate)
+    const isFuture = option.date >= todayIso
+    return { ...option, state, isFuture }
+  })
 
   return (
     <section className="screen active plan-screen">
@@ -146,63 +181,96 @@ export function PlanCalendar({
             <ChevronRight aria-hidden="true" />
           </button>
         </div>
-        <div className="week-picker two-week-picker" role="group" aria-label="Дни недели для тренировок">
-          {weekDateOptions.map((option) => {
-            const selected = selectedWeekDates.includes(option.date)
-            const isToday = option.date === todayDateInputValue()
-            const hasPlannedWorkout = plannedWorkouts.some((w) => w.scheduledDate === option.date && w.status !== 'cancelled')
-            const isCompleted = plannedWorkouts.some((w) => w.scheduledDate === option.date && w.status === 'completed')
-            const label = selected ? `Убрать тренировку ${option.formatted}` : `Запланировать тренировку ${option.formatted}`
-            const classes = [
-              'secondary', 'compact', 'week-day',
-              selected ? 'active' : '',
-              isToday ? 'today' : '',
-              hasPlannedWorkout ? 'has-workout' : '',
-              isCompleted ? 'completed' : '',
-            ].filter(Boolean).join(' ')
+        {/* Issue #120: compact 7-day week strip (прототип). */}
+        <div className="plan-week-strip" role="group" aria-label="Дни недели для тренировок">
+          {weekStrip.map((d) => {
+            const selected = selectedWeekDates.includes(d.date)
+            const toggleable = d.isFuture && (d.state === 'rest' || d.state === 'plan')
+            const noteFor = toggleable
+              ? (selected
+                  ? `Тренировка на ${d.formatted} отменена`
+                  : `Тренировка запланирована на ${d.formatted}`)
+              : d.state === 'done'
+                ? `${d.formatted} · тренировка пройдена`
+                : d.state === 'next'
+                  ? `Ближайшая тренировка · ${d.formatted}`
+                  : d.state === 'today'
+                    ? `Сегодня · тренировка по плану`
+                    : ''
             return (
-              <button key={option.date} className={classes} type="button" onClick={() => onToggleWeekDate(option.date)} aria-pressed={selected} aria-label={label}>
-                <span className="week-day__dot" aria-hidden="true" />
-                <b>{option.label}</b>
-                <span>{option.formatted.replace(/^..,\s*/, '')}</span>
+              <button
+                key={d.date}
+                className={`plan-week-day plan-week-day--${d.state} ${selected ? 'plan-week-day--selected' : ''}`}
+                type="button"
+                onClick={() => {
+                  if (toggleable) {
+                    onToggleWeekDate(d.date)
+                    setDayNote(noteFor)
+                  } else if (noteFor) {
+                    setDayNote(noteFor)
+                  }
+                }}
+                aria-pressed={selected}
+                aria-label={`${d.formatted} · ${d.state === 'rest' ? 'отдых' : 'тренировка'}`}
+              >
+                <span className="plan-week-day__wd">{d.label}</span>
+                <span className="plan-week-day__num">{d.formatted.replace(/^..,\s*/, '').replace(/^\d+\./, '')}</span>
+                <span className="plan-week-day__dot" aria-hidden="true" />
               </button>
             )
           })}
         </div>
+        {dayNote && (
+          <div className="plan-day-note" role="status">
+            <Calendar aria-hidden="true" />
+            <span>{dayNote}</span>
+          </div>
+        )}
       </SectionList>
 
-      <SectionList title="Ближайшие">
-        {nextWorkout && (
-          <WorkoutRow
-            eyebrow={`Следующая тренировка · ${formatDateOnly(nextWorkout.scheduledDate)}`}
-            title={nextWorkout.workoutDayName}
-            metadata={`${nextWorkout.workoutDay.exercises.length} упр · ~${estimateWorkoutMinutes(nextWorkout.workoutDay)} мин`}
-            badge="активна"
-            primaryAction={(
-              <button className="primary compact-action" type="button" onClick={() => onStartWorkout(nextWorkout.workoutDay)}>
-                Открыть
-              </button>
+      {/* Issue #120: Готовность + Расписание (Week view only). */}
+      {horizon === 'week' && (
+        <>
+          {coachState && typeof coachState.readinessScore === 'number' && (
+            <div className="plan-readiness-row">
+              <span className="plan-readiness-row__label">Готовность</span>
+              <b className="plan-readiness-row__value">{coachState.readinessScore}<small>/100</small></b>
+            </div>
+          )}
+          <SectionList title="Расписание">
+            {nextWorkout && (
+              <WorkoutRow
+                eyebrow={`Следующая · ${formatDateOnly(nextWorkout.scheduledDate)}`}
+                title={nextWorkout.workoutDayName}
+                metadata={`${nextWorkout.workoutDay.exercises.length} упр · ~${estimateWorkoutMinutes(nextWorkout.workoutDay)} мин`}
+                badge="активна"
+                primaryAction={(
+                  <button className="primary compact-action" type="button" onClick={() => onStartWorkout(nextWorkout.workoutDay)}>
+                    Открыть
+                  </button>
+                )}
+                onOpenActions={() => setActionWorkoutId(nextWorkout.id)}
+                active={nextWorkout.workoutDay.id === activeWorkoutDay.id}
+              />
             )}
-            onOpenActions={() => setActionWorkoutId(nextWorkout.id)}
-            active={nextWorkout.workoutDay.id === activeWorkoutDay.id}
-          />
-        )}
-        {upcomingWorkouts.map((workout) => (
-          <WorkoutRow
-            key={workout.id}
-            eyebrow={`Потом · ${formatDateOnly(workout.scheduledDate)}`}
-            title={workout.workoutDayName}
-            metadata={`${workout.workoutDay.exercises.length} упр · ~${estimateWorkoutMinutes(workout.workoutDay)} мин`}
-            primaryAction={(
-              <button className="secondary compact" type="button" onClick={() => onSelectWorkoutDay(workout.workoutDay)}>
-                Состав
-              </button>
-            )}
-            onOpenActions={() => setActionWorkoutId(workout.id)}
-            active={workout.workoutDay.id === activeWorkoutDay.id}
-          />
-        ))}
-      </SectionList>
+            {upcomingWorkouts.map((workout) => (
+              <WorkoutRow
+                key={workout.id}
+                eyebrow={`Потом · ${formatDateOnly(workout.scheduledDate)}`}
+                title={workout.workoutDayName}
+                metadata={`${workout.workoutDay.exercises.length} упр · ~${estimateWorkoutMinutes(workout.workoutDay)} мин`}
+                primaryAction={(
+                  <button className="secondary compact" type="button" onClick={() => onSelectWorkoutDay(workout.workoutDay)}>
+                    Состав
+                  </button>
+                )}
+                onOpenActions={() => setActionWorkoutId(workout.id)}
+                active={workout.workoutDay.id === activeWorkoutDay.id}
+              />
+            ))}
+          </SectionList>
+        </>
+      )}
 
       {plannedItems.map((workout) => (
         editingPlannedWorkoutId === workout.id && (

@@ -462,3 +462,81 @@
   font-variant-numeric: tabular-nums;
   font-size: 28px; font-weight: 500; line-height: 1.05;
 }
+
+/* --- Plan week strip (issue #120) — компактная 7-дневная лента. --- */
+.plan-week-strip {
+  display: flex; gap: 6px; margin: 10px 0;
+}
+.plan-week-day {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 0; border-radius: 14px; border: 1px solid var(--separator);
+  background: transparent; cursor: pointer;
+  font-family: var(--font-ui);
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.plan-week-day:active { transform: scale(0.97); }
+.plan-week-day__wd {
+  font: 600 10px var(--font-ui);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.plan-week-day__num {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px; font-weight: 600;
+  color: var(--text-tertiary);
+}
+.plan-week-day__dot {
+  width: 5px; height: 5px; border-radius: 999px;
+  background: transparent;
+}
+.plan-week-day--today {
+  background: var(--hero-bg); border-color: var(--hero-bg);
+}
+.plan-week-day--today .plan-week-day__wd { color: var(--hero-text-tertiary); }
+.plan-week-day--today .plan-week-day__num { color: var(--hero-text); }
+.plan-week-day--today .plan-week-day__dot { background: var(--accent); }
+.plan-week-day--next {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.plan-week-day--next .plan-week-day__wd,
+.plan-week-day--next .plan-week-day__num { color: var(--accent); }
+.plan-week-day--next .plan-week-day__dot { background: var(--accent); }
+.plan-week-day--done {
+  background: var(--surface); border-color: var(--border);
+}
+.plan-week-day--done .plan-week-day__num { color: var(--text-primary); }
+.plan-week-day--done .plan-week-day__dot { background: var(--success); }
+.plan-week-day--plan {
+  background: var(--surface); border-color: var(--border);
+}
+.plan-week-day--plan .plan-week-day__num { color: var(--text-primary); }
+.plan-week-day--plan .plan-week-day__dot {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.plan-day-note {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 13px; border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font: 600 13px var(--font-ui); color: var(--accent);
+}
+.plan-readiness-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin: 14px 0; padding: 15px 17px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.plan-readiness-row__label {
+  font: 600 12px var(--font-ui);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.plan-readiness-row__value {
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px; font-weight: 500; color: var(--success);
+}
+.plan-readiness-row__value small {
+  font-family: var(--font-ui); font-size: 14px;
+  color: var(--text-tertiary); font-weight: 500;
+}

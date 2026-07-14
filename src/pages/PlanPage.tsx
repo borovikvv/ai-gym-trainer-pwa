@@ -1,5 +1,5 @@
 import type { WorkoutDay  } from '../../shared/types'
-import type { UserQuestionnaire } from '../data/programApi'
+import type { CoachState, UserQuestionnaire } from '../data/programApi'
 import type { TrainingCalendarItem } from '../domain/coachPlanning'
 import { useProgram } from '../contexts/ProgramContext'
 import { PlanCalendar } from '../components/PlanCalendar'
@@ -16,6 +16,7 @@ interface PlanPageProps {
   weekDateOptions: Array<{ label: string; date: string; formatted: string }>
   editingPlannedWorkoutId: string | null
   editingPlannedDate: string
+  coachState: CoachState | null
   onShiftPlanningWeek: (deltaWeeks: number) => void
   onResetPlanningStart: () => void
   onToggleWeekDate: (date: string) => void
@@ -53,6 +54,7 @@ export function PlanPage(props: PlanPageProps) {
       activeWorkoutDay={props.activeWorkoutDay}
       editingPlannedWorkoutId={props.editingPlannedWorkoutId}
       editingPlannedDate={props.editingPlannedDate}
+      coachState={props.coachState}
       onShiftPlanningWeek={props.onShiftPlanningWeek}
       onResetPlanningStart={props.onResetPlanningStart}
       onToggleWeekDate={props.onToggleWeekDate}

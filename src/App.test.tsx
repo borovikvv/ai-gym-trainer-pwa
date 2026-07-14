@@ -533,8 +533,9 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByRole('heading', { name: /^План$/ })).toBeInTheDocument()
     expect(screen.getByText('Даты')).toBeInTheDocument()
     expect(screen.getAllByText(/3 тренировки\/нед/i).length).toBeGreaterThan(0)
-    await user.click(screen.getAllByRole('button', { name: /запланировать тренировку вт,/i })[0])
-    await user.click(screen.getAllByRole('button', { name: /запланировать тренировку сб,/i })[0])
+    // #120: week strip — plan two rest days to populate the calendar.
+    await user.click(screen.getAllByRole('button', { name: /ср,.*отдых/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /сб,.*отдых/i })[0])
     expect(screen.getAllByText('2 в календаре').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Следующая тренировка/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/День A/i).length).toBeGreaterThan(0)

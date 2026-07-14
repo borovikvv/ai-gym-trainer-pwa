@@ -83,6 +83,7 @@ describe('PlanCalendar', () => {
         activeWorkoutDay={activeWorkoutDay}
         editingPlannedWorkoutId={null}
         editingPlannedDate=""
+        coachState={null}
         onShiftPlanningWeek={vi.fn()}
         onResetPlanningStart={vi.fn()}
         onToggleWeekDate={vi.fn()}
@@ -127,6 +128,7 @@ describe('PlanCalendar', () => {
         activeWorkoutDay={next.workoutDay}
         editingPlannedWorkoutId={null}
         editingPlannedDate=""
+        coachState={null}
         onShiftPlanningWeek={vi.fn()}
         onResetPlanningStart={vi.fn()}
         onToggleWeekDate={vi.fn()}
@@ -180,6 +182,7 @@ describe('PlanCalendar', () => {
         activeWorkoutDay={activeDay}
         editingPlannedWorkoutId={null}
         editingPlannedDate=""
+        coachState={null}
         onShiftPlanningWeek={vi.fn()}
         onResetPlanningStart={vi.fn()}
         onToggleWeekDate={onToggleWeekDate}
@@ -199,7 +202,9 @@ describe('PlanCalendar', () => {
     )
 
     expect(screen.getAllByText('1 в календаре').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Убрать тренировку чт, 11.06' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Запланировать тренировку пт, 12.06' })).toHaveAttribute('aria-pressed', 'false')
+    // #120: week strip aria-label = «formatted · тренировка/отдых», aria-pressed
+    // shows the selected (planned) state.
+    expect(screen.getByRole('button', { name: /чт, 11\.06.*тренировка/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /пт, 12\.06.*отдых/i })).toHaveAttribute('aria-pressed', 'false')
   })
 })
