@@ -100,7 +100,11 @@ type CoachHomeProps = {
 function MesocycleCard({ mesocycle }: { mesocycle: MesocycleState | null | undefined }) {
   if (!mesocycle || mesocycle.phase === 'idle') return null
 
-  const weekLabel = `неделя ${mesocycle.weekInCycle} / ${mesocycle.cycleLength}`
+  // Early deload (triggered by MRV/pain, not calendar) vs scheduled deload
+  const isEarlyDeload = mesocycle.isDeload && !mesocycle.deloadScheduled
+  const weekLabel = isEarlyDeload
+    ? 'разгрузка'
+    : `неделя ${mesocycle.weekInCycle} / ${mesocycle.cycleLength}`
   const PHASE_RU: Record<string, string> = {
     loading: 'загрузка',
     accumulation: 'накопление',
@@ -111,8 +115,8 @@ function MesocycleCard({ mesocycle }: { mesocycle: MesocycleState | null | undef
     ? 'разгрузка'
     : (PHASE_RU[mesocycle.phase] || mesocycle.phaseDescription)
   // N-segment progress bar: past weeks filled with success, current + future muted.
-  const segments = mesocycle.cycleLength
-  const doneWeeks = mesocycle.isDeload ? segments : Math.min(mesocycle.weekInCycle, segments)
+  const segments = mesocycle.isDeload ? mesocycle.deloadWeeks : mesocycle.cycleLength
+  const doneWeeks = isEarlyDeload ? segments : Math.min(mesocycle.weekInCycle, segments)
 
   return (
     <div className="mesocycle-card" role="status" aria-label={phaseLabel}>
