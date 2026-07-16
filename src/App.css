@@ -554,17 +554,15 @@ select:disabled {
 /* Issue #81: micro-animations on interactive cards */
 .workout-row,
 .day-card,
-.exercise,
-.library-entry-card,
-.preview-exercise {
-  transition: transform 120ms ease, background-color 120ms ease;
-}
-
-.workout-row:active,
-.day-card:active,
-.exercise:active,
-.library-entry-card:active,
-.preview-exercise:active {
+	.exercise,
+	.preview-exercise {
+	  transition: transform 120ms ease, background-color 120ms ease;
+	}
+	
+	.workout-row:active,
+	.day-card:active,
+	.exercise:active,
+	.preview-exercise:active {
   transform: scale(0.98);
 }
 
@@ -1315,13 +1313,6 @@ select:disabled {
 .decision b {
   display: block;
   margin-bottom: 4px;
-}
-
-.library-entry-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
 }
 
 /* components: menus and sheets */
@@ -2325,17 +2316,6 @@ select:disabled {
   font-weight: 850;
 }
 
-.home-library-row {
-  width: 100%;
-  color: inherit;
-  text-align: left;
-}
-
-.home-library-row > span {
-  display: grid;
-  gap: 2px;
-}
-
 .compact-note {
   margin: 0;
   color: var(--text-secondary);
@@ -2780,60 +2760,3 @@ select:disabled {
   margin-bottom: 2px;
 }
 
-/* Issue #85: weekly program review card */
-.program-review-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.program-review-card__header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  color: var(--text-secondary);
-}
-
-.program-review-card__header p {
-  margin: 0;
-  font-size: var(--text-small);
-  line-height: 1.42;
-}
-
-.program-review-change {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  border-left: 3px solid var(--separator);
-}
-
-.program-review-change--high {
-  border-left-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-}
-
-.program-review-change--medium {
-  border-left-color: var(--warning, #bf5600);
-  background: color-mix(in srgb, var(--warning, #bf5600) 8%, transparent);
-}
-
-.program-review-change--low {
-  border-left-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-.program-review-change b {
-  display: block;
-  font-size: var(--text-small);
-  margin-bottom: 2px;
-}
-
-.program-review-card__focus {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--surface-muted);
-}
-
-.program-review-card__focus b {
-  display: block;
-  font-size: var(--text-body);
-}

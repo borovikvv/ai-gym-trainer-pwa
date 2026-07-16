@@ -25,7 +25,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /открыть библиотеку упражнений/i }))
     expect(screen.getByRole('searchbox', { name: /поиск упражнения/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /все группы/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Все' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Тренер' }))
     // #116: avatar dropdown — open it, then tap the active user to open the
@@ -350,8 +350,8 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
-    // Issue #57: history simplified — name + date in <b>, volume in <div class="muted">
-    expect(screen.getByText(/День A · \d{2}\.\d{2}, \d{2}:\d{2}/i)).toBeInTheDocument()
+    expect(screen.getAllByText('День A').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/\.\d{2} · \d+/).length).toBeGreaterThan(0)
     const savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
     expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 3, energy: 3, availableMinutes: 60 }))
 
@@ -508,8 +508,8 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText(/Программа обновлена: 2 тренировки\/нед/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'План' }))
-    expect(screen.getByText('День A')).toBeInTheDocument()
-    expect(screen.getByText('День B')).toBeInTheDocument()
+    expect(screen.getAllByText('День A').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('День B').length).toBeGreaterThan(0)
     expect(screen.queryByText('День C')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Тренер' }))

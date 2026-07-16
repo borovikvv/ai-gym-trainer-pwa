@@ -97,7 +97,7 @@ describe('ProgressScreen', () => {
     render(<ProgressScreen progressDashboard={dashboard} />)
 
     // Issue #124: section now always shows with a clean empty state
-    expect(screen.getByRole('heading', { name: 'Сила (e1RM)' })).toBeInTheDocument()
+    expect(screen.getByText('Сила')).toBeInTheDocument()
     expect(screen.getByText(/нужно 2\+ тренировки/i)).toBeInTheDocument()
   })
 
@@ -139,7 +139,7 @@ describe('ProgressScreen', () => {
     render(<ProgressScreen progressDashboard={dashboardWithE1RM} />)
 
     // Section title appears
-    expect(screen.getByRole('heading', { name: 'Сила (e1RM)' })).toBeInTheDocument()
+    expect(screen.getByText('Сила')).toBeInTheDocument()
 
     // Both exercises are rendered with their best e1RM
     // Note: 'Жим лёжа' also appears in other sections, so use getAllByText.

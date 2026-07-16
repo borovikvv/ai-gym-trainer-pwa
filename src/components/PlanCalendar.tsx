@@ -1,13 +1,13 @@
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { useState } from 'react'
-import { Calendar, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
+import { Calendar, CheckCircle } from 'lucide-react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import type { CoachState, MesocycleState, PlannedWorkout, UserQuestionnaire } from '../data/programApi'
 import type { TrainingCalendarItem } from '../domain/coachPlanning'
 import { toHumanCoachText } from '../domain/coachCopy'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
-import { ActionMenu, HeroStatus, ScreenHeader, SectionList, SegmentedControl, WorkoutRow } from './ui'
+import { ActionMenu, ScreenHeader, SectionList, SegmentedControl, WorkoutRow } from './ui'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 
 type WeekDateOption = {
@@ -28,8 +28,6 @@ type PlanCalendarProps = {
   editingPlannedWorkoutId: string | null
   editingPlannedDate: string
   coachState: CoachState | null
-  onShiftPlanningWeek: (deltaWeeks: number) => void
-  onResetPlanningStart: () => void
   onToggleWeekDate: (date: string) => void
   onSelectWorkoutDay: (day: WorkoutDay) => void
   onStartWorkout: (day: WorkoutDay) => void
@@ -171,8 +169,6 @@ export function PlanCalendar({
   editingPlannedWorkoutId,
   editingPlannedDate,
   coachState,
-  onShiftPlanningWeek,
-  onResetPlanningStart,
   onToggleWeekDate,
   onSelectWorkoutDay,
   onStartWorkout,
@@ -207,11 +203,9 @@ export function PlanCalendar({
     }))
   const nextWorkout = plannedItems[0]
   const upcomingWorkouts = plannedItems.slice(1)
-  const selectedWorkout = plannedItems.find((workout) => workout.id === actionWorkoutId) ?? null
-  const selectedDatesLabel = selectedWeekDates.length > 0 ? `${selectedWeekDates.length} в календаре` : 'нет дат'
-  const activeWorkoutFocus = toHumanCoachText(activeWorkoutDay.description) || activeWorkoutDay.label
+	  const selectedWorkout = plannedItems.find((workout) => workout.id === actionWorkoutId) ?? null
 
-  // Issue #120: compact 7-day week strip (first week of the planning horizon).
+	  // Issue #120: compact 7-day week strip (first week of the planning horizon).
   const todayIso = todayDateInputValue()
   const nextDate = nextWorkout?.scheduledDate
   const weekStrip = weekDateOptions.slice(0, 7).map((option) => {
@@ -235,50 +229,13 @@ export function PlanCalendar({
           ]}
           value={horizon}
           onChange={setHorizon}
+          shape="rounded"
           aria-label="Горизонт планирования"
         />
       </div>
 
-      {nextWorkout && (
-        <HeroStatus
-          eyebrow={formatDateOnly(nextWorkout.scheduledDate)}
-          title="Следующая тренировка"
-          metadata={`${nextWorkout.workoutDayName} · ${nextWorkout.workoutDay.exercises.length} упр`}
-          metric={(
-            <span className="hero-metric-mins">
-              <b>{estimateWorkoutMinutes(nextWorkout.workoutDay)}</b>
-              <small>мин</small>
-            </span>
-          )}
-          reason={toHumanCoachText(nextWorkout.coachReason || nextWorkout.goal)}
-          primaryAction={(
-            <button className="primary compact-action" type="button" onClick={() => onStartWorkout(nextWorkout.workoutDay)}>
-              Открыть
-            </button>
-          )}
-          secondaryAction={(
-            <button className="secondary compact" type="button" onClick={() => onSelectWorkoutDay(nextWorkout.workoutDay)}>
-              Состав
-            </button>
-          )}
-        />
-      )}
-
       {horizon === 'week' && (
-      <SectionList
-        title="Даты"
-        action={<span className="badge">{selectedDatesLabel}</span>}
-      >
-        <div className="plan-top-actions">
-          <button className="icon-button" type="button" onClick={() => onShiftPlanningWeek(-1)} aria-label="Предыдущие 7 дней">
-            <ChevronLeft aria-hidden="true" />
-          </button>
-          <button className="secondary compact" type="button" onClick={onResetPlanningStart}>сегодня</button>
-          <button className="icon-button" type="button" onClick={() => onShiftPlanningWeek(1)} aria-label="Следующие 7 дней">
-            <ChevronRight aria-hidden="true" />
-          </button>
-        </div>
-        {/* Issue #120: compact 7-day week strip (прототип). */}
+      <div className="plan-week-strip-wrap">
         <div className="plan-week-strip" role="group" aria-label="Дни недели для тренировок">
           {weekStrip.map((d) => {
             const selected = selectedWeekDates.includes(d.date)
@@ -323,7 +280,45 @@ export function PlanCalendar({
             <span>{dayNote}</span>
           </div>
         )}
-      </SectionList>
+      </div>
+      )}
+
+      {nextWorkout && (
+        <div className="plan-hero">
+          <div className="plan-hero__top">
+            <div className="plan-hero__info">
+              <div className="plan-hero__eyebrow">{formatDateOnly(nextWorkout.scheduledDate)} · следующая</div>
+              <div className="plan-hero__title">{nextWorkout.workoutDayName}</div>
+            </div>
+            <div className="plan-hero__duration">
+              <span className="plan-hero__dur-num">{estimateWorkoutMinutes(nextWorkout.workoutDay)}</span>
+              <span className="plan-hero__dur-unit">мин</span>
+            </div>
+          </div>
+
+          <div className="plan-hero__pills">
+            <span className="plan-hero__pill">{nextWorkout.workoutDay.exercises.length} упражнений</span>
+            {nextWorkout.workoutDay.exercises.length > 0 && (
+              <span className="plan-hero__pill">
+                {[...new Set(nextWorkout.workoutDay.exercises.map((ex) => ex.muscleGroup).filter(Boolean))].join(' · ')}
+              </span>
+            )}
+            <span className="plan-hero__pill plan-hero__pill--green">
+              {nextWorkout.workoutDay.description
+                ? toHumanCoachText(nextWorkout.workoutDay.description)?.slice(0, 30) || 'плановая'
+                : 'плановая'}
+            </span>
+          </div>
+
+          <div className="plan-hero__actions">
+            <button className="plan-hero__action-primary" type="button" onClick={() => onStartWorkout(nextWorkout.workoutDay)}>
+              Открыть
+            </button>
+            <button className="plan-hero__action-secondary" type="button" onClick={() => onSelectWorkoutDay(nextWorkout.workoutDay)}>
+              Состав
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Issue #120: Готовность + Расписание (Week view only). */}
@@ -400,7 +395,11 @@ export function PlanCalendar({
           <div className="plan-composition-grid">
             <div className="plan-composition-card plan-composition-card--focus">
               <span>Фокус</span>
-              <b>{activeWorkoutFocus}</b>
+              <b>{(() => {
+                const raw = toHumanCoachText(activeWorkoutDay.description) || activeWorkoutDay.label
+                const dot = raw.indexOf('.')
+                return dot > 0 && dot <= 60 ? raw.slice(0, dot) : raw.length > 50 ? raw.slice(0, 50) + '…' : raw
+              })()}</b>
             </div>
             <div className="plan-composition-card">
               <span>Время</span>

@@ -1,11 +1,9 @@
-import { BookOpen, Dumbbell, ClipboardList } from 'lucide-react'
 import type { UserProfile, WorkoutDay  } from '../../shared/types'
 import type { CoachMemory, CoachState, MesocycleState, PlannedWorkout } from '../data/programApi'
 import type { WorkoutHistoryEntry } from '../domain/workoutHistory'
-import { toHumanCoachText } from '../domain/coachCopy'
 import { estimateWorkoutMinutes } from '../domain/workoutReadiness'
 import { visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
-import { HeroStatus, MetricPair, ProfileMenu, ScreenHeader, SectionList, WorkoutRow } from './ui'
+import { HeroStatus, MetricPair, ProfileMenu, ScreenHeader, SectionList } from './ui'
 import { GoalsCard } from './GoalsCard'
 import { useEffect, useState } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
@@ -62,13 +60,7 @@ function computeStreakFromHistory(history: WorkoutHistoryEntry[]): string {
     }
   }
 
-  // Russian pluralization for "неделя".
-  const mod10 = streak % 10
-  const mod100 = streak % 100
-  const word = (mod10 === 1 && mod100 !== 11) ? 'неделя'
-    : (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) ? 'недели'
-    : 'недель'
-  return `${streak} ${word}`
+  return `${streak} нед`
 }
 
 type CoachHomeProps = {
@@ -146,7 +138,7 @@ export function CoachHome({
   plannedWorkouts,
   scheduledWorkoutDays,
   allUserWorkoutDays,
-  extraExercisesByDay,
+  extraExercisesByDay: _extraExercisesByDay,
   extraDayPickerOpen,
   coachTodaySummary: _coachTodaySummary,
   activeUser: _activeUser,
@@ -164,7 +156,7 @@ export function CoachHome({
   onAddExtraWorkoutDay,
   formatWeight,
   formatDateOnly,
-  formatDateTime,
+  formatDateTime: _formatDateTime,
   addDays,
   todayDateInputValue,
 }: CoachHomeProps) {
@@ -223,6 +215,16 @@ export function CoachHome({
     return () => { cancelled = true }
   }, [activeUserId, userHistory.length])
 
+  // Issue #85: детали недельного разбора (bottom-sheet)
+  const [reviewDetail, setReviewDetail] = useState<{
+    kicker: string
+    title: string
+    body: string
+  } | null>(null)
+
+  // Детали завершённой тренировки (bottom-sheet)
+  const [historyDetail, setHistoryDetail] = useState<WorkoutHistoryEntry | null>(null)
+
   // Фаза 2Б: баннер «план пересобран» после пропущенной тренировки.
   // Показывается, пока пользователь его не закроет (ключ = id пропущенных).
   const [dismissedMissedKey, setDismissedMissedKey] = useState<string>(() => {
@@ -273,7 +275,7 @@ export function CoachHome({
 
       <HeroStatus
         eyebrow={primaryTimelineItem ? formatDateOnly(primaryTimelineItem.scheduledDate) : 'Следующая'}
-        title={heroWorkoutDay.label}
+        title={heroWorkoutDay.name}
         metadata={`${activeExerciseCount} упр · ~${activeWorkoutMinutes} мин`}
         metadataAsPill
         info={firstExercise && firstExerciseWeight ? (
@@ -287,7 +289,7 @@ export function CoachHome({
         ) : undefined}
         primaryAction={(
           <button className="primary" type="button" aria-label="Начать тренировку" onClick={() => onStartWorkout(heroWorkoutDay)}>
-            <Dumbbell aria-hidden="true" />
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.5 6.5 17.5 17.5M4 8l1-1M20 16l-1 1M8 4 7 5M17 19l-1 1M14.5 9.5l-5 5" /></svg>
             <span>Начать тренировку</span>
           </button>
         )}
@@ -317,42 +319,64 @@ export function CoachHome({
 
       <MetricPair
         metrics={[
-          { label: 'Серия', value: computeStreakFromHistory(userHistory) },
-          { label: 'На неделе', value: coachMemory ? `${coachMemory.weeklyBalance.completedWorkoutsLast7Days}/${coachMemory.weeklyBalance.plannedWorkoutsPerWeek}` : '—' },
+          {
+            label: 'Серия',
+            value: (() => {
+              const raw = computeStreakFromHistory(userHistory)
+              const m = raw.match(/^(\d+)\s+(.+)$/)
+              if (!m) return raw
+              return <>{m[1]} <small className="metric-card__unit">{m[2]}</small></>
+            })(),
+          },
+          {
+            label: 'На неделе',
+            value: coachMemory
+              ? <>
+                  <span className="metric-card__fraction-num">{coachMemory.weeklyBalance.completedWorkoutsLast7Days}</span>
+                  <span className="metric-card__fraction-den">/{coachMemory.weeklyBalance.plannedWorkoutsPerWeek}</span>
+                </>
+              : '—',
+          },
         ]}
       />
 
       {/* Фаза 2: многонедельные цели — тренер ведёт к ним через макроцикл */}
       <GoalsCard userId={activeUserId} exerciseOptions={goalExerciseOptions(exerciseLibrary, allUserWorkoutDays)} />
 
-      {/* Issue #85: AI weekly program review — Issue #104: collapsed into review-row */}
+      {/* Issue #85: AI weekly program review — прототип: кнопки с двумя строками + › */}
       {programReview && programReview.changes.length > 0 && (
-        <SectionList title="Недельный разбор">
-          <div className="card program-review-card">
-            <div className="program-review-card__header">
-              <ClipboardList size={18} aria-hidden="true" />
-              <p>{shortTitle(programReview.summary)}</p>
-              <span className="review-row__meta">{programReview.changes.length} правок</span>
-            </div>
+        <SectionList
+          title="Недельный разбор"
+          action={<span className="muted">{programReview.changes.length} правок</span>}
+        >
+          <div className="review-card">
             {programReview.changes.map((change, i) => (
-              <details key={i} className="review-row">
-                <summary>
-                  <span className={`review-row__dot review-row__dot--${change.priority}`} aria-hidden="true" />
-                  <span className="review-row__title">{shortTitle(change.description)}</span>
-                  <span className="review-row__meta">{change.type}</span>
-                </summary>
-                <p className="review-row__body">{change.rationale}</p>
-              </details>
+              <button key={i} className="review-card__row" type="button" onClick={() => setReviewDetail({
+                kicker: reviewTypeLabel(change.type),
+                title: shortTitle(change.description),
+                body: change.rationale,
+              })}>
+                <span className={`review-card__dot review-card__dot--${change.priority}`} aria-hidden="true" />
+                <div className="review-card__body">
+                  <div className="review-card__title">{shortTitle(change.description)}</div>
+                  <div className="review-card__meta">{reviewTypeLabel(change.type)}</div>
+                </div>
+                <span className="review-card__arrow" aria-hidden="true">›</span>
+              </button>
             ))}
             {programReview.nextWeekFocus && (
-              <details className="review-row">
-                <summary>
-                  <span className="review-row__dot review-row__dot--low" aria-hidden="true" />
-                  <span className="review-row__title">Фокус недели</span>
-                  <span className="review-row__meta">фокус</span>
-                </summary>
-                <p className="review-row__body">{programReview.nextWeekFocus}</p>
-              </details>
+              <button className="review-card__row" type="button" onClick={() => setReviewDetail({
+                kicker: 'Фокус недели',
+                title: programReview.nextWeekFocus!,
+                body: programReview.nextWeekFocus!,
+              })}>
+                <span className="review-card__dot review-card__dot--low" aria-hidden="true" />
+                <div className="review-card__body">
+                  <div className="review-card__title">{shortTitle(programReview.nextWeekFocus)}</div>
+                  <div className="review-card__meta">фокус недели</div>
+                </div>
+                <span className="review-card__arrow" aria-hidden="true">›</span>
+              </button>
             )}
           </div>
         </SectionList>
@@ -362,50 +386,104 @@ export function CoachHome({
         <SectionList title="Далее">
           {upcomingTimelineItems.map((item) => {
             const day = item.workoutDay
-            // Issue #57 regression: programApi.ts sets day.description =
-            // workout.coachReason, which is a long server-side narration
-            // ("Профиль тренера: ...", "Coach State: ...", "Прогноз
-            // календаря: ...", "Решение тренера: ..."). Running it through
-            // toHumanCoachText strips those sentences; if nothing
-            // human-readable remains, fall back to day.name so the row
-            // never shows raw system text.
-            const humanMetadata = toHumanCoachText(day.description || '') || day.name
+            const badgeLetter = item.workoutDayName.charAt(0).toUpperCase()
+            const ddmm = item.scheduledDate ? item.scheduledDate.slice(8, 10) + '.' + item.scheduledDate.slice(5, 7) : ''
             return (
-              <WorkoutRow
-                key={item.id}
-                eyebrow={formatDateOnly(item.scheduledDate)}
-                title={item.workoutDayName}
-                metadata={humanMetadata}
-                badge={`${day.exercises.length + (extraExercisesByDay[day.id]?.length ?? 0)} упр.`}
-                active={day.id === heroWorkoutDay.id}
-                primaryAction={(
-                  <button className="secondary compact" type="button" onClick={() => onSelectWorkoutDay(day)} aria-label={`Выбрать ${item.workoutDayName}`}>
-                    Выбрать
-                  </button>
-                )}
-              />
+              <div key={item.id} className="next-row">
+                <span className="next-row__badge">{badgeLetter}</span>
+                <div className="next-row__body">
+                  <div className="next-row__title">{item.workoutDayName}</div>
+                  <div className="next-row__meta">{ddmm} · {day.exercises.length} упр.</div>
+                </div>
+                <button className="next-row__action" type="button" onClick={() => onSelectWorkoutDay(day)} aria-label={`Выбрать ${item.workoutDayName}`}>
+                  Выбрать
+                </button>
+              </div>
             )
           })}
         </SectionList>
       )}
 
-      <button className="card top-gap library-entry-card home-library-row" type="button" onClick={onOpenLibrary} aria-label="Открыть библиотеку упражнений">
-        <BookOpen aria-hidden="true" />
-        <span>
-          <b>Библиотека</b>
-          <span className="muted">Техника и замены</span>
+      <button className="library-btn" type="button" onClick={onOpenLibrary} aria-label="Открыть библиотеку упражнений">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+        <span className="library-btn__text">
+          <b className="library-btn__title">Библиотека</b>
+          <span className="library-btn__sub">Техника и замены</span>
         </span>
+        <span className="library-btn__arrow" aria-hidden="true">›</span>
       </button>
 
       {userHistory.length > 0 && (
         <SectionList title="История">
-          {userHistory.slice(0, 3).map((workout) => (
-            <div className="history-line" key={workout.id}>
-              <b>{workout.workoutDayName} · {formatDateTime(workout.completedAt)}</b>
-              <div className="muted">{Math.round(workout.totalVolume)} кг</div>
-            </div>
-          ))}
+          <div className="review-card">
+            {userHistory.slice(0, 3).map((workout) => (
+              <button key={workout.id} className="review-card__row" type="button" onClick={() => setHistoryDetail(workout)}>
+                <span className="review-card__dot review-card__dot--low" aria-hidden="true" />
+                <div className="review-card__body">
+                  <div className="review-card__title">{workout.workoutDayName}</div>
+                  <div className="review-card__meta">{workout.completedAt.slice(8, 10)}.{workout.completedAt.slice(5, 7)} · {Math.round(workout.totalVolume)} кг</div>
+                </div>
+                <span className="review-card__arrow" aria-hidden="true">›</span>
+              </button>
+            ))}
+          </div>
         </SectionList>
+      )}
+
+      {/* Bottom-sheet деталей завершённой тренировки */}
+      {historyDetail && (
+        <div className="review-sheet-overlay" onClick={() => setHistoryDetail(null)}>
+          <div className="review-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="review-sheet__grabber" />
+            <div className="review-sheet__header">
+              <div className="review-sheet__copy">
+                <div className="review-sheet__kicker">{historyDetail.completedAt.slice(8, 10)}.{historyDetail.completedAt.slice(5, 7)}</div>
+                <div className="review-sheet__title">{historyDetail.workoutDayName}</div>
+              </div>
+              <button className="review-sheet__close" onClick={() => setHistoryDetail(null)} aria-label="Закрыть">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="history-detail__list">
+              {historyDetail.exercises.map((ex, i) => (
+                <div key={i} className="history-detail__exercise">
+                  <div className="history-detail__ex-name">{ex.exerciseName}</div>
+                  <div className="history-detail__sets">
+                    {ex.sets.filter((s) => s.completed).map((set, j) => (
+                      <span key={j} className="history-detail__set">{set.weight} кг × {set.reps}</span>
+                    ))}
+                  </div>
+                  <div className="history-detail__ex-vol">{Math.round(ex.volume)} кг</div>
+                </div>
+              ))}
+              <div className="history-detail__total">
+                <span>Общий объём</span>
+                <span>{Math.round(historyDetail.totalVolume)} кг</span>
+              </div>
+            </div>
+            <button className="primary review-sheet__done" type="button" onClick={() => setHistoryDetail(null)}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom-sheet деталей недельного разбора — как в прототипе */}
+      {reviewDetail && (
+        <div className="review-sheet-overlay" onClick={() => setReviewDetail(null)}>
+          <div className="review-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="review-sheet__grabber" />
+            <div className="review-sheet__header">
+              <div className="review-sheet__copy">
+                <div className="review-sheet__kicker">{reviewDetail.kicker}</div>
+                <div className="review-sheet__title">{reviewDetail.title}</div>
+              </div>
+              <button className="review-sheet__close" onClick={() => setReviewDetail(null)} aria-label="Закрыть">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="review-sheet__body">{reviewDetail.body}</div>
+            <button className="primary review-sheet__done" type="button" onClick={() => setReviewDetail(null)}>Понятно</button>
+          </div>
+        </div>
       )}
     </section>
   )
@@ -451,6 +529,17 @@ function goalExerciseOptions(
 
 // Issue #104: shortTitle — first ~40 chars up to the first period, for
 // scannable one-line review rows instead of full paragraphs.
+// Маппинг типов правок с английского на русский
+const TYPE_RU: Record<string, string> = {
+  adjust_volume: 'объём',
+  change_focus: 'смена фокуса',
+  swap_exercise: 'замена',
+  add_deload: 'разгрузка',
+}
+function reviewTypeLabel(type: string): string {
+  return TYPE_RU[type] || type
+}
+
 function shortTitle(text: string): string {
   const trimmed = (text ?? '').trim()
   if (!trimmed) return ''

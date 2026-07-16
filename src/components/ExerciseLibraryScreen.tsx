@@ -6,16 +6,6 @@ type ExerciseLibraryScreenProps = {
   exerciseLibrary: ExercisePlan[]
 }
 
-type EquipmentFilter = 'all' | 'barbell' | 'dumbbells' | 'machine' | 'bodyweight'
-
-const equipmentFilters: { id: EquipmentFilter; label: string }[] = [
-  { id: 'all', label: 'Всё оборудование' },
-  { id: 'barbell', label: 'Штанга' },
-  { id: 'dumbbells', label: 'Гантели' },
-  { id: 'machine', label: 'Тренажёры/блоки' },
-  { id: 'bodyweight', label: 'Вес тела' },
-]
-
 function normalize(value: string) {
   return value.toLocaleLowerCase('ru-RU').trim()
 }
@@ -28,24 +18,40 @@ function countLabel(count: number) {
   return `${count} упражнений`
 }
 
-function exerciseMatchesEquipment(exercise: ExercisePlan, equipment: EquipmentFilter) {
-  if (equipment === 'all') return true
-  const haystack = normalize(`${exercise.name} ${exercise.instruction} ${exercise.prescription} ${exercise.coachFocus}`)
-  if (equipment === 'barbell') return /штанг|гриф/.test(haystack)
-  if (equipment === 'dumbbells') return /гантел/.test(haystack)
-  if (equipment === 'machine') return /тренаж|блок|кроссовер|смита|гравитрон/.test(haystack)
-  if (equipment === 'bodyweight') return /вес тела|планка|отжим|подтяг|брусь/.test(haystack)
-  return true
+// Группировка конкретных групп мышц в основные категории
+const MUSCLE_GROUP_MAP: Record<string, string> = {
+  'Грудь': 'Грудь',
+  'Грудь/плечи': 'Грудь',
+  'Спина': 'Спина',
+  'Ноги': 'Ноги',
+  'Ноги · квадрицепс': 'Ноги',
+  'Ноги/ягодицы': 'Ноги',
+  'Задняя поверхность бедра': 'Ноги',
+  'Ягодицы/задняя цепь': 'Ноги',
+  'Икры': 'Ноги',
+  'Плечи': 'Плечи',
+  'Плечи · задняя дельта': 'Плечи',
+  'Плечи · средняя дельта': 'Плечи',
+  'Задняя дельта': 'Плечи',
+  'Руки': 'Руки',
+  'Руки · бицепс': 'Руки',
+  'Руки · трицепс': 'Руки',
+  'Руки · трицепс / Грудь': 'Руки',
+  'Кор': 'Кор',
+  'Пресс': 'Кор',
+}
+
+function simplifyMuscleGroup(group: string | undefined): string {
+  return MUSCLE_GROUP_MAP[group ?? ''] || group || 'Другое'
 }
 
 export function ExerciseLibraryScreen({ exerciseLibrary }: ExerciseLibraryScreenProps) {
   const [query, setQuery] = useState('')
   const [muscleFilter, setMuscleFilter] = useState('all')
-  const [equipmentFilter, setEquipmentFilter] = useState<EquipmentFilter>('all')
   const [selectedExercise, setSelectedExercise] = useState<ExercisePlan | null>(null)
 
   const muscleGroups = useMemo(() => {
-    const groups = Array.from(new Set(exerciseLibrary.map((exercise) => exercise.muscleGroup).filter(Boolean)))
+    const groups = Array.from(new Set(exerciseLibrary.map((e) => simplifyMuscleGroup(e.muscleGroup)).filter(Boolean)))
     return groups.sort((a, b) => a.localeCompare(b, 'ru'))
   }, [exerciseLibrary])
 
@@ -54,47 +60,31 @@ export function ExerciseLibraryScreen({ exerciseLibrary }: ExerciseLibraryScreen
     return exerciseLibrary.filter((exercise) => {
       const searchText = normalize(`${exercise.name} ${exercise.muscleGroup} ${exercise.instruction}`)
       const matchesQuery = !normalizedQuery || searchText.includes(normalizedQuery)
-      const matchesMuscle = muscleFilter === 'all' || exercise.muscleGroup === muscleFilter
-      return matchesQuery && matchesMuscle && exerciseMatchesEquipment(exercise, equipmentFilter)
+      const matchesMuscle = muscleFilter === 'all' || simplifyMuscleGroup(exercise.muscleGroup) === muscleFilter
+      return matchesQuery && matchesMuscle
     })
-  }, [equipmentFilter, exerciseLibrary, muscleFilter, query])
+  }, [exerciseLibrary, muscleFilter, query])
 
   return (
     <section className="screen active library-screen">
-      <div className="top">
-        <div>
-          <div className="kicker">Библиотека</div>
-          <div className="title">Упражнения</div>
-        </div>
+      <div className="library-screen__header">
+        <div className="library-screen__title">Библиотека</div>
+        <input
+          className="library-screen__search"
+          aria-label="Поиск упражнения"
+          type="search"
+          value={query}
+          placeholder="Поиск упражнения..."
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
 
-      <div className="card library-controls">
-        <label className="field-label">
-          <span>Поиск упражнения</span>
-          <input
-            aria-label="Поиск упражнения"
-            type="search"
-            value={query}
-            placeholder="Жим, тяга, бицепс..."
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <div className="muted">{countLabel(filteredExercises.length)}</div>
-      </div>
-
-      <div className="library-filter-block" aria-label="Фильтр по группе мышц">
-        <button
-          className={`filter-chip ${muscleFilter === 'all' ? 'active' : ''}`}
-          type="button"
-          onClick={() => setMuscleFilter('all')}
-        >
-          Все группы
-        </button>
+      <div className="library-screen__filters">
+        <button className={`lib-pill ${muscleFilter === 'all' ? 'lib-pill--active' : ''}`} onClick={() => setMuscleFilter('all')}>Все</button>
         {muscleGroups.map((group) => (
           <button
-            className={`filter-chip ${muscleFilter === group ? 'active' : ''}`}
             key={group}
-            type="button"
+            className={`lib-pill ${muscleFilter === group ? 'lib-pill--active' : ''}`}
             onClick={() => setMuscleFilter(group)}
           >
             {group}
@@ -102,41 +92,18 @@ export function ExerciseLibraryScreen({ exerciseLibrary }: ExerciseLibraryScreen
         ))}
       </div>
 
-      <div className="library-filter-block" aria-label="Фильтр по оборудованию">
-        {equipmentFilters.map((filter) => (
-          <button
-            className={`filter-chip ${equipmentFilter === filter.id ? 'active' : ''}`}
-            key={filter.id}
-            type="button"
-            onClick={() => setEquipmentFilter(filter.id)}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
+      <div className="library-screen__count">{countLabel(filteredExercises.length)}</div>
 
-      <div className="library-results">
+      <div className="library-screen__list">
         {filteredExercises.length === 0 ? (
-          <div className="card empty-state">
-            <b>Ничего не найдено</b>
-            <div className="muted">Попробуй другой запрос или сбрось фильтры.</div>
-          </div>
+          <div className="muted" style={{ padding: '1rem 0', textAlign: 'center' }}>Ничего не найдено</div>
         ) : (
           filteredExercises.map((exercise) => (
-            <article className="exercise library-exercise-card" key={exercise.id} aria-label={exercise.name}>
-              <button
-                className="library-exercise-card-button"
-                type="button"
-                aria-label={`Открыть описание упражнения ${exercise.name}`}
-                onClick={() => setSelectedExercise(exercise)}
-              >
-                <div>
-                  <b>{exercise.name}</b>
-                  <div className="muted">{exercise.instruction}</div>
-                </div>
-                <span className="badge">{exercise.muscleGroup}</span>
-              </button>
-            </article>
+            <button key={exercise.id} className="library-screen__row" type="button" onClick={() => setSelectedExercise(exercise)} aria-label={`Открыть ${exercise.name}`}>
+              <b className="library-screen__row-name">{exercise.name}</b>
+              <span className="library-screen__row-group">{exercise.muscleGroup}</span>
+              <span className="library-screen__row-arrow" aria-hidden="true">›</span>
+            </button>
           ))
         )}
       </div>

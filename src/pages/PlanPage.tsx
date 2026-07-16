@@ -17,8 +17,6 @@ interface PlanPageProps {
   editingPlannedWorkoutId: string | null
   editingPlannedDate: string
   coachState: CoachState | null
-  onShiftPlanningWeek: (deltaWeeks: number) => void
-  onResetPlanningStart: () => void
   onToggleWeekDate: (date: string) => void
   setEditingPlannedWorkoutId: (id: string | null) => void
   setEditingPlannedDate: (date: string) => void
@@ -55,8 +53,6 @@ export function PlanPage(props: PlanPageProps) {
       editingPlannedWorkoutId={props.editingPlannedWorkoutId}
       editingPlannedDate={props.editingPlannedDate}
       coachState={props.coachState}
-      onShiftPlanningWeek={props.onShiftPlanningWeek}
-      onResetPlanningStart={props.onResetPlanningStart}
       onToggleWeekDate={props.onToggleWeekDate}
       onSelectWorkoutDay={props.onSelectWorkoutDay}
       onStartWorkout={props.onStartWorkout}

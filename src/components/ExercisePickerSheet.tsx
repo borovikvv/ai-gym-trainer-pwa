@@ -8,9 +8,15 @@ type ExercisePickerSheetProps = {
   onClose: () => void
 }
 
-// Issue #102: add search by name + filter by muscle group.
-// Previously the sheet showed only the first 30 exercises with no way to
-// find a specific one except scrolling.
+// Icon SVG (прототип) — перекрестье
+function ExIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.4 14.4 9.6 9.6M18.657 21.485l2.828-2.828M3.515 5.343 6.343 2.515M2.515 6.343 5.343 3.515M18.657 21.485 2.515 6.343" />
+    </svg>
+  )
+}
+
 export function ExercisePickerSheet({ exerciseLibrary, activeExercises, onAddExercise, onClose }: ExercisePickerSheetProps) {
   const [search, setSearch] = useState('')
   const [muscleFilter, setMuscleFilter] = useState<string | null>(null)
@@ -28,44 +34,38 @@ export function ExercisePickerSheet({ exerciseLibrary, activeExercises, onAddExe
       .filter((exercise) => !activeExercises.some((currentExercise) => currentExercise.name === exercise.name))
       .filter((exercise) => !searchLower || exercise.name.toLowerCase().includes(searchLower))
       .filter((exercise) => !muscleFilter || exercise.muscleGroup === muscleFilter)
-    // Issue #102: removed .slice(0, 30) — filtering already limits the list,
-    // and capping at 30 hid valid exercises from the user
   }, [exerciseLibrary, activeExercises, search, muscleFilter])
 
   return (
-    <>
-      <div className="overlay show" onClick={onClose} />
-      <div className="sheet show" role="dialog" aria-modal="true" aria-label="Добавить упражнение">
-        <div className="sheet-handle" aria-hidden="true" />
-        <div className="sheet-header">
-          <h2>Добавить упражнение</h2>
-          <button className="sheet-close" type="button" onClick={onClose} aria-label="Закрыть">×</button>
+    <div className="lib-overlay" onClick={onClose}>
+      <div className="lib-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Библиотека">
+        {/* Header */}
+        <div className="lib-sheet__header">
+          <div className="lib-sheet__title">Библиотека</div>
+          <button className="lib-sheet__close" type="button" onClick={onClose} aria-label="Закрыть">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
         </div>
 
-        {/* Issue #102: search input with autofocus */}
+        {/* Search */}
         <input
           ref={searchInputRef}
           type="text"
           inputMode="text"
-          className="search-input"
+          className="lib-sheet__search"
           placeholder="Поиск упражнения..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           autoFocus
         />
 
-        {/* Issue #102: muscle group filter chips */}
-        <div className="muscle-filter-chips">
-          <button
-            className={`chip ${muscleFilter === null ? 'active' : ''}`}
-            onClick={() => setMuscleFilter(null)}
-          >
-            Все
-          </button>
+        {/* Filter pills */}
+        <div className="lib-sheet__filters">
+          <button className={`lib-pill ${muscleFilter === null ? 'lib-pill--active' : ''}`} onClick={() => setMuscleFilter(null)}>Все</button>
           {muscleGroups.map((group) => (
             <button
               key={group}
-              className={`chip ${muscleFilter === group ? 'active' : ''}`}
+              className={`lib-pill ${muscleFilter === group ? 'lib-pill--active' : ''}`}
               onClick={() => setMuscleFilter(muscleFilter === group ? null : group)}
             >
               {group}
@@ -73,21 +73,26 @@ export function ExercisePickerSheet({ exerciseLibrary, activeExercises, onAddExe
           ))}
         </div>
 
-        {/* Result count when filtered */}
-        {filteredExercises.length === 0 ? (
-          <div className="muted" style={{ padding: '1rem 0', textAlign: 'center' }}>
-            Ничего не найдено
-          </div>
-        ) : (
-          filteredExercises.map((exercise) => (
-            <div className="exercise" key={exercise.id}>
-              <div><b>{exercise.name}</b><div className="muted">{exercise.muscleGroup} · {exercise.setsCount}×{exercise.repMin}–{exercise.repMax}</div></div>
-              <button className="secondary compact" onClick={() => onAddExercise(exercise)} aria-label={`Добавить ${exercise.name}`}>добавить</button>
-            </div>
-          ))
-        )}
-        <button className="secondary wide" type="button" onClick={onClose}>Отмена</button>
+        {/* Exercise list */}
+        <div className="lib-sheet__list">
+          {filteredExercises.length === 0 ? (
+            <div className="muted" style={{ padding: '1rem 0', textAlign: 'center' }}>Ничего не найдено</div>
+          ) : (
+            filteredExercises.map((exercise) => (
+              <button key={exercise.id} className="lib-row" type="button" onClick={() => onAddExercise(exercise)} aria-label={`Добавить ${exercise.name}`}>
+                <span className="lib-row__icon"><ExIcon /></span>
+                <span className="lib-row__body">
+                  <b className="lib-row__name">{exercise.name}</b>
+                  <span className="lib-row__group">{exercise.muscleGroup}</span>
+                </span>
+                <span className="lib-row__action">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
       </div>
-    </>
+    </div>
   )
 }

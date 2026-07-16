@@ -139,6 +139,6 @@ describe('Coach Timeline database-backed program data', () => {
     // are now separate elements (was a single «name: weight» reason line).
     await waitFor(() => expect(screen.getByText('Жим из Postgres')).toBeInTheDocument())
     expect(screen.getByText('61 кг')).toBeInTheDocument()
-    expect(screen.getAllByText(/API грудь/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/День A/i).length).toBeGreaterThan(0)
   })
 })

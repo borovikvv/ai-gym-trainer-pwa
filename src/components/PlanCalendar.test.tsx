@@ -84,8 +84,6 @@ describe('PlanCalendar', () => {
         editingPlannedWorkoutId={null}
         editingPlannedDate=""
         coachState={null}
-        onShiftPlanningWeek={vi.fn()}
-        onResetPlanningStart={vi.fn()}
         onToggleWeekDate={vi.fn()}
         onSelectWorkoutDay={vi.fn()}
         onStartWorkout={vi.fn()}
@@ -129,8 +127,6 @@ describe('PlanCalendar', () => {
         editingPlannedWorkoutId={null}
         editingPlannedDate=""
         coachState={null}
-        onShiftPlanningWeek={vi.fn()}
-        onResetPlanningStart={vi.fn()}
         onToggleWeekDate={vi.fn()}
         onSelectWorkoutDay={vi.fn()}
         onStartWorkout={vi.fn()}
@@ -147,8 +143,8 @@ describe('PlanCalendar', () => {
       />,
     )
 
-    expect(screen.getByText('2026-06-11')).toBeInTheDocument()
-    expect(screen.queryByText('2026-06-07')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/2026-06-11/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/2026-06-07/).length).toBe(0)
   })
 
   it('keeps internal coach state out of the composition focus card', () => {
@@ -183,8 +179,6 @@ describe('PlanCalendar', () => {
         editingPlannedWorkoutId={null}
         editingPlannedDate=""
         coachState={null}
-        onShiftPlanningWeek={vi.fn()}
-        onResetPlanningStart={vi.fn()}
         onToggleWeekDate={onToggleWeekDate}
         onSelectWorkoutDay={vi.fn()}
         onStartWorkout={vi.fn()}
@@ -201,8 +195,8 @@ describe('PlanCalendar', () => {
       />,
     )
 
-    expect(screen.getAllByText('1 в календаре').length).toBeGreaterThan(0)
-    // #120: week strip aria-label = «formatted · тренировка/отдых», aria-pressed
+	    expect(screen.getAllByRole('button', { name: /тренировка/i }).length).toBeGreaterThan(0)
+	    // #120: week strip aria-label = «formatted · тренировка/отдых», aria-pressed
     // shows the selected (planned) state.
     expect(screen.getByRole('button', { name: /чт, 11\.06.*тренировка/i })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: /пт, 12\.06.*отдых/i })).toHaveAttribute('aria-pressed', 'false')

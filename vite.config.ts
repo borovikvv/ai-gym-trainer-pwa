@@ -58,6 +58,11 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8910',
+    },
+  },
   preview: {
     allowedHosts: ['trainer.borovikvv.ru', '144.31.245.29'],
   },

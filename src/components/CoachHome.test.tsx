@@ -261,7 +261,7 @@ describe('MesocycleCard', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Мезоцикл · Накопление — первая неделя')).toBeInTheDocument()
+    expect(screen.getByText('Мезоцикл · загрузка')).toBeInTheDocument()
     expect(screen.getByText('неделя 1 / 5')).toBeInTheDocument()
   })
 
