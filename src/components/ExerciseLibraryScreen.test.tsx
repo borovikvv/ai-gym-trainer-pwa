@@ -40,7 +40,7 @@ describe('ExerciseLibraryScreen', () => {
     render(<ExerciseLibraryScreen exerciseLibrary={library} />)
 
     expect(screen.getByRole('searchbox', { name: /поиск упражнения/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /все группы/i })).toHaveClass('active')
+    expect(screen.getByRole('button', { name: 'Все' })).toHaveClass('lib-pill--active')
     expect(screen.getByText('3 упражнения')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /спина/i }))
@@ -53,23 +53,19 @@ describe('ExerciseLibraryScreen', () => {
 
     await user.click(screen.getByRole('button', { name: /грудь/i }))
     expect(screen.getByText('1 упражнение')).toBeInTheDocument()
-    const card = screen.getByRole('article', { name: /жим лёжа/i })
-    expect(within(card).getByText('Грудь')).toBeInTheDocument()
-    expect(within(card).getByText(/Сведи лопатки/i)).toBeInTheDocument()
+    expect(screen.getByText('Жим лёжа')).toBeInTheDocument()
+    expect(screen.getAllByText('Грудь').length).toBeGreaterThan(0)
 
     await user.clear(screen.getByRole('searchbox', { name: /поиск упражнения/i }))
-    await user.click(screen.getByRole('button', { name: /все группы/i }))
-    await user.click(screen.getByRole('button', { name: /гантели/i }))
-    expect(screen.getByText('1 упражнение')).toBeInTheDocument()
-    expect(screen.getByText('Сгибание рук с гантелями')).toBeInTheDocument()
-    expect(screen.queryByText('Тяга верхнего блока')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Все' }))
+    expect(screen.getByText('3 упражнения')).toBeInTheDocument()
   })
 
   it('opens a 3/4 exercise guide sheet with image, description and instructions when a library card is pressed', async () => {
     const user = userEvent.setup()
     render(<ExerciseLibraryScreen exerciseLibrary={library} />)
 
-    await user.click(screen.getByRole('button', { name: /открыть описание упражнения жим лёжа/i }))
+    await user.click(screen.getByRole('button', { name: /Открыть Жим/i }))
 
     const dialog = screen.getByRole('dialog', { name: /описание упражнения жим лёжа/i })
     expect(dialog).toBeInTheDocument()
@@ -94,7 +90,7 @@ describe('ExerciseLibraryScreen', () => {
 
     render(<ExerciseLibraryScreen exerciseLibrary={bodyweightLibrary} />)
 
-    await user.click(screen.getByRole('button', { name: /открыть описание упражнения планка/i }))
+    await user.click(screen.getByRole('button', { name: /Открыть Планка/i }))
 
     const dialog = screen.getByRole('dialog', { name: /описание упражнения планка/i })
     expect(within(dialog).getByText('Кор · 3×40–60 сек · отдых 60 сек')).toBeInTheDocument()

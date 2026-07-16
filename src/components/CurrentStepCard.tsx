@@ -1,16 +1,18 @@
-// Фаза 3.1 (план развития): фокусная карточка «текущий шаг».
+// Issue #123: Gym logger with ± steppers + RIR scale + coach hint.
 //
-// Экран тренировки должен отвечать на один вопрос — «что сейчас делать».
-// Режим работы: гигантские «60 кг × 8», счётчик подходов, одна кнопка
-// «Готово» → быстрый выбор ощущений (RPE). Режим отдыха: карточка
-// становится таймером с целью следующего подхода и коротким словом тренера
-// («почему?» — за раскрывашкой). Когда ответ LLM приходит посреди отдыха,
-// цифры цели обновляются на месте с лёгкой пульсацией.
+// The card now shows:
+// 1. Two ± steppers for weight (by weightStep) and reps (by 1)
+// 2. RIR scale: 4 dots (4+/3/1-2/0) — user taps one to select difficulty
+// 3. "Готово · подход N" button — disabled until RIR is chosen
+// 4. Coach hint line with green left border (tag / value / note)
+//
+// Rest mode is unchanged (hero-bg timer card from #122).
 import { useEffect, useState } from 'react'
 import type { ExercisePlan } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
 import type { WorkoutSetInput } from '../domain/progression'
-import { difficultyOptions, formatRestSeconds, type NextSetHint } from './gymTypes'
+import { formatRestSeconds, type NextSetHint } from './gymTypes'
+import { Stepper } from './ui'
 
 type CurrentStepCardProps = {
   exercise: ExercisePlan
@@ -35,18 +37,16 @@ export function CurrentStepCard({
   recommendation,
   restRemainingSeconds,
   timedExercise,
-  formatWeight,
+  formatWeight: _formatWeight,
   updateSet,
   markSetDone,
   extendRest,
   skipRest,
 }: CurrentStepCardProps) {
-  const [rpePickerOpen, setRpePickerOpen] = useState(false)
+  const [selectedRir, setSelectedRir] = useState<number | null>(null)
   const resting = restRemainingSeconds > 0
 
   // Пульсация цифр цели, когда LLM-ответ обновил их посреди отдыха.
-  // Сравнение «во время рендера» — рекомендованный React паттерн вместо
-  // синхронного setState в эффекте.
   const targetWeight = recommendation && recommendation.weight > 0 ? recommendation.weight : null
   const targetReps = recommendation && recommendation.reps > 0 ? recommendation.reps : null
   const targetKey = `${targetWeight}:${targetReps}`
@@ -62,12 +62,12 @@ export function CurrentStepCard({
     return () => window.clearTimeout(timeout)
   }, [pulse])
 
-  // Смена упражнения/подхода закрывает выбор RPE (сравнение в рендере).
+  // Смена упражнения/подхода сбрасывает RIR выбор.
   const stepKey = `${exercise.id}:${activeSetIndex}`
   const [seenStepKey, setSeenStepKey] = useState(stepKey)
   if (seenStepKey !== stepKey) {
     setSeenStepKey(stepKey)
-    setRpePickerOpen(false)
+    setSelectedRir(null)
   }
 
   if (allSetsCompleted) return null
@@ -76,9 +76,13 @@ export function CurrentStepCard({
   const setNumber = activeSetIndex + 1
   const totalSets = activeLog.sets.length
 
-  function pickRpe(rpe: number) {
-    updateSet(activeSetIndex, { rpe })
-    setRpePickerOpen(false)
+  function pickRir(rpe: number) {
+    setSelectedRir(rpe)
+  }
+
+  function handleDone() {
+    if (selectedRir === null) return
+    updateSet(activeSetIndex, { rpe: selectedRir })
     markSetDone(activeSetIndex)
   }
 
@@ -91,7 +95,7 @@ export function CurrentStepCard({
           <div className={pulse ? 'current-step__next current-step__next--pulse' : 'current-step__next'}>
             Следующий: {timedExercise
               ? `${targetReps ?? ''} сек`
-              : `${targetWeight !== null ? `${formatWeight(targetWeight)} кг` : ''}${targetReps !== null ? ` × ${targetReps}` : ''}`}
+              : `${targetWeight !== null ? `${targetWeight} кг` : ''}${targetReps !== null ? ` × ${targetReps}` : ''}`}
           </div>
         )}
         {recommendation?.reason && <div className="muted current-step__reason">{recommendation.reason}</div>}
@@ -110,46 +114,92 @@ export function CurrentStepCard({
     )
   }
 
+  const currentWeight = activeSet?.weight ?? exercise.targetWeight ?? 0
+  const currentReps = activeSet?.reps ?? exercise.repMin ?? 0
+  const weightStep = exercise.weightStep > 0 ? exercise.weightStep : 2.5
+
+  // RIR dots: short labels + tone for the 4 options (запас → отказ)
+  const rirDots = [
+    { rpe: 6, label: '4+', hint: 'Легко', tone: 'success' },
+    { rpe: 7, label: '3', hint: 'Норм', tone: 'success' },
+    { rpe: 8, label: '1–2', hint: 'Тяж', tone: 'warning' },
+    { rpe: 10, label: '0', hint: 'Макс', tone: 'danger' },
+  ]
+
   return (
-    <div className="card current-step">
-      <div className="current-step__eyebrow">Сейчас · подход {setNumber} из {totalSets}</div>
-      <div className="current-step__value">
-        {timedExercise
-          ? `${activeSet?.reps || exercise.repMin} сек`
-          : `${formatWeight(activeSet?.weight ?? 0)} кг × ${activeSet?.reps || exercise.repMin}`}
+    <div className="card current-step current-step--logger">
+      <div className="current-step__eyebrow">Подход {setNumber} из {totalSets}</div>
+
+      {/* Issue #123: ± steppers for weight and reps */}
+      <div className="current-step__steppers">
+        {!timedExercise && (
+          <Stepper
+            value={currentWeight}
+            step={weightStep}
+            min={0}
+            onChange={(v) => updateSet(activeSetIndex, { weight: v })}
+            label="Вес (кг)"
+            variant="big"
+            aria-label="Вес"
+          />
+        )}
+        <Stepper
+          value={currentReps}
+          step={1}
+          min={0}
+          onChange={(v) => updateSet(activeSetIndex, { reps: v })}
+          label={timedExercise ? 'Секунды' : 'Повторы'}
+          variant="big"
+          aria-label="Повторы"
+        />
       </div>
-      {recommendation?.reason && !rpePickerOpen && (
-        <div className="muted current-step__reason">{recommendation.reason}</div>
-      )}
-      {rpePickerOpen ? (
-        <div className="current-step__rpe" role="group" aria-label="Как прошёл подход?">
-          <div className="muted">Как прошёл подход?</div>
-          <div className="current-step__rpe-options">
-            {difficultyOptions.map((option) => (
+
+      {/* Issue #123: RIR scale — dots on a line (запас → отказ), как в прототипе */}
+      <div className="rir-scale" role="group" aria-label="Сколько ещё сделаешь?">
+        <span className="rir-scale__label">Сколько ещё сделаешь?</span>
+        <div className="rir-track">
+          <div className="rir-track__line" aria-hidden="true" />
+          <div className="rir-track__dots">
+            {rirDots.map((dot) => (
               <button
-                key={option.value}
-                className="secondary"
+                key={dot.rpe}
                 type="button"
-                onClick={() => pickRpe(option.value)}
-                aria-label={`${option.label} — ${option.hint}`}
+                className={`rir-dot rir-dot--${dot.tone} ${selectedRir === dot.rpe ? 'rir-dot--active' : ''}`}
+                onClick={() => pickRir(dot.rpe)}
+                aria-label={`${dot.hint} — ${dot.label} в запасе`}
+                aria-pressed={selectedRir === dot.rpe}
               >
-                <b>{option.label}</b>
-                <small>{option.hint}</small>
+                <span className="rir-dot__circle"><span className="rir-dot__inner" /></span>
+                <span className="rir-dot__value">{dot.label}</span>
               </button>
             ))}
           </div>
-          <button className="secondary compact" type="button" onClick={() => setRpePickerOpen(false)}>Назад</button>
+          <div className="rir-track__ends">
+            <span>запас</span>
+            <span>отказ</span>
+          </div>
         </div>
-      ) : (
-        <button
-          className="primary current-step__done"
-          type="button"
-          onClick={() => setRpePickerOpen(true)}
-          aria-label={`Подход ${setNumber} выполнен`}
-        >
-          Готово
-        </button>
+      </div>
+
+      {/* Issue #123: coach hint line (green left border) */}
+      {recommendation?.reason && (
+        <div className="coach-hint">
+          {recommendation.source === 'llm' && <span className="coach-hint__tag">ИИ</span>}
+          <span className="coach-hint__text">{recommendation.reason}</span>
+        </div>
       )}
+
+      {/* Issue #123: Готово — disabled until RIR chosen */}
+      <button
+        className="primary current-step__done"
+        type="button"
+        onClick={handleDone}
+        disabled={selectedRir === null}
+        aria-label={`Подход ${setNumber} выполнен`}
+      >
+        {selectedRir !== null ? `Готово · подход ${setNumber}` : 'Выбери остаток повторов'}
+      </button>
     </div>
   )
 }
+

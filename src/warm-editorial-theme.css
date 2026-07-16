@@ -16,14 +16,15 @@
   --font-ui: 'Space Grotesk', system-ui, sans-serif;
   --warm-editorial: 1;  /* cache buster — не удалять */
 
-  /* Поверхности — тёплая «бумага» вместо системно-серого iOS */
-  --app-bg: #E9E2D4;
+  /* Поверхности — тёплая «бумага» вместо системно-серого iOS.
+     Значения сведены к прототипу (README «Prototype LIGHT values»). */
+  --app-bg: #E4DCCB;
   --bg: #F1E9DB;
   --surface: #FFFDF9;
   --surface-solid: #FFFDF9;
   --surface-muted: #EAE0CF;
   --border: rgba(34, 32, 27, 0.12);
-  --separator: rgba(34, 32, 27, 0.12);
+  --separator: rgba(34, 32, 27, 0.09);
 
   /* Текст — тёплый near-black */
   --text-primary: #22201B;
@@ -41,9 +42,10 @@
 
   /* Тёмная hero-карточка — тёплый эспрессо вместо чёрного */
   --hero-bg: #2A2018;
+  --hero-2: #3A2C20;            /* второй уровень hero (градиенты, вложенные блоки) */
   --hero-text: #F1E9DB;
-  --hero-text-muted: rgba(241, 233, 219, 0.78);
-  --hero-text-tertiary: rgba(241, 233, 219, 0.58);
+  --hero-text-muted: rgba(241, 233, 219, 0.72);
+  --hero-text-tertiary: rgba(241, 233, 219, 0.5);
 
   --shadow-soft: 0 18px 44px rgba(60, 40, 20, 0.12);
   color-scheme: light;
@@ -126,11 +128,6 @@
 .set-collapsed .set-actions { flex-wrap: nowrap; width: 100%; }
 .set-collapsed .set-actions .secondary.compact { flex: 0 0 auto; white-space: nowrap; }
 
-/* 2) Наезд: в режиме зала прячем фиксированную кнопку смены темы —
-   во время тренировки она не нужна и перекрывает «удалить». */
-.app-shell--gym .theme-toggle,
-.phone.gym-mode .theme-toggle { display: none; }
-
 /* 3) Компактная «шапка упражнения» над степпером (см. патч в GymScreen).
    Название — крупным серивом, «Техника/Замена» — мелкими нейтральными. */
 .gym-exercise-head {
@@ -160,20 +157,603 @@
    ПАТЧ 5 — СТЕНА ТЕКСТА → СКАНИРУЕМЫЙ ЭКРАН
    ===================================================================== */
 
-/* 5b: Строки разбора — заголовок + метка, детали в раскрытии */
-.review-row { border-bottom: 1px solid var(--separator); }
-.review-row > summary {
-  display: flex; align-items: center; gap: 12px; padding: 14px 2px;
-  list-style: none; cursor: pointer;
+/* 5b: Недельный разбор — прототип: кнопки с двумя строками + › */
+.review-card {
+  padding: 2px 16px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
-.review-row > summary::-webkit-details-marker { display: none; }
-.review-row__dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
-.review-row__dot--high { background: var(--danger); }
-.review-row__dot--medium { background: var(--warning); }
-.review-row__dot--low { background: var(--success); }
-.review-row__title { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; line-height: 1.3; }
-.review-row__meta { color: var(--text-tertiary); font-size: 12px; white-space: nowrap; }
-.review-row__body { margin: 0 0 12px 20px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+
+/* Вертикальная ритмика между секциями на домашнем экране (прототип) */
+.home-screen .goals-section,
+.home-screen .section-list,
+.home-screen .library-btn {
+  margin-top: 20px;
+}
+
+/* Блок «Далее» — прототип: бейдж-буква + две строки + кнопка */
+.next-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--separator);
+}
+.next-row__badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 0 0 auto;
+}
+.next-row__body {
+  flex: 1;
+  min-width: 0;
+}
+.next-row__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.next-row__meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+.next-row__action {
+  font: 600 13px var(--font-ui);
+  color: var(--accent);
+  background: none;
+  border: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.review-card__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--separator);
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+.review-card__row:last-child {
+  border-bottom: 0;
+}
+.review-card__dot {
+  width: 8px; height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.review-card__dot--high { background: var(--danger); }
+.review-card__dot--medium { background: var(--warning); }
+.review-card__dot--low { background: var(--success); }
+.review-card__body {
+  flex: 1;
+  min-width: 0;
+}
+.review-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+.review-card__meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+.review-card__arrow {
+  color: var(--text-tertiary);
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+
+/* Нижняя навигация — прототип: светлая карточка, акцентный активный */
+.nav {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  backdrop-filter: none;
+  box-shadow: var(--shadow-soft);
+}
+.nav button {
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  padding: 9px 0 7px;
+  border-radius: 15px;
+  font: 600 11px var(--font-ui);
+  color: var(--text-tertiary);
+}
+.nav button.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+/* Экран библиотеки — прототип: заголовок, поиск, пилюли, список */
+.library-screen__header {
+  padding: 8px 18px 0;
+}
+.library-screen__title {
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+}
+.library-screen__search {
+  display: block;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: 400 14px var(--font-ui);
+  outline: none;
+}
+.library-screen__search:focus {
+  border-color: var(--accent);
+}
+.library-screen__filters {
+  display: flex;
+  gap: 7px;
+  padding: 12px 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.library-screen__filters::-webkit-scrollbar { display: none; }
+.library-screen__count {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  padding: 0 18px 8px;
+}
+.library-screen__list {
+  padding: 0 18px 24px;
+}
+.library-screen__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--separator);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.library-screen__row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.library-screen__row-group {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  flex: 0 0 auto;
+}
+.library-screen__row-arrow {
+  color: var(--text-tertiary);
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+
+/* Library sheet — прототип: bottom-sheet с фильтрами и списком */
+.lib-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(20, 14, 8, 0.42);
+  display: flex;
+  align-items: flex-end;
+}
+.lib-sheet {
+  width: 100%;
+  height: 88%;
+  background: var(--bg);
+  border-radius: 30px 30px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: sheetup .34s cubic-bezier(.2, .8, .2, 1) both;
+}
+.lib-sheet__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px 12px;
+  flex: 0 0 auto;
+}
+.lib-sheet__title {
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.lib-sheet__close {
+  width: 34px; height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.lib-sheet__search {
+  display: block;
+  margin: 0 22px 12px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-primary);
+  font: 400 14px var(--font-ui);
+  outline: none;
+}
+.lib-sheet__search:focus {
+  border-color: var(--accent);
+}
+.lib-sheet__filters {
+  display: flex;
+  gap: 7px;
+  padding: 0 22px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 0 0 auto;
+}
+.lib-sheet__filters::-webkit-scrollbar { display: none; }
+.lib-pill {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font: 600 12px var(--font-ui);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+  flex: 0 0 auto;
+}
+.lib-pill--active {
+  background: var(--text-primary);
+  color: var(--bg);
+  border-color: var(--text-primary);
+}
+.lib-sheet__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 22px 24px;
+}
+.lib-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--separator);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.lib-row__icon {
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+.lib-row__body {
+  flex: 1;
+  min-width: 0;
+}
+.lib-row__name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.lib-row__group {
+  display: block;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+.lib-row__action {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Hero-карточка на экране Плана — прототип */
+.plan-hero {
+  border-radius: 24px;
+  background: var(--hero-bg);
+  color: var(--hero-text);
+  padding: 22px;
+}
+.plan-hero__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.plan-hero__info {
+  min-width: 0;
+}
+.plan-hero__eyebrow {
+  font: 600 11px var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hero-text-tertiary);
+}
+.plan-hero__title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.05;
+  margin-top: 6px;
+}
+.plan-hero__duration {
+  flex: 0 0 auto;
+  padding-left: 12px;
+  text-align: right;
+}
+.plan-hero__dur-num {
+  display: block;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+}
+.plan-hero__dur-unit {
+  display: block;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  color: var(--hero-text-tertiary);
+}
+.plan-hero__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.plan-hero__pill {
+  font: 600 12px var(--font-ui);
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hero-text) 10%, transparent);
+  color: var(--hero-text-muted);
+}
+.plan-hero__pill--green {
+  background: color-mix(in srgb, var(--success) 30%, transparent);
+  color: var(--hero-text);
+}
+.plan-hero__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.plan-hero__action-primary {
+  flex: 1;
+  padding: 15px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #fff;
+  font: 600 15px var(--font-ui);
+  cursor: pointer;
+}
+.plan-hero__action-secondary {
+  flex: 0 0 auto;
+  padding: 15px 18px;
+  border: 1px solid color-mix(in srgb, var(--hero-text) 22%, transparent);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--hero-text);
+  font: 600 14px var(--font-ui);
+  cursor: pointer;
+}
+	
+/* Прогресс — hero-карточка (прототип) */
+.progress-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--hero-bg);
+  color: var(--hero-text);
+}
+.progress-hero__left {
+  min-width: 0;
+}
+.progress-hero__title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.12;
+}
+.progress-hero__meta {
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--hero-text-muted);
+}
+.progress-hero__orb {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex: 0 0 auto;
+}
+.progress-hero__orb-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.progress-hero__orb-text > div {
+  line-height: 1;
+}
+.progress-hero__orb-num {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+}
+.progress-hero__orb-label {
+  font-size: 9px;
+  color: var(--hero-text-tertiary);
+  line-height: 1;
+  margin-top: 2px;
+}
+
+/* Bottom-sheet история тренировки — список упражнений с подходами */
+.history-detail__list {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.history-detail__exercise {
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--separator);
+}
+.history-detail__ex-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.history-detail__sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.history-detail__set {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.history-detail__ex-vol {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+.history-detail__total {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 2px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Bottom-sheet для деталей недельного разбора (прототип) */
+.review-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(20, 14, 8, 0.42);
+  display: flex;
+  align-items: flex-end;
+}
+.review-sheet {
+  width: 100%;
+  background: var(--bg);
+  border-radius: 30px 30px 0 0;
+  padding: 24px 22px calc(22px + env(safe-area-inset-bottom));
+  animation: sheetup .34s cubic-bezier(.2, .8, .2, 1) both;
+  max-height: 86%;
+  overflow-y: auto;
+}
+@keyframes sheetup {
+  0% { transform: translateY(100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.review-sheet__grabber {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 0 auto 18px;
+}
+.review-sheet__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.review-sheet__copy {
+  min-width: 0;
+}
+.review-sheet__kicker {
+  font: 600 11px var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.review-sheet__title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.04;
+  margin-top: 4px;
+  color: var(--text-primary);
+}
+.review-sheet__close {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.review-sheet__body {
+  margin-top: 18px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+.review-sheet__done {
+  margin-top: 20px;
+}
 
 /* 5c: Обрезка и перенос — текст не сжимается, обрезается многоточием */
 .workout-row__title, .plan-card__title, .timeline-card__title {
@@ -186,22 +766,1542 @@
 .plan-card__actions { display: flex; gap: 8px; margin-top: 12px; }
 
 /* 5d: Safe-area — отступ сверху под статус-бар */
-.screen { padding-top: max(16px, env(safe-area-inset-top)); }
+.screen {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+/* Eyebrow на домашнем экране «Сегодня · DD месяц» — прототипный стиль */
+.home-screen .screen-header__copy .eyebrow {
+  font: 600 12px 'Space Grotesk';
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* Заголовок «Тренер» — прототип: serif 38px/1 */
+.home-screen .screen-header__copy h1 {
+  font-size: 38px;
+  line-height: 1;
+}
+
+/* Кнопка «Начать тренировку» в hero — прототип */
+.home-screen .hero-status__actions .primary {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  font: 600 16px 'Space Grotesk';
+  gap: 9px;
+}
+
+/* Кнопка «Тренировка вне плана» — прототип */
+.home-screen .hero-status__secondary {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--hero-text-muted);
+  font: 500 14px 'Space Grotesk';
+}
 
 /* Тёмная тема (data-theme="dark") — тёплый вариант, при желании оставьте
    существующий iOS-dark. Здесь минимальный тёплый сдвиг: */
 :root[data-theme="dark"] {
-  --app-bg: #17130E;
-  --bg: #211B14;
-  --surface: rgba(42, 32, 24, 0.9);
-  --surface-solid: #2A2018;
-  --surface-muted: #33291F;
-  --separator: rgba(241, 233, 219, 0.16);
+  /* Прототип DARK (README «Prototype DARK values»). */
+  --app-bg: #0B0805;
+  --bg: #171209;
+  --surface: #221A11;
+  --surface-solid: #221A11;
+  --surface-muted: #2E2417;
+  --border: rgba(241, 233, 219, 0.13);
+  --separator: rgba(241, 233, 219, 0.09);
   --text-primary: #F1E9DB;
   --text-secondary: rgba(241, 233, 219, 0.7);
-  --text-tertiary: rgba(241, 233, 219, 0.45);
-  --accent: #E86A3E;
+  --text-tertiary: rgba(241, 233, 219, 0.44);
+  --accent: #EC6C3F;
   --accent-pressed: #DA5326;
-  --success: #6B9A78;
-  --hero-bg: #2A2018;
+  --success: #7CA98A;
+  --success-pressed: #5E8C6B;
+  --warning: #D89A54;
+  --danger: #DE6B58;
+  --hero-bg: #251C13;
+  --hero-2: #31251A;
+  --hero-text: #F4EDE0;
+  --hero-text-muted: rgba(244, 237, 224, 0.72);
+  --hero-text-tertiary: rgba(244, 237, 224, 0.5);
+}
+
+/* =====================================================================
+   ПРИМИТИВЫ UI KIT (issue #115) — Stepper / SegmentedControl / Pill.
+   Используются на нескольких экранах; стили живут здесь, рядом с токенами.
+   ===================================================================== */
+
+/* --- Stepper: `− [value] +`. Компактный ряд по умолчанию. --- */
+.stepper { display: block; }
+.stepper__label {
+  display: block;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.stepper__row {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center; gap: 10px; margin-top: 8px;
+}
+.stepper__btn {
+  height: 48px; border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--text-primary);
+  font-size: 24px; font-weight: 400; line-height: 1;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.stepper__btn--plus {
+  border: 0; background: var(--hero-bg); color: var(--hero-text);
+}
+.stepper__btn:active { transform: scale(0.97); }
+.stepper__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.stepper__value {
+  text-align: center; font-variant-numeric: tabular-nums;
+  font-family: var(--font-display, inherit);
+  font-size: 38px; font-weight: 500; line-height: 1;
+  color: var(--text-primary);
+}
+
+/* big — повторяет прототип зального логгера (56px кнопки, 60px сериф). */
+.stepper--big .stepper__row {
+  grid-template-columns: 58px 1fr 58px;
+}
+.stepper--big .stepper__btn { height: 56px; font-size: 28px; }
+.stepper--big .stepper__value { font-size: 60px; }
+
+/* --- SegmentedControl: пилюля переключателей. --- */
+.segmented {
+  display: inline-flex; gap: 3px;
+  padding: 4px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.segmented--rounded {
+  border-radius: 14px;
+  width: 100%;
+}
+.segmented--rounded .segmented__option {
+  flex: 1;
+  padding: 9px 0;
+  font: 600 13px var(--font-ui);
+}
+.segmented__option {
+  border: 0; border-radius: 999px;
+  padding: 7px 15px;
+  background: transparent; color: var(--text-secondary);
+  font: 600 12px var(--font-ui);
+  transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.segmented__option--active {
+  background: var(--text-primary); color: var(--bg);
+}
+.segmented__option:active { transform: scale(0.97); }
+.segmented--rounded .segmented__option { border-radius: 11px; }
+
+/* --- Pill: капсула-метка. Тоны через --pill-*. --- */
+.pill--button {
+  border: 0; cursor: pointer;
+  transition: transform 120ms ease;
+}
+.pill--button:active { transform: scale(0.96); }
+.pill--neutral { color: var(--text-secondary); background: var(--surface-muted); }
+.pill--accent { color: var(--accent-pressed); background: rgba(218, 83, 38, 0.12); }
+.pill--success { color: var(--success-pressed); background: rgba(78, 122, 91, 0.14); }
+.pill--warning { color: var(--warning); background: rgba(198, 122, 46, 0.14); }
+.pill--danger { color: var(--danger); background: rgba(194, 59, 46, 0.12); }
+.pill--on-hero {
+  color: var(--hero-text-muted);
+  background: color-mix(in srgb, var(--hero-text) 12%, transparent);
+}
+/* В тёмной теме акцент/тон-на-хиро держат тёплый контраст. */
+:root[data-theme="dark"] .pill--accent {
+  color: var(--accent); background: rgba(236, 108, 63, 0.16);
+}
+:root[data-theme="dark"] .pill--success {
+  color: var(--success); background: rgba(124, 169, 138, 0.16);
+}
+:root[data-theme="dark"] .pill--warning {
+  color: var(--warning); background: rgba(216, 154, 84, 0.16);
+}
+:root[data-theme="dark"] .pill--danger {
+  color: var(--danger); background: rgba(222, 107, 88, 0.16);
+}
+
+/* --- ProfileMenu: единая кнопка-аватар с выпадающим списком (issue #116). --- */
+.profile-menu { position: relative; flex: 0 0 auto; }
+.profile-menu__avatar {
+  width: 44px; height: 44px; border: 0;
+  border-radius: 14px;
+  background: var(--hero-bg); color: var(--hero-text);
+  display: grid; place-items: center;
+  font: 700 15px var(--font-ui);
+  transition: transform 120ms ease;
+}
+.profile-menu__avatar:active { transform: scale(0.96); }
+.profile-menu__popover {
+  position: absolute; top: 100%; right: 0; margin-top: 8px; z-index: 30;
+  min-width: 210px; padding: 6px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 40px rgba(60, 40, 20, 0.22);
+  animation: pop .16s ease both;
+}
+@keyframes pop { 0% { transform: scale(0.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.profile-menu__heading {
+  padding: 8px 10px 4px;
+  font: 600 10px var(--font-ui);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.profile-menu__list { display: flex; flex-direction: column; gap: 2px; }
+.profile-menu__item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 12px;
+  background: transparent; text-align: left;
+  transition: background-color 120ms ease;
+}
+.profile-menu__item:active { background: var(--surface-muted); }
+.profile-menu__mini {
+  width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
+  background: var(--hero-bg); color: var(--hero-text);
+  display: grid; place-items: center;
+  font: 700 13px var(--font-ui);
+}
+.profile-menu__name {
+  flex: 1; min-width: 0;
+  font: 600 14px var(--font-ui); color: var(--text-primary);
+}
+.profile-menu__check {
+  flex: 0 0 auto;
+  color: var(--accent); font-weight: 700; font-size: 15px;
+}
+
+/* --- HeroStatus extensions (issue #117): metadata pill + «начинаем с» row. --- */
+/* Метаданные как pill в правом верхнем углу hero (прототип). */
+.hero-status__metadata-pill {
+  flex: 0 0 auto;
+  font: 600 11px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  padding: 4px 9px;
+}
+/* Eyebrow в hero — uppercase tracking по прототипу. */
+.hero-status__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 11px; font-weight: 600;
+}
+.hero-status h2 {
+  font-family: var(--font-display, inherit);
+  font-size: 34px; font-weight: 500; line-height: 1.02;
+  margin: 12px 0 0;
+}
+/* Boxed «Начинаем с <b>упражнение</b>  ·  вес». */
+.hero-status__info {
+  margin-top: 16px;
+  padding: 12px 14px; border-radius: 14px;
+  background: color-mix(in srgb, var(--hero-text) 8%, transparent);
+}
+.hero-status__start {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+}
+.hero-status__start-dot {
+  width: 8px; height: 8px; border-radius: 999px;
+  background: var(--accent); flex: 0 0 auto;
+}
+.hero-status__start-label {
+  flex: 1; min-width: 0;
+  font-size: 14px; color: var(--hero-text-muted);
+}
+.hero-status__start-label b {
+  color: var(--hero-text); font-weight: 600;
+}
+.hero-status__start-weight {
+  flex: 0 0 auto; margin-left: auto;
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px; font-weight: 500; color: var(--hero-text);
+}
+/* Compact stacked «56 / мин» metric for the Plan hero — keeps the metric
+   narrow so a long title («Следующая тренировка») no longer breaks mid-word. */
+.hero-metric-mins {
+  display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+}
+.hero-metric-mins b {
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-hero); font-weight: 600;
+}
+.hero-metric-mins small {
+  margin-top: 2px;
+  font-size: 11px; font-weight: 600;
+  color: var(--hero-text-tertiary);
+}
+
+/* --- Mesocycle card (issue #118). --- */
+.mesocycle-card {
+  margin-top: 14px;
+  margin-bottom: 12px;
+  padding: 15px 17px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.mesocycle-card__head {
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.mesocycle-card__phase {
+  font: 600 12px var(--font-ui);
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mesocycle-card__weeks {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.mesocycle-card__bar {
+  display: flex; gap: 5px; margin-top: 11px;
+}
+.mesocycle-card__seg {
+  flex: 1; height: 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 26%, transparent);
+}
+.mesocycle-card__seg--done {
+  background: var(--success);
+}
+
+/* --- Section headers — serif 22px (прототип). --- */
+.section-list__header h2 {
+  font-family: var(--font-display, inherit);
+  font-size: 22px; font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+/* --- Goals card (прототип). --- */
+.goals-section {
+  margin-top: 20px;
+}
+.goals-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.goals-title {
+  font-family: var(--font-display, inherit);
+  font-size: 22px; font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0;
+}
+.goals-header-add {
+  font: 600 12px var(--font-ui);
+  color: var(--accent);
+  background: none; border: 0;
+  cursor: pointer;
+}
+.goal-card {
+  padding: 15px 16px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.goal-card:last-child { margin-bottom: 0; }
+.goal-card__body {
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.goal-card__icon {
+  flex: 0 0 auto; margin-top: 2px;
+}
+.goal-card__info { flex: 1; min-width: 0; }
+.goal-card__title {
+  font-family: var(--font-display, inherit);
+  font-size: 16px; font-weight: 500;
+  color: var(--text-primary);
+}
+.goal-card__meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+.goal-card__remove {
+  flex: 0 0 auto;
+  font: 600 12px var(--font-ui);
+  color: var(--text-tertiary);
+  background: none; border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.goals-empty {
+  padding: 18px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.goals-empty p { margin: 0 0 12px; }
+.goals-add-btn {
+  padding: 11px 16px; border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font: 600 13px var(--font-ui);
+  cursor: pointer;
+}
+
+/* --- Plan horizon toggle (issue #119). --- */
+.plan-horizon-toggle {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+/* Кнопка «Библиотека» — прототип: книга + две строки + › */
+.library-btn {
+  width: 100%;
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.library-btn:active {
+  background: var(--surface-muted);
+}
+.library-btn__text {
+  flex: 1;
+}
+.library-btn__title {
+  display: block;
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.library-btn__sub {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+.library-btn__arrow {
+  color: var(--text-tertiary);
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+
+/* --- Metric cards — serif 28px values (прототип). --- */
+.metric-card span {
+  font: 600 12px var(--font-ui);
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.metric-card b {
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px; font-weight: 500; line-height: 1.05;
+  white-space: nowrap;
+}
+/* Перебиваем .metric-card span для вложенных элементов метрик */
+.metric-card .metric-card__unit {
+  font: 500 14px var(--font-ui);
+  color: var(--text-secondary);
+  margin-left: 4px;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline;
+}
+.metric-card .metric-card__fraction-num,
+.metric-card .metric-card__fraction-den {
+  display: inline;
+  font: 500 28px/1.05 var(--font-display);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.metric-card .metric-card__fraction-num {
+  color: var(--success);
+}
+.metric-card .metric-card__fraction-den {
+  color: var(--text-tertiary);
+}
+
+/* --- Plan week strip wrapper — над hero-карточкой --- */
+.plan-week-strip-wrap {
+  margin-bottom: 16px;
+}
+.plan-week-strip-wrap .plan-week-strip {
+  margin: 0;
+}
+
+/* --- Plan week strip (issue #120) — компактная 7-дневная лента. --- */
+.plan-week-strip {
+  display: flex; gap: 6px; margin: 10px 0;
+}
+.plan-week-day {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 0; border-radius: 14px; border: 1px solid var(--separator);
+  background: transparent; cursor: pointer;
+  font-family: var(--font-ui);
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.plan-week-day:active { transform: scale(0.97); }
+.plan-week-day__wd {
+  font: 600 10px var(--font-ui);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.plan-week-day__num {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px; font-weight: 600;
+  color: var(--text-tertiary);
+}
+.plan-week-day__dot {
+  width: 5px; height: 5px; border-radius: 999px;
+  background: transparent;
+}
+.plan-week-day--today {
+  background: var(--hero-bg); border-color: var(--hero-bg);
+}
+.plan-week-day--today .plan-week-day__wd { color: var(--hero-text-tertiary); }
+.plan-week-day--today .plan-week-day__num { color: var(--hero-text); }
+.plan-week-day--today .plan-week-day__dot { background: var(--accent); }
+.plan-week-day--next {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.plan-week-day--next .plan-week-day__wd,
+.plan-week-day--next .plan-week-day__num { color: var(--accent); }
+.plan-week-day--next .plan-week-day__dot { background: var(--accent); }
+.plan-week-day--done {
+  background: var(--surface); border-color: var(--border);
+}
+.plan-week-day--done .plan-week-day__num { color: var(--text-primary); }
+.plan-week-day--done .plan-week-day__dot { background: var(--success); }
+.plan-week-day--plan {
+  background: var(--surface); border-color: var(--border);
+}
+.plan-week-day--plan .plan-week-day__num { color: var(--text-primary); }
+.plan-week-day--plan .plan-week-day__dot {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.plan-day-note {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 13px; border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font: 600 13px var(--font-ui); color: var(--accent);
+}
+.plan-readiness-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin: 14px 0; padding: 15px 17px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.plan-readiness-row__label {
+  font: 600 12px var(--font-ui);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.plan-readiness-row__value {
+  font-family: var(--font-display, inherit);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px; font-weight: 500; color: var(--success);
+}
+.plan-readiness-row__value small {
+  font-family: var(--font-ui); font-size: 14px;
+  color: var(--text-tertiary); font-weight: 500;
+}
+
+/* --- Plan Mesocycle view (issue #121). --- */
+.plan-meso-view { margin-top: 6px; }
+.plan-meso-intro {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-radius: 16px;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 26%, transparent);
+  margin-bottom: 14px;
+  font-size: 13px; line-height: 1.4; color: var(--text-secondary);
+}
+.plan-meso-intro svg { flex: 0 0 auto; color: var(--success); }
+.plan-meso-week {
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 2px; border-bottom: 1px solid var(--separator);
+}
+.plan-meso-week__dot {
+  width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto;
+}
+.plan-meso-week--done .plan-meso-week__dot { background: var(--success); }
+.plan-meso-week--now .plan-meso-week__dot { background: var(--accent); }
+.plan-meso-week--plan .plan-meso-week__dot {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.plan-meso-week__copy { flex: 1; min-width: 0; }
+.plan-meso-week__label {
+  font-family: var(--font-display, inherit);
+  font-size: 16px; font-weight: 500; color: var(--text-primary);
+}
+.plan-meso-week__days {
+  font-size: 13px; color: var(--text-secondary); margin-top: 1px;
+}
+.plan-meso-week__side { text-align: right; flex: 0 0 auto; }
+.plan-meso-week__tag {
+  font: 600 11px var(--font-ui);
+  padding: 4px 9px; border-radius: 999px;
+}
+.plan-meso-week__tag--done {
+  background: var(--surface-muted); color: var(--text-secondary);
+}
+.plan-meso-week__tag--now {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.plan-meso-week__tag--plan {
+  background: var(--surface-muted); color: var(--text-tertiary);
+}
+.plan-meso-week__vol {
+  font-size: 12px; color: var(--text-tertiary); margin-top: 5px;
+}
+.plan-meso-empty {
+  margin-top: 16px; padding: 18px;
+  border-radius: 16px; background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+/* =====================================================================
+   Issue #122 — Gym: slim top bar + set chips + sticky actions + rest card
+   ===================================================================== */
+
+/* --- Slim top bar: ← Выйти · progress · i/N --- */
+.session-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.session-top-bar__back {
+  background: none; border: none;
+  font-size: 15px; color: var(--text-secondary);
+  cursor: pointer; white-space: nowrap;
+  padding: 4px 0;
+}
+.session-top-bar__progress {
+  flex: 1;
+  height: 6px;
+  background: var(--surface-muted);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.session-top-bar__progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.session-top-bar__counter {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Set chips row: равномерно на всю ширину, не зависит от 3 подходов. --- */
+.set-chips {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 6px;
+  padding: 8px 16px;
+}
+.set-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.set-chip--done {
+  background: rgba(78, 122, 91, 0.1);
+  border-color: rgba(78, 122, 91, 0.3);
+  color: var(--success-pressed);
+}
+.set-chip--current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--hero-text);
+  font-weight: 600;
+}
+.set-chip--upcoming {
+  background: var(--surface-muted);
+  color: var(--text-tertiary);
+}
+.set-chip__num {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+/* set-chip__value скрыт для upcoming — номер показывает только __num без дубляжа */
+.set-chip--upcoming .set-chip__value {
+  display: none;
+}
+.set-chip__value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Sticky action bar (redesigned) --- */
+.gym-action-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 10;
+}
+.gym-action-bar .primary { flex: 1; }
+.gym-action-bar__finish {
+  flex: 0 0 auto;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius-md, 12px);
+  background: var(--hero-bg);
+  color: var(--hero-text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* --- Dashed "Добавить упражнение" + danger "Удалить" --- */
+.gym-add-exercise-btn {
+  width: 100%;
+  padding: 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  margin: 8px 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.gym-add-exercise-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.gym-remove-exercise-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.gym-remove-exercise-btn:hover { opacity: 1; }
+
+/* --- Rest timer card (hero-bg, large timer) --- */
+.current-step--rest {
+  background: var(--hero-bg);
+  color: var(--hero-text);
+  border: none;
+}
+.current-step--rest .current-step__eyebrow {
+  color: var(--hero-text-tertiary);
+}
+.current-step--rest .current-step__timer {
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--hero-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin: 8px 0;
+}
+.current-step--rest .current-step__next {
+  color: var(--hero-text-muted);
+  font-size: 14px;
+}
+.current-step--rest .current-step__reason {
+  color: var(--hero-text-tertiary);
+}
+.current-step--rest .current-step__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.current-step--rest .current-step__actions button {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid rgba(241, 233, 219, 0.2);
+  border-radius: var(--radius-md, 12px);
+  background: rgba(241, 233, 219, 0.08);
+  color: var(--hero-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+.current-step--rest .current-step__actions button:hover {
+  background: rgba(241, 233, 219, 0.15);
+}
+
+/* =====================================================================
+   Issue #123 — Gym logger: steppers + RIR scale + coach hint
+   ===================================================================== */
+
+/* --- Steppers layout in logger card --- */
+.current-step--logger {
+  padding: 16px;
+}
+/* Prototype stacks weight and reps as two full-width rows (side-by-side does
+   not fit two 58px-button steppers on a 375px screen — the reps «+» clips). */
+.current-step__steppers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 12px 0 16px;
+}
+.current-step__steppers .stepper {
+  width: 100%;
+}
+
+/* --- RIR scale --- */
+.rir-scale {
+  margin: 18px 0 4px;
+}
+.rir-scale__label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 14px;
+}
+/* Dots-on-a-line (prototype): a track behind 4 circles, value below each,
+   «запас» / «отказ» captions at the ends. */
+.rir-track { position: relative; padding: 0 4px; }
+.rir-track__line {
+  position: absolute; top: 13px; left: 16px; right: 16px;
+  height: 2px; background: var(--separator);
+}
+.rir-track__dots {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+}
+.rir-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.rir-dot__circle {
+  width: 26px; height: 26px; border-radius: 999px;
+  display: grid; place-items: center;
+  border: 2px solid var(--text-tertiary);
+  background: var(--bg);
+  transition: border-color 0.15s, background 0.15s;
+}
+.rir-dot__inner { width: 9px; height: 9px; border-radius: 999px; background: transparent; }
+.rir-dot__value {
+  font-size: 13px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+.rir-dot--active.rir-dot--success .rir-dot__circle { border-color: var(--success); background: var(--success); }
+.rir-dot--active.rir-dot--warning .rir-dot__circle { border-color: var(--warning); background: var(--warning); }
+.rir-dot--active.rir-dot--danger .rir-dot__circle { border-color: var(--danger); background: var(--danger); }
+.rir-dot--active .rir-dot__inner { background: #fff; }
+.rir-dot--active.rir-dot--success .rir-dot__value { color: var(--success); }
+.rir-dot--active.rir-dot--warning .rir-dot__value { color: var(--warning); }
+.rir-dot--active.rir-dot--danger .rir-dot__value { color: var(--danger); }
+.rir-track__ends {
+  display: flex; justify-content: space-between; margin-top: 4px;
+}
+.rir-track__ends span {
+  font-size: 10px; font-weight: 500; color: var(--text-tertiary);
+}
+
+/* --- Coach hint line (green left border) --- */
+.coach-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--success);
+  background: rgba(78, 122, 91, 0.06);
+  border-radius: 0 12px 12px 0;
+  margin: 12px 0;
+}
+.coach-hint__tag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--success-pressed);
+  background: rgba(78, 122, 91, 0.14);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.coach-hint__text {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* --- Готово button states --- */
+.current-step__done:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Compact inline «Прошлый раз / Цель» (prototype), replaces the big MetricPair. */
+.gym-prevgoal {
+  display: flex;
+  gap: 26px;
+  padding: 0 2px;
+  margin: 14px 0 4px;
+}
+.gym-prevgoal__label {
+  display: block;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.gym-prevgoal__value {
+  font-size: 15px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.gym-prevgoal__value--goal { color: var(--success); }
+.gym-prevgoal__trend {
+  display: block;
+  font-size: 11px; color: var(--text-tertiary); margin-top: 2px;
+}
+
+/* Subtle one-line autosave reassurance (replaces the 3-line card). */
+.autosave-line {
+  margin: 12px 0 0;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* =====================================================================
+   Issue #124 — Progress: focus tags + strength section polish
+   ===================================================================== */
+
+/* --- Focus tags (color-coded by status) --- */
+.focus-tag {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.focus-tag--success {
+  background: rgba(78, 122, 91, 0.14);
+  color: var(--success-pressed);
+}
+.focus-tag--warning {
+  background: rgba(198, 122, 46, 0.14);
+  color: var(--warning);
+}
+.focus-tag--danger {
+  background: rgba(194, 59, 46, 0.14);
+  color: var(--danger);
+}
+.focus-tag--neutral {
+  background: var(--surface-muted);
+  color: var(--text-tertiary);
+}
+
+/* --- Strength section: e1RM cards polish --- */
+.e1rm-sparkline-card__footer small.e1rm-trend--up,
+.e1rm-sparkline-card__footer small.e1rm-trend--down {
+  font-weight: 600;
+}
+.e1rm-trend--up { color: var(--success); }
+.e1rm-trend--down { color: var(--danger); }
+
+/* =====================================================================
+   Issue #125 — Review screen redesign
+   ===================================================================== */
+
+.review-screen {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.review-header {
+  text-align: center;
+  padding: 24px 0 16px;
+}
+.review-header h1 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+  margin: 0;
+}
+.review-header p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+/* --- Hero stats grid --- */
+.review-stats-grid {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+}
+.review-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.review-stat__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+.review-stat__value {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display);
+}
+.review-stat__unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-tertiaryary);
+}
+
+/* --- Section headers --- */
+.review-section {
+  margin: 20px 0;
+}
+.review-section h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+
+/* --- Exercise list with marks --- */
+.review-exercise-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.review-exercise-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.review-exercise-row p {
+  margin: 0;
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- Debrief card --- */
+.review-debrief-card {
+  padding: 16px;
+}
+.review-debrief__summary {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.review-debrief__group {
+  margin-bottom: 12px;
+}
+.review-debrief__label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+.review-debrief__line {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 2px 0;
+  color: var(--text-secondary);
+}
+.review-debrief__line--good {
+  color: var(--success-pressed);
+}
+.review-debrief__line--warn {
+  color: var(--warning);
+}
+.review-debrief__why {
+  font-size: 13px;
+  font-style: italic;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* --- Action buttons --- */
+.review-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+  padding-bottom: 24px;
+}
+
+/* =====================================================================
+   Issue #126 — Unified bottom-sheet style
+   All sheets: grabber + header with close ✕ + scrollable body + animation
+   ===================================================================== */
+
+.sheet {
+  /* Ensure sheet is above overlay */
+  z-index: 100;
+}
+
+/* --- Grabber handle (already exists for some sheets, now unified) --- */
+.sheet-handle {
+  width: 44px;
+  height: 5px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: var(--separator);
+  flex: 0 0 auto;
+}
+
+/* --- Sheet header: title + close button --- */
+.sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+}
+.sheet-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+.sheet-header .kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+/* --- Close button --- */
+.sheet-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.sheet-close:hover {
+  background: var(--border);
+}
+
+/* --- Sheet body: scrollable --- */
+.sheet > .sheet-header + *,
+.sheet > .sheet-handle + .sheet-header + * {
+  /* First child after header gets top margin removed if needed */
+}
+
+/* --- Sheet animation (slide up) --- */
+@keyframes sheetup {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet.show {
+  animation: sheetup 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* --- Overlay fade --- */
+@keyframes overlay-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.overlay.show {
+  animation: overlay-fade 0.2s ease;
+}
+
+/* =====================================================================
+   Issue #128 — Layout parity with prototype
+   Override App.css values that don't match the Warm Editorial prototype.
+   ===================================================================== */
+
+/* --- 1. Eyebrow: uppercase + tracking (was none/0) --- */
+.eyebrow {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.hero-status .eyebrow,
+.hero-status__eyebrow {
+  letter-spacing: 0.16em;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* --- 2. Title: 38px / 500 (was 34px / 760) --- */
+.title {
+  font-size: 38px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* --- 3. Border radius tokens (was 30/22) --- */
+:root {
+  --radius-xl: 26px;
+  --radius-lg: 18px;
+}
+:root[data-theme="dark"] {
+  --radius-xl: 26px;
+  --radius-lg: 18px;
+}
+
+/* --- 4. Shadow (was 0 18px 44px rgba(60,40,20,0.12)) --- */
+:root {
+  --shadow-soft: 0 20px 44px rgba(42, 32, 24, 0.28);
+}
+:root[data-theme="dark"] {
+  --shadow-soft: 0 20px 44px rgba(0, 0, 0, 0.4);
+}
+
+/* --- 5. Hero card padding (was --space-5 = 20px) --- */
+.hero-status {
+  padding: 22px;
+}
+
+/* --- 6. Button font-weights --- */
+.primary {
+  font-weight: 600;
+  padding: 16px;
+}
+.secondary {
+  font-weight: 500;
+  padding: 12px;
+}
+.nav button {
+  font-weight: 600;
+}
+
+/* --- 7. Badge / pill font-weight (was 780) --- */
+.badge,
+.pill {
+  font-weight: 600;
+}
+
+/* =====================================================================
+   POLISH PASS — PreWorkoutPreview + Gym session + general improvements
+   Приводит оставшиеся экраны в соответствие с прототипом.
+   ===================================================================== */
+
+/* --- PreWorkoutPreview: тёплая editorial-стилизация --- */
+.preview-screen .back {
+  font-family: var(--font-ui);
+  font-size: 14px; font-weight: 600;
+  color: var(--text-secondary);
+  background: none; border: 0;
+  padding: 4px 0 12px;
+  cursor: pointer;
+}
+.preview-screen > .top {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.preview-screen > .top .kicker {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.preview-screen > .top .title {
+  font-family: var(--font-display);
+  font-size: 32px; font-weight: 500; line-height: 1.02;
+  color: var(--text-primary);
+  margin: 4px 0 0;
+}
+.preview-screen > .top .badge {
+  flex: 0 0 auto;
+  font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 999px;
+  background: var(--surface-muted); color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* hero card on preview — dark espresso like home */
+.preview-screen .preworkout-hero {
+  margin-top: 14px;
+  padding: 20px 22px;
+  border-radius: 24px;
+  background: var(--hero-bg);
+  color: var(--hero-text);
+}
+.preview-screen .preworkout-hero .label {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--hero-text-tertiary);
+}
+.preview-screen .preworkout-hero h1 {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: 20px; font-weight: 500; line-height: 1.3;
+  color: var(--hero-text);
+}
+
+/* cards on preview screen */
+.preview-screen .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: none;
+}
+.preview-screen .card h3 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 15px; font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* checkin grid buttons — warm pill style */
+.preview-screen .checkin-panel {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+}
+.preview-screen .checkin-grid button,
+.preview-screen .checkin-choice-row button {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px; font-weight: 600;
+  color: var(--text-primary);
+  min-height: 40px;
+}
+.preview-screen .checkin-grid button.active,
+.preview-screen .checkin-choice-row button.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent-pressed);
+}
+.preview-screen .checkin-grid button.danger.active,
+.preview-screen .checkin-choice-row button.danger.active {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--danger);
+}
+
+/* readiness grid — larger option cards */
+.preview-screen .readiness-grid button {
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 80px;
+}
+.preview-screen .readiness-grid button b {
+  font-family: var(--font-ui);
+  font-size: 15px; font-weight: 700;
+}
+.preview-screen .readiness-grid button span {
+  font-size: 12px; font-weight: 500;
+  color: var(--text-secondary);
+}
+.preview-screen .readiness-grid button.active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.preview-screen .readiness-grid button.active b {
+  color: var(--accent-pressed);
+}
+
+/* exercise list on preview */
+.preview-screen .preview-exercise {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--separator);
+}
+.preview-screen .preview-exercise:last-child { border-bottom: 0; }
+.preview-screen .preview-exercise img {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.preview-screen .preview-exercise > div { min-width: 0; }
+.preview-screen .preview-exercise b {
+  font-family: var(--font-display);
+  font-size: 15px; font-weight: 500;
+  color: var(--text-primary);
+}
+.preview-screen .preview-exercise .muted {
+  font-size: 12px; color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+/* CTA button on preview */
+.preview-screen > .primary {
+  width: 100%;
+  margin-top: 16px;
+  padding: 16px;
+  border: 0; border-radius: 16px;
+  background: var(--accent); color: #fff;
+  font: 600 16px var(--font-ui);
+  box-shadow: 0 12px 26px rgba(218, 83, 38, 0.22);
+  cursor: pointer;
+}
+
+/* --- GymScreen session-header: progress bar + clean exit --- */
+.session-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 12px;
+}
+.session-header .back {
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 600;
+  color: var(--text-secondary);
+  background: none; border: 0;
+  display: flex; align-items: center; gap: 4px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  padding: 4px 0;
+}
+.session-header .back::before {
+  content: '←';
+  font-size: 16px;
+}
+/* hide the ScreenHeader badge in the session-header — replaced by progress bar */
+.session-header .screen-header { display: none; }
+
+/* progress bar between exit and counter */
+.session-progress {
+  flex: 1; min-width: 0;
+  height: 6px; border-radius: 999px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+.session-progress__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+.session-counter {
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Gym exercise head: finer serif title --- */
+.gym-exercise-head__copy h2 {
+  font-family: var(--font-display);
+  font-size: 26px; font-weight: 500; line-height: 1.05;
+  color: var(--text-primary);
+}
+
+/* --- Stepper big value: serif --- */
+.stepper--big .stepper__value {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- InfoHint: warm styling --- */
+.preview-screen .info-hint-row,
+.preview-screen .card .info-hint-row {
+  margin-top: 10px;
+}
+
+/* --- General: ensure .card on all screens uses warm surface --- */
+.preview-screen .card,
+.plan-screen .card,
+.progress-screen .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+}
+
+/* --- All-sets details: warm styling --- */
+.all-sets-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--separator);
+  padding-top: 12px;
+}
+.all-sets-details > summary {
+  font-family: var(--font-ui);
+  font-size: 14px; font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px 0;
+  list-style: none;
+}
+.all-sets-details > summary::-webkit-details-marker { display: none; }
+.all-sets-details > summary::before {
+  content: '▸ ';
+  color: var(--text-tertiary);
+}
+.all-sets-details[open] > summary::before {
+  content: '▾ ';
 }

@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; }
+  button { font-family: inherit; cursor: pointer; }
+  .app-theme {
+    --app-bg:#E4DCCB; --paper:#F1E9DB; --surface:#FFFDF9; --surface-muted:#EAE0CF;
+    --border:rgba(34,32,27,0.12); --separator:rgba(34,32,27,0.09);
+    --ink:#22201B; --ink2:#6E665A; --ink3:#A79D8B;
+    --accent:#DA5326; --accent-press:#B8431C; --success:#4E7A5B; --warning:#C67A2E; --danger:#C23B2E;
+    --hero-bg:#2A2018; --hero-2:#3A2C20; --hero-text:#F1E9DB; --hero-muted:rgba(241,233,219,0.72); --hero-tert:rgba(241,233,219,0.5);
+    --shadow:0 24px 60px rgba(60,40,20,0.22);
+    font-family:'Space Grotesk',system-ui,sans-serif; color:var(--ink);
+  }
+  .app-theme[data-theme="dark"] {
+    --app-bg:#0B0805; --paper:#171209; --surface:#221A11; --surface-muted:#2E2417;
+    --border:rgba(241,233,219,0.13); --separator:rgba(241,233,219,0.09);
+    --ink:#F1E9DB; --ink2:rgba(241,233,219,0.7); --ink3:rgba(241,233,219,0.44);
+    --accent:#EC6C3F; --accent-press:#DA5326; --success:#7CA98A; --warning:#D89A54; --danger:#DE6B58;
+    --hero-bg:#251C13; --hero-2:#31251A; --hero-text:#F4EDE0; --hero-muted:rgba(244,237,224,0.72); --hero-tert:rgba(244,237,224,0.5);
+    --shadow:0 24px 60px rgba(0,0,0,0.5);
+  }
+  .ser { font-family:'Newsreader',Georgia,serif; }
+  .tnum { font-variant-numeric:tabular-nums; }
+  .scroll::-webkit-scrollbar { width:0; height:0; }
+  .scroll { scrollbar-width:none; }
+  a { color:var(--accent); }
+  @keyframes fadein { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:none;} }
+  @keyframes sheetup { from{transform:translateY(102%);} to{transform:translateY(0);} }
+  @keyframes pop { 0%{transform:scale(0.9);opacity:0;} 100%{transform:scale(1);opacity:1;} }
+  @keyframes ring { from{stroke-dashoffset:var(--dash);} to{stroke-dashoffset:var(--off);} }
+  .anim { animation:fadein .32s ease both; }
+</style>
+</helmet>
+
+<div class="app-theme" data-theme="{{ theme }}" style="{{ accentVar }}">
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:20px;padding:30px 16px 48px;background:var(--app-bg);transition:background .3s;">
+
+  <!-- header + theme switch -->
+  <div style="width:100%;max-width:430px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+    <div>
+      <div style="font:600 11px 'Space Grotesk';letter-spacing:0.16em;text-transform:uppercase;color:var(--accent);">AI Gym Trainer · Warm Editorial</div>
+      <div class="ser" style="font-size:23px;font-weight:500;line-height:1.05;margin-top:3px;color:var(--ink);">Прототип · тренер в кармане</div>
+      <div style="font:500 11px 'Space Grotesk';color:var(--ink3);margin-top:4px;">Тема — авто по системе; переключатель справа — для превью</div>
+    </div>
+    <div style="display:flex;gap:3px;padding:4px;border-radius:999px;background:var(--surface);border:1px solid var(--border);flex:0 0 auto;">
+      <button style="{{ segAuto }}" onClick="{{ setAuto }}">Авто</button>
+      <button style="{{ segLight }}" onClick="{{ setLight }}">Светлая</button>
+      <button style="{{ segDark }}" onClick="{{ setDark }}">Тёмная</button>
+    </div>
+  </div>
+
+  <!-- PHONE -->
+  <div style="position:relative;width:390px;height:840px;border-radius:52px;background:var(--paper);box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column;transition:background .3s;">
+
+    <!-- status bar -->
+    <div style="flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;padding:16px 28px 6px;font:600 14px 'Space Grotesk';color:var(--ink);">
+      <span class="tnum">9:41</span>
+      <span style="display:flex;align-items:center;gap:6px;">
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"></rect><rect x="4.5" y="5" width="3" height="6" rx="1"></rect><rect x="9" y="2.5" width="3" height="8.5" rx="1"></rect><rect x="13.5" y="0" width="3" height="11" rx="1"></rect></svg>
+        <svg width="16" height="11" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 4.5C4.5 1.5 11.5 1.5 15 4.5M3.4 7C5.7 5 10.3 5 12.6 7M6 9.4C7.1 8.5 8.9 8.5 10 9.4"></path></svg>
+        <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" stroke="currentColor" stroke-opacity="0.4" stroke-width="1"></rect><rect x="2.2" y="2.2" width="16" height="7.6" rx="1.6" fill="currentColor"></rect><rect x="23" y="3.6" width="1.8" height="4.8" rx="0.9" fill="currentColor" fill-opacity="0.5"></rect></svg>
+      </span>
+    </div>
+
+    <!-- SCROLL CONTENT -->
+    <div class="scroll" style="flex:1;overflow-y:auto;overflow-x:hidden;">
+
+      <!-- ============ HOME ============ -->
+      <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+      <div class="anim" style="padding:8px 18px 26px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+          <div>
+            <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--ink3);">Сегодня · 12 июля</div>
+            <div class="ser" style="font-size:38px;font-weight:500;line-height:1;margin-top:4px;color:var(--ink);">Тренер</div>
+          </div>
+          <div style="position:relative;flex:0 0 auto;">
+            <button style="width:44px;height:44px;border-radius:14px;background:var(--hero-bg);color:var(--hero-text);display:grid;place-items:center;font:700 15px 'Space Grotesk';border:0;" onClick="{{ toggleProfileMenu }}">{{ profileInitial }}</button>
+            <sc-if value="{{ profileMenuOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:100%;right:0;margin-top:8px;z-index:30;min-width:210px;padding:6px;border-radius:16px;background:var(--surface);border:1px solid var(--border);box-shadow:0 18px 40px rgba(60,40,20,0.22);animation:pop .16s ease both;">
+                <div style="font:600 10px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:var(--ink3);padding:8px 10px 4px;">Профиль</div>
+                <sc-for list="{{ profiles }}" as="p" hint-placeholder-count="2">
+                  <button style="{{ p.style }}" onClick="{{ p.onClick }}">
+                    <span style="width:30px;height:30px;border-radius:9px;background:var(--hero-bg);color:var(--hero-text);display:grid;place-items:center;font:700 13px 'Space Grotesk';flex:0 0 auto;">{{ p.initial }}</span>
+                    <span style="flex:1;text-align:left;font:600 14px 'Space Grotesk';color:var(--ink);">{{ p.name }}</span>
+                    <span style="{{ p.checkStyle }}">✓</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- hero -->
+        <div style="padding:22px;border-radius:26px;background:var(--hero-bg);color:var(--hero-text);box-shadow:0 20px 44px rgba(42,32,24,0.28);overflow:hidden;position:relative;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.16em;text-transform:uppercase;color:var(--hero-tert);">Следующая тренировка</div>
+            <div class="tnum" style="font:600 11px 'Space Grotesk';color:var(--hero-muted);background:color-mix(in srgb,var(--hero-text) 12%,transparent);padding:4px 9px;border-radius:999px;">5 упр · ~52 мин</div>
+          </div>
+          <h2 class="ser" style="margin:12px 0 0;font-size:34px;font-weight:500;line-height:1.02;">Грудь / спина</h2>
+          <div style="margin-top:16px;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--hero-text) 8%,transparent);">
+            <span style="width:8px;height:8px;border-radius:999px;background:var(--accent);flex:0 0 auto;"></span>
+            <div style="font-size:14px;color:var(--hero-muted);">Начинаем с <b style="color:var(--hero-text);">Жим лёжа</b></div>
+            <div class="tnum ser" style="margin-left:auto;font-size:22px;font-weight:500;">60<span style="font-size:13px;font-family:'Space Grotesk';color:var(--hero-tert);"> кг</span></div>
+          </div>
+          <button style="width:100%;margin-top:16px;padding:16px;border:0;border-radius:16px;background:var(--accent);color:#fff;font:600 16px 'Space Grotesk';display:flex;align-items:center;justify-content:center;gap:9px;" onClick="{{ startWorkoutTap }}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5M4 8l1-1M20 16l-1 1M8 4 7 5M17 19l-1 1M14.5 9.5l-5 5"></path></svg>
+            Начать тренировку
+          </button>
+          <button style="width:100%;margin-top:8px;padding:12px;border:0;border-radius:14px;background:transparent;color:var(--hero-muted);font:500 14px 'Space Grotesk';" onClick="{{ startWorkoutTap }}">Тренировка вне плана</button>
+        </div>
+
+        <!-- mesocycle -->
+        <div style="margin-top:14px;padding:15px 17px;border-radius:18px;background:var(--surface);border:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <div style="display:flex;align-items:center;gap:8px;font:600 12px 'Space Grotesk';letter-spacing:0.09em;text-transform:uppercase;color:var(--ink2);">
+              Мезоцикл · накопление
+            </div>
+            <div class="tnum" style="font-size:13px;font-weight:600;color:var(--ink);">неделя 2 / 4</div>
+          </div>
+          <div style="margin-top:11px;display:flex;gap:5px;">
+            <div style="flex:1;height:6px;border-radius:999px;background:var(--success);"></div>
+            <div style="flex:1;height:6px;border-radius:999px;background:var(--success);"></div>
+            <div style="flex:1;height:6px;border-radius:999px;background:color-mix(in srgb,var(--success) 26%,transparent);"></div>
+            <div style="flex:1;height:6px;border-radius:999px;background:color-mix(in srgb,var(--success) 26%,transparent);"></div>
+          </div>
+        </div>
+
+        <!-- metrics -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+          <div style="padding:16px;border-radius:18px;background:var(--surface);border:1px solid var(--border);">
+            <span style="font:600 12px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--ink3);">Серия</span>
+            <b class="ser tnum" style="display:block;margin-top:6px;font-size:28px;font-weight:500;color:var(--ink);">4 <span style="font-size:14px;font-family:'Space Grotesk';color:var(--ink2);">нед</span></b>
+          </div>
+          <div style="padding:16px;border-radius:18px;background:var(--surface);border:1px solid var(--border);">
+            <span style="font:600 12px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--ink3);">На неделе</span>
+            <b class="ser tnum" style="display:block;margin-top:6px;font-size:28px;font-weight:500;color:var(--success);">2<span style="color:var(--ink3);"> / 3</span></b>
+          </div>
+        </div>
+
+        <!-- цели -->
+        <div style="margin-top:20px;display:flex;align-items:baseline;justify-content:space-between;">
+          <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);">Цели</div>
+          <sc-if value="{{ hasGoals }}" hint-placeholder-val="{{ true }}">
+            <button style="font:600 12px 'Space Grotesk';color:var(--accent);background:none;border:0;" onClick="{{ openGoalAdd }}">+ Поставить</button>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ hasGoals }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+            <sc-for list="{{ goals }}" as="g" hint-placeholder-count="1">
+              <div style="padding:15px 16px;border-radius:16px;background:var(--surface);border:1px solid var(--border);">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:2px;"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="4.5"></circle><circle cx="12" cy="12" r="0.6" fill="var(--accent)"></circle></svg>
+                  <div style="flex:1;min-width:0;">
+                    <div class="ser" style="font-size:16px;font-weight:500;color:var(--ink);">{{ g.title }}</div>
+                    <div style="font-size:12px;color:var(--ink3);margin-top:1px;">{{ g.date }} · {{ g.note }}</div>
+                  </div>
+                  <button style="flex:0 0 auto;font:600 12px 'Space Grotesk';color:var(--ink3);background:none;border:0;padding:2px 4px;" onClick="{{ g.remove }}">убрать</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ noGoals }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:8px;padding:18px;border-radius:16px;background:var(--surface);border:1px solid var(--border);">
+            <div style="font-size:13px;line-height:1.45;color:var(--ink2);">Поставь цель — тренер построит путь к ней и будет отслеживать прогресс каждую неделю.</div>
+            <button style="margin-top:12px;padding:11px 16px;border-radius:12px;border:1px solid var(--accent);background:transparent;color:var(--accent);font:600 13px 'Space Grotesk';" onClick="{{ openGoalAdd }}">+ Поставить цель</button>
+          </div>
+        </sc-if>
+
+        <!-- weekly review -->
+        <div style="margin-top:20px;display:flex;align-items:baseline;justify-content:space-between;">
+          <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);">Недельный разбор</div>
+          <span class="tnum" style="font:600 12px 'Space Grotesk';color:var(--ink3);">3 правки</span>
+        </div>
+        <div style="margin-top:8px;padding:2px 16px;border-radius:18px;background:var(--surface);border:1px solid var(--border);">
+          <sc-for list="{{ reviewRows }}" as="r" hint-placeholder-count="3">
+            <button style="width:100%;display:flex;align-items:center;gap:12px;padding:14px 2px;border:0;border-bottom:1px solid var(--separator);background:transparent;text-align:left;font-family:'Space Grotesk';" onClick="{{ r.onClick }}">
+              <span style="width:8px;height:8px;border-radius:999px;flex:0 0 auto;background:{{ r.color }};"></span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:14px;font-weight:600;line-height:1.3;color:var(--ink);">{{ r.title }}</div>
+                <div style="font-size:12px;color:var(--ink3);">{{ r.meta }}</div>
+              </div>
+              <span style="color:var(--ink3);font-size:18px;" data-comment-anchor="edfe967abb-span">›</span>
+            </button>
+          </sc-for>
+        </div>
+
+        <!-- далее -->
+        <div style="margin-top:20px;display:flex;align-items:baseline;justify-content:space-between;">
+          <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);">Далее</div>
+          <div style="font:600 12px 'Space Grotesk';color:var(--ink3);">15 июля</div>
+        </div>
+        <div style="margin-top:8px;padding:0 4px;border-radius:18px;">
+          <sc-for list="{{ nextItems }}" as="n" hint-placeholder-count="1">
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 2px;border-bottom:1px solid var(--separator);">
+              <div class="ser tnum" style="width:42px;height:42px;border-radius:12px;background:var(--surface-muted);display:grid;place-items:center;font-size:16px;font-weight:500;color:var(--ink);flex:0 0 auto;">{{ n.badge }}</div>
+              <div style="flex:1;min-width:0;">
+                <div class="ser" style="font-size:16px;font-weight:500;color:var(--ink);">{{ n.title }}</div>
+                <div style="font-size:13px;color:var(--ink2);">{{ n.meta }}</div>
+              </div>
+              <button style="font:600 13px 'Space Grotesk';color:var(--accent);background:none;border:0;flex:0 0 auto;" onClick="{{ startWorkoutTap }}">Выбрать</button>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- library entry -->
+        <button style="width:100%;margin-top:16px;display:flex;align-items:center;gap:12px;padding:15px 16px;border-radius:16px;background:var(--surface);border:1px solid var(--border);text-align:left;" onClick="{{ openLibrary }}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <div style="flex:1;"><b style="display:block;font-size:15px;color:var(--ink);">Библиотека</b><span style="font-size:13px;color:var(--ink2);">Техника и замены</span></div>
+          <span style="color:var(--ink3);font-size:18px;">›</span>
+        </button>
+
+        <!-- history -->
+        <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);margin:22px 0 8px;">История</div>
+        <sc-for list="{{ history }}" as="h" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 2px;border-bottom:1px solid var(--separator);">
+            <div><b style="font-size:14px;color:var(--ink);">{{ h.name }}</b><div style="font-size:12px;color:var(--ink3);">{{ h.date }}</div></div>
+            <div class="tnum" style="font-size:14px;font-weight:600;color:var(--ink2);">{{ h.vol }}</div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <!-- ============ PROGRESS ============ -->
+      <sc-if value="{{ isProgress }}" hint-placeholder-val="{{ false }}">
+      <div class="anim" style="padding:8px 18px 26px;">
+        <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--ink3);">Прогресс · 14 дней</div>
+        <div class="ser" style="font-size:38px;font-weight:500;line-height:1;margin:4px 0 16px;color:var(--ink);">Динамика</div>
+
+        <div style="padding:20px;border-radius:24px;background:var(--hero-bg);color:var(--hero-text);display:flex;justify-content:space-between;align-items:center;gap:14px;">
+          <div>
+            <div class="ser" style="font-size:22px;font-weight:500;line-height:1.12;">Движение в правильную сторону</div>
+            <div class="tnum" style="margin-top:8px;font-size:13px;color:var(--hero-muted);">6 из 6 тренировок · 24 300 кг</div>
+          </div>
+          <div style="position:relative;width:80px;height:80px;flex:0 0 auto;">
+            <svg width="80" height="80" viewBox="0 0 80 80" style="transform:rotate(-90deg);"><circle cx="40" cy="40" r="34" fill="none" stroke="color-mix(in srgb,var(--hero-text) 16%,transparent)" stroke-width="7"></circle><circle cx="40" cy="40" r="34" fill="none" stroke="var(--success)" stroke-width="7" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="0"></circle></svg>
+            <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center;"><div><div class="tnum ser" style="font-size:22px;font-weight:600;" data-comment-anchor="1ccbc16a65-div">6/6</div><div style="font-size:9px;color:var(--hero-tert);">выполнено</div></div></div>
+          </div>
+        </div>
+
+        <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);margin:22px 0 8px;">Следующий фокус</div>
+        <sc-for list="{{ focusRows }}" as="f" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:13px;padding:14px 2px;border-bottom:1px solid var(--separator);">
+            <div class="tnum" style="width:32px;height:32px;border-radius:10px;background:var(--hero-bg);color:var(--hero-text);display:grid;place-items:center;font-weight:600;font-size:14px;flex:0 0 auto;">{{ f.n }}</div>
+            <div style="flex:1;min-width:0;"><b style="font-size:15px;color:var(--ink);">{{ f.name }}</b><div style="font-size:13px;color:var(--ink2);">{{ f.note }}</div></div>
+            <span style="font:600 12px 'Space Grotesk';padding:5px 11px;border-radius:999px;background:{{ f.tagBg }};color:{{ f.tagColor }};flex:0 0 auto;">{{ f.tag }}</span>
+          </div>
+        </sc-for>
+
+        <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);margin:22px 0 2px;" data-comment-anchor="3fb80766f0-div">Сила</div>
+        <div style="font:500 12px 'Space Grotesk';color:var(--ink3);margin-bottom:10px;">Расчётный максимум на 1 повтор, кг</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <sc-for list="{{ lifts }}" as="l" hint-placeholder-count="4">
+            <div style="padding:14px 16px;border-radius:18px;background:var(--surface);border:1px solid var(--border);">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+                <b style="font-size:15px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ l.name }}</b>
+                <div style="display:flex;align-items:baseline;gap:8px;flex:0 0 auto;"><span class="tnum ser" style="font-size:20px;font-weight:600;color:var(--ink);">{{ l.e1rm }}</span><span style="font:600 12px 'Space Grotesk';color:{{ l.trendColor }};">{{ l.delta }}</span></div>
+              </div>
+              <svg viewBox="0 0 120 30" width="100%" height="30" preserveAspectRatio="none" style="display:block;margin-top:8px;overflow:visible;">
+                <polyline points="{{ l.points }}" fill="none" stroke="{{ l.trendColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                <circle cx="{{ l.dotX }}" cy="{{ l.dotY }}" r="3" fill="{{ l.trendColor }}"></circle>
+              </svg>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ PLAN ============ -->
+      <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+      <div class="anim" style="padding:8px 18px 26px;">
+        <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--ink3);">3 тренировки / нед</div>
+        <div class="ser" style="font-size:38px;font-weight:500;line-height:1;margin:4px 0 16px;color:var(--ink);">План</div>
+
+        <!-- horizon toggle -->
+        <div style="display:flex;gap:3px;padding:4px;border-radius:14px;background:var(--surface);border:1px solid var(--border);margin-bottom:16px;">
+          <button style="{{ segWeek }}" onClick="{{ setHorizonWeek }}">Неделя</button>
+          <button style="{{ segMeso }}" onClick="{{ setHorizonMeso }}">Мезоцикл · 4 нед</button>
+        </div>
+
+        <!-- week strip -->
+        <sc-if value="{{ isWeekHorizon }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <sc-for list="{{ weekStrip }}" as="d" hint-placeholder-count="7">
+            <button style="flex:1;text-align:center;padding:10px 0;border-radius:14px;background:{{ d.bg }};border:1px solid {{ d.border }};cursor:pointer;font-family:'Space Grotesk';" onClick="{{ d.onClick }}" data-comment-anchor="2fd48f07d6-button">
+              <div style="font:600 10px 'Space Grotesk';text-transform:uppercase;color:{{ d.labelColor }};">{{ d.wd }}</div>
+              <div class="tnum" style="margin-top:5px;font-size:15px;font-weight:600;color:{{ d.numColor }};">{{ d.day }}</div>
+              <div style="margin-top:6px;height:5px;width:5px;border-radius:999px;margin-left:auto;margin-right:auto;background:{{ d.dot }};"></div>
+            </button>
+          </sc-for>
+        </div>
+        <sc-if value="{{ hasDayNote }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;padding:10px 13px;border-radius:12px;background:color-mix(in srgb,var(--accent) 10%,transparent);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3.5 9.5h17M5 4.5h14a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"></path></svg>
+            <span style="font:600 13px 'Space Grotesk';color:var(--accent);">{{ dayNote }}</span>
+          </div>
+        </sc-if>
+        <div style="height:8px;"></div>
+        </sc-if>
+
+        <!-- mesocycle horizon -->
+        <sc-if value="{{ isMesoHorizon }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-bottom:6px;">
+          <div style="padding:14px 16px;border-radius:16px;background:color-mix(in srgb,var(--success) 10%,transparent);border:1px solid color-mix(in srgb,var(--success) 26%,transparent);display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"></path><path d="M22 4 12 14.01l-3-3"></path></svg>
+            <span style="font-size:13px;line-height:1.4;color:var(--ink2);">Тренер планирует на весь мезоцикл, а не на неделю — объём и интенсивность меняются по фазам.</span>
+          </div>
+          <sc-for list="{{ mesoWeeks }}" as="m" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:14px;padding:15px 2px;border-bottom:1px solid var(--separator);">
+              <span style="width:10px;height:10px;border-radius:999px;flex:0 0 auto;background:{{ m.dot }};"></span>
+              <div style="flex:1;min-width:0;">
+                <div class="ser" style="font-size:16px;font-weight:500;color:var(--ink);">{{ m.label }}</div>
+                <div style="font-size:13px;color:var(--ink2);">{{ m.days }}</div>
+              </div>
+              <div style="text-align:right;flex:0 0 auto;">
+                <span style="font:600 11px 'Space Grotesk';padding:4px 9px;border-radius:999px;background:{{ m.tagBg }};color:{{ m.tagColor }};">{{ m.tag }}</span>
+                <div class="tnum" style="font-size:12px;color:var(--ink3);margin-top:5px;">{{ m.vol }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+        <div style="border-radius:24px;background:var(--hero-bg);color:var(--hero-text);padding:22px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="min-width:0;">
+              <div style="font:600 11px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--hero-tert);">Пн, 14.07 · следующая</div>
+              <div class="ser" style="font-size:26px;font-weight:500;line-height:1.05;margin-top:6px;">Восстановительная</div>
+            </div>
+            <div class="ser tnum" style="text-align:right;flex:0 0 auto;padding-left:12px;"><div style="font-size:30px;font-weight:600;line-height:1;">50</div><div style="font-size:11px;font-family:'Space Grotesk';color:var(--hero-tert);">мин</div></div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;">
+            <span style="font:600 12px 'Space Grotesk';padding:5px 10px;border-radius:999px;background:color-mix(in srgb,var(--hero-text) 10%,transparent);color:var(--hero-muted);">5 упражнений</span>
+            <span style="font:600 12px 'Space Grotesk';padding:5px 10px;border-radius:999px;background:color-mix(in srgb,var(--hero-text) 10%,transparent);color:var(--hero-muted);">Грудь · спина · руки</span>
+            <span style="font:600 12px 'Space Grotesk';padding:5px 10px;border-radius:999px;background:color-mix(in srgb,var(--success) 30%,transparent);color:var(--hero-text);">лёгкая нагрузка</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px;">
+            <button style="flex:1;padding:15px;border:0;border-radius:14px;background:var(--accent);color:#fff;font:600 15px 'Space Grotesk';" onClick="{{ startWorkoutTap }}">Открыть</button>
+            <button style="flex:0 0 auto;padding:15px 18px;border:1px solid color-mix(in srgb,var(--hero-text) 22%,transparent);border-radius:14px;background:transparent;color:var(--hero-text);font:600 14px 'Space Grotesk';" onClick="{{ openComposition }}" data-comment-anchor="362cde4bb4-button">Состав</button>
+          </div>
+        </div>
+
+        <!-- readiness note -->
+        <div style="margin-top:12px;padding:14px 16px;border-radius:16px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <span style="width:8px;height:8px;border-radius:999px;background:var(--success);flex:0 0 auto;"></span>
+          <span style="font-size:13px;color:var(--ink2);">Готовность <b class="tnum" style="color:var(--ink);">80/100</b> · восстановление хорошее</span>
+        </div>
+
+        <!-- upcoming list -->
+        <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);margin:22px 0 8px;">Расписание</div>
+        <sc-for list="{{ planCards }}" as="p" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 2px;border-bottom:1px solid var(--separator);">
+            <div class="ser tnum" style="width:46px;height:46px;border-radius:12px;background:var(--surface-muted);display:grid;place-items:center;font-size:13px;font-weight:500;color:var(--ink);flex:0 0 auto;text-align:center;line-height:1.1;">{{ p.day }}</div>
+            <div style="flex:1;min-width:0;"><div class="ser" style="font-size:16px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ p.name }}</div><div style="font-size:13px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ p.meta }}</div></div>
+            <span class="tnum" style="font:600 12px 'Space Grotesk';color:var(--ink3);flex:0 0 auto;">{{ p.mins }} мин</span>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <!-- ============ REVIEW ============ -->
+      <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+      <div class="anim" style="padding:8px 18px 26px;">
+        <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--success);">Тренировка завершена</div>
+        <div class="ser" style="font-size:38px;font-weight:500;line-height:1.02;margin:4px 0 18px;color:var(--ink);">Отличная работа</div>
+
+        <div style="padding:24px 22px;border-radius:26px;background:var(--hero-bg);color:var(--hero-text);">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+            <div><div class="ser tnum" style="font-size:32px;font-weight:600;">{{ revMin }}</div><div style="font:600 10px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--hero-tert);">минут</div></div>
+            <div><div class="ser tnum" style="font-size:32px;font-weight:600;">{{ revSets }}</div><div style="font:600 10px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--hero-tert);">подходов</div></div>
+            <div><div class="ser tnum" style="font-size:32px;font-weight:600;">{{ revVol }}</div><div style="font:600 10px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--hero-tert);">кг</div></div>
+          </div>
+        </div>
+
+        <div class="ser" style="font-size:22px;font-weight:500;color:var(--ink);margin:22px 0 8px;">По упражнениям</div>
+        <sc-for list="{{ revEx }}" as="e" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 2px;border-bottom:1px solid var(--separator);">
+            <div style="min-width:0;"><b style="font-size:15px;color:var(--ink);">{{ e.name }}</b><div class="tnum" style="font-size:13px;color:var(--ink2);">{{ e.detail }}</div></div>
+            <span style="flex:0 0 auto;color:{{ e.markColor }};font-size:18px;">{{ e.mark }}</span>
+          </div>
+        </sc-for>
+
+        <!-- coach debrief -->
+        <div style="margin-top:20px;padding:18px;border-radius:20px;background:var(--surface);border:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;font:600 12px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--ink3);">
+            <span style="width:8px;height:8px;border-radius:999px;background:var(--accent);"></span>Тренер
+          </div>
+          <p class="ser" style="margin:10px 0 0;font-size:17px;line-height:1.4;color:var(--ink);">Жим лёжа закрыт по цели — на следующей неделе пробуем 62.5 кг. Спина стабильна.</p>
+        </div>
+
+        <button style="width:100%;margin-top:20px;padding:17px;border:0;border-radius:16px;background:var(--accent);color:#fff;font:600 16px 'Space Grotesk';" onClick="{{ finishReview }}">На главную</button>
+      </div>
+      </sc-if>
+
+      <!-- ============ GYM / SESSION ============ -->
+      <sc-if value="{{ isGym }}" hint-placeholder-val="{{ false }}">
+    <div class="anim" style="padding:8px 18px 24px;">
+        <!-- slim top bar -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <button style="font:600 13px 'Space Grotesk';color:var(--ink2);background:none;border:0;display:flex;align-items:center;gap:4px;" onClick="{{ exitWorkout }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg>Выйти
+          </button>
+          <div style="flex:1;height:6px;border-radius:999px;background:var(--surface-muted);overflow:hidden;"><div style="height:100%;background:var(--accent);border-radius:999px;transition:width .35s;width:{{ progressPct }};"></div></div>
+          <div class="tnum" style="font:600 13px 'Space Grotesk';color:var(--ink);">{{ exCounter }}</div>
+        </div>
+
+        <!-- title + demoted pills -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <div style="min-width:0;">
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:var(--ink3);">{{ exSetLabel }}</div>
+            <h2 class="ser" style="margin:4px 0 0;font-size:29px;font-weight:500;line-height:1.04;color:var(--ink);">{{ exName }}</h2>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex:0 0 auto;position:relative;">
+            <button style="padding:7px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--border);font:600 12px 'Space Grotesk';color:var(--ink);" onClick="{{ openTechnique }}" data-comment-anchor="65d6cb81e9-button">Техника</button>
+            <button style="padding:7px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--border);font:600 12px 'Space Grotesk';color:var(--ink2);" onClick="{{ openLibrary }}">Замена</button>
+          </div>
+        </div>
+
+        <!-- REST or LOGGER -->
+        <sc-if value="{{ resting }}" hint-placeholder-val="{{ false }}">
+          <div class="anim" style="margin-top:16px;padding:26px 20px;border-radius:24px;background:var(--hero-bg);color:var(--hero-text);text-align:center;">
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.16em;text-transform:uppercase;color:var(--hero-tert);">Отдых</div>
+            <div class="ser tnum" style="font-size:64px;font-weight:500;line-height:1;margin:8px 0 4px;">{{ restText }}</div>
+            <div style="height:6px;border-radius:999px;background:color-mix(in srgb,var(--hero-text) 16%,transparent);overflow:hidden;margin:14px 0 18px;"><div style="height:100%;background:var(--accent);border-radius:999px;transition:width 1s linear;width:{{ restPct }};"></div></div>
+            <div style="display:flex;gap:8px;">
+              <button style="flex:1;padding:13px;border:1px solid color-mix(in srgb,var(--hero-text) 22%,transparent);border-radius:14px;background:transparent;color:var(--hero-text);font:600 14px 'Space Grotesk';" onClick="{{ addRest }}">+30 сек</button>
+              <button style="flex:1;padding:13px;border:0;border-radius:14px;background:var(--accent);color:#fff;font:600 14px 'Space Grotesk';" onClick="{{ skipRest }}">Пропустить</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ showLogger }}" hint-placeholder-val="{{ true }}">
+          <div class="anim" style="margin-top:16px;padding:22px 18px 18px;border-radius:24px;background:var(--surface);border:1px solid var(--border);box-shadow:0 14px 34px rgba(60,40,20,0.08);">
+            <sc-if value="{{ isEditingSet }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:9px 12px;border-radius:12px;background:color-mix(in srgb,var(--warning) 14%,transparent);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+                <b style="font:600 12px 'Space Grotesk';color:var(--warning);flex:1;">{{ editHint }}</b>
+                <button style="font:600 12px 'Space Grotesk';color:var(--ink2);background:none;border:0;" onClick="{{ cancelEdit }}">Отмена</button>
+              </div>
+            </sc-if>
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:var(--ink3);">Вес, кг</div>
+            <div style="display:grid;grid-template-columns:58px 1fr 58px;align-items:center;gap:10px;margin-top:8px;">
+              <button style="height:56px;border-radius:16px;border:1px solid var(--border);background:var(--paper);font-size:28px;font-weight:400;color:var(--ink);" onClick="{{ weightDown }}">−</button>
+              <div class="ser tnum" style="text-align:center;font-size:60px;font-weight:500;line-height:1;color:var(--ink);">{{ curWeight }}</div>
+              <button style="height:56px;border-radius:16px;border:0;background:var(--hero-bg);color:var(--hero-text);font-size:28px;font-weight:400;" onClick="{{ weightUp }}">+</button>
+            </div>
+            <div style="font:600 11px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:var(--ink3);margin-top:18px;">Повторы</div>
+            <div style="display:grid;grid-template-columns:58px 1fr 58px;align-items:center;gap:10px;margin-top:8px;">
+              <button style="height:56px;border-radius:16px;border:1px solid var(--border);background:var(--paper);font-size:28px;font-weight:400;color:var(--ink);" onClick="{{ repDown }}">−</button>
+              <div class="ser tnum" style="text-align:center;font-size:60px;font-weight:500;line-height:1;color:var(--ink);">{{ curReps }}</div>
+              <button style="height:56px;border-radius:16px;border:0;background:var(--hero-bg);color:var(--hero-text);font-size:28px;font-weight:400;" onClick="{{ repUp }}">+</button>
+            </div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:18px;">
+              <span style="font:600 11px 'Space Grotesk';letter-spacing:0.14em;text-transform:uppercase;color:var(--ink3);">Сколько ещё сделаешь?</span>
+            </div>
+            <div style="position:relative;margin-top:14px;padding:0 4px;">
+              <div style="position:absolute;top:13px;left:16px;right:16px;height:2px;background:var(--separator);"></div>
+              <div style="position:relative;display:flex;justify-content:space-between;">
+                <sc-for list="{{ rirPoints }}" as="p" hint-placeholder-count="4">
+                  <button style="display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;padding:0;" onClick="{{ p.onClick }}">
+                    <span style="{{ p.dotStyle }}"><span style="{{ p.innerStyle }}"></span></span>
+                    <span style="{{ p.numStyle }}">{{ p.rir }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <span style="font:500 10px 'Space Grotesk';color:var(--ink3);">запас</span>
+                <span style="font:500 10px 'Space Grotesk';color:var(--ink3);">отказ</span>
+              </div>
+            </div>
+            <button style="width:100%;margin-top:16px;padding:18px;border:0;border-radius:16px;background:var(--accent);color:#fff;font:600 17px 'Space Grotesk';display:flex;align-items:center;justify-content:center;gap:8px;opacity:{{ doneOpacity }};" onClick="{{ markDone }}">{{ doneLabel }}</button>
+          </div>
+
+          <!-- coach hint -->
+          <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--success) 12%,transparent);border-left:3px solid var(--success);">
+            <span style="font:700 11px 'Space Grotesk';letter-spacing:0.05em;text-transform:uppercase;color:var(--success);white-space:nowrap;">{{ hintTag }}</span>
+            <b class="tnum" style="font-size:15px;color:var(--ink);">{{ hintVal }}</b>
+            <span style="font-size:12px;color:var(--ink2);margin-left:auto;text-align:right;line-height:1.25;max-width:150px;">{{ hintNote }}</span>
+          </div>
+
+          <!-- prev / goal -->
+          <div style="margin-top:14px;display:flex;gap:26px;padding:0 2px;">
+            <div><div style="font:600 11px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--ink3);">Прошлый раз</div><b class="tnum" style="font-size:15px;color:var(--ink);">{{ exPrev }}</b></div>
+            <div><div style="font:600 11px 'Space Grotesk';letter-spacing:0.08em;text-transform:uppercase;color:var(--ink3);">Цель</div><b class="tnum" style="font-size:15px;color:var(--success);">{{ exGoal }}</b></div>
+          </div>
+        </sc-if>
+
+        <!-- set chips -->
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <sc-for list="{{ chips }}" as="c" hint-placeholder-count="3">
+            <button class="tnum" style="flex:1;text-align:center;padding:10px 4px;border-radius:12px;font-size:13px;font-weight:600;background:{{ c.bg }};border:1px solid {{ c.border }};color:{{ c.color }};font-family:'Space Grotesk';" onClick="{{ c.onClick }}">{{ c.label }}</button>
+          </sc-for>
+        </div>
+        <sc-if value="{{ chipsHint }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:8px;font:500 12px 'Space Grotesk';color:var(--ink3);text-align:center;">{{ chipsHint }}</div>
+        </sc-if>
+
+        <!-- next exercise CTA (when all sets done) -->
+        <sc-if value="{{ allDone }}" hint-placeholder-val="{{ false }}">
+          <div class="anim" style="margin-top:16px;padding:16px;border-radius:18px;background:var(--surface-muted);display:flex;align-items:center;gap:12px;">
+            <div style="flex:1;"><div style="font:600 11px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:var(--ink3);">Дальше</div><b class="ser" style="font-size:17px;color:var(--ink);">{{ nextName }}</b></div>
+          </div>
+        </sc-if>
+
+        <!-- sticky actions -->
+        <div style="margin-top:16px;display:flex;gap:8px;">
+          <button style="flex:1;padding:15px;border:0;border-radius:16px;background:var(--hero-bg);color:var(--hero-text);font:600 15px 'Space Grotesk';" onClick="{{ nextExercise }}">{{ nextCta }}</button>
+          <button style="flex:0 0 auto;padding:15px 18px;border:1px solid var(--border);border-radius:16px;background:transparent;color:var(--ink2);font:600 14px 'Space Grotesk';" onClick="{{ finishWorkout }}">Финиш</button>
+        </div>
+        <button style="width:100%;margin-top:8px;padding:14px;border:1px dashed var(--border);border-radius:16px;background:transparent;color:var(--ink2);font:600 14px 'Space Grotesk';display:flex;align-items:center;justify-content:center;gap:8px;" onClick="{{ openAddExercise }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>Добавить упражнение
+        </button>
+        <sc-if value="{{ canDelete }}" hint-placeholder-val="{{ true }}">
+          <button style="width:100%;margin-top:8px;padding:13px;border:0;border-radius:16px;background:transparent;color:var(--danger);font:600 14px 'Space Grotesk';display:flex;align-items:center;justify-content:center;gap:8px;" onClick="{{ deleteExercise }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"></path></svg>Удалить текущее упражнение
+          </button>
+        </sc-if>
+      </div>
+      </sc-if></div>
+
+    <!-- BOTTOM NAV -->
+    <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:0 0 auto;padding:8px 14px calc(8px + env(safe-area-inset-bottom));">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:7px;border-radius:22px;background:var(--surface);border:1px solid var(--border);">
+          <button style="{{ navHome }}" onClick="{{ goHome }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 3.5 11 7l3.5 1.1L11 9.2 9.9 12.7 8.8 9.2 5.3 8.1 8.8 7z"></path><path d="M18 3v3M19.5 4.5h-3M18 15v2M19 16h-2"></path></svg><span>Тренер</span></button>
+          <button style="{{ navGym }}" onClick="{{ startWorkoutTap }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.4 14.4 9.6 9.6M18.657 21.485l2.828-2.828M3.515 5.343 6.343 2.515M21.485 18.657 18.657 21.485M2.515 6.343 5.343 3.515M6.343 2.515 21.485 17.657M17.657 6.343 6.343 17.657"></path></svg><span>Зал</span></button>
+          <button style="{{ navProgress }}" onClick="{{ goProgress }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5v16M18 9v12M8 13v8M3 21h18"></path></svg><span>Прогресс</span></button>
+          <button style="{{ navPlan }}" onClick="{{ goPlan }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3.5 9.5h17M5 4.5h14a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"></path></svg><span>План</span></button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ GOAL SHEET ============ -->
+    <sc-if value="{{ showGoalSheet }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:26;background:rgba(20,14,8,0.42);display:flex;align-items:flex-end;" onClick="{{ cancelGoalAdd }}">
+        <div style="width:100%;background:var(--paper);border-radius:30px 30px 0 0;padding:24px 22px calc(22px + env(safe-area-inset-bottom));animation:sheetup .34s cubic-bezier(.2,.8,.2,1) both;" onClick="{{ stop }}">
+          <div style="width:40px;height:4px;border-radius:999px;background:var(--border);margin:0 auto 18px;"></div>
+          <div style="font:600 11px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);">Новая цель</div>
+          <div class="ser" style="font-size:27px;font-weight:500;line-height:1.05;margin:4px 0 16px;color:var(--ink);">К чему идём?</div>
+          <div style="font:600 11px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">Упражнение</div>
+          <div class="scroll" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:18px;">
+            <sc-for list="{{ goalExChips }}" as="c" hint-placeholder-count="6">
+              <button style="{{ c.style }}" onClick="{{ c.onClick }}">{{ c.name }}</button>
+            </sc-for>
+          </div>
+          <div style="font:600 11px 'Space Grotesk';letter-spacing:0.1em;text-transform:uppercase;color:var(--ink3);">Целевой вес, кг</div>
+          <div style="display:grid;grid-template-columns:58px 1fr 58px;align-items:center;gap:10px;margin-top:8px;">
+            <button style="height:56px;border-radius:16px;border:1px solid var(--border);background:var(--surface);font-size:28px;color:var(--ink);" onClick="{{ goalWeightDown }}">−</button>
+            <div class="ser tnum" style="text-align:center;font-size:52px;font-weight:500;line-height:1;color:var(--ink);">{{ draftGoalWeight }}</div>
+            <button style="height:56px;border-radius:16px;border:0;background:var(--hero-bg);color:var(--hero-text);font-size:28px;" onClick="{{ goalWeightUp }}">+</button>
+          </div>
+          <button style="width:100%;margin-top:20px;padding:16px;border:0;border-radius:16px;background:var(--accent);color:#fff;font:600 16px 'Space Grotesk';" onClick="{{ saveGoal }}">Сохранить цель</button>
+          <button style="width:100%;margin-top:8px;padding:12px;border:0;border-radius:14px;background:transparent;color:var(--ink2);font:600 14px 'Space Grotesk';" onClick="{{ cancelGoalAdd }}">Отмена</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ DETAIL / INFO SHEET ============ -->
+    <sc-if value="{{ showInfo }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:25;background:rgba(20,14,8,0.42);display:flex;align-items:flex-end;" onClick="{{ closeInfo }}">
+        <div style="width:100%;background:var(--paper);border-radius:30px 30px 0 0;padding:24px 22px calc(22px + env(safe-area-inset-bottom));animation:sheetup .34s cubic-bezier(.2,.8,.2,1) both;max-height:86%;overflow-y:auto;" class="scroll" onClick="{{ stop }}">
+          <div style="width:40px;height:4px;border-radius:999px;background:var(--border);margin:0 auto 18px;"></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="min-width:0;">
+              <div style="font:600 11px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);">{{ infoKicker }}</div>
+              <div class="ser" style="font-size:28px;font-weight:500;line-height:1.04;margin-top:4px;color:var(--ink);">{{ infoTitle }}</div>
+            </div>
+            <button style="width:34px;height:34px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--ink);display:grid;place-items:center;flex:0 0 auto;" onClick="{{ closeInfo }}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+            </button>
+          </div>
+          <div style="margin-top:18px;display:flex;flex-direction:column;gap:2px;">
+            <sc-if value="{{ hasInfoImage }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-bottom:14px;border-radius:16px;overflow:hidden;background:var(--surface-muted);border:1px solid var(--border);aspect-ratio:3/2;">
+                <img src="{{ infoImage }}" alt="{{ infoTitle }}" style="width:100%;height:100%;object-fit:cover;display:block;">
+              </div>
+            </sc-if>
+            <sc-for list="{{ infoLines }}" as="ln" hint-placeholder-count="4">
+              <div style="display:flex;gap:13px;padding:13px 2px;border-bottom:1px solid var(--separator);">
+                <span class="tnum ser" style="flex:0 0 auto;width:26px;height:26px;border-radius:999px;background:var(--surface-muted);color:var(--ink2);display:grid;place-items:center;font-size:13px;font-weight:600;">{{ ln.n }}</span>
+                <span style="font-size:15px;line-height:1.4;color:var(--ink);">{{ ln.text }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <button style="width:100%;margin-top:20px;padding:16px;border:0;border-radius:16px;background:var(--accent);color:#fff;font:600 16px 'Space Grotesk';" onClick="{{ closeInfo }}">Понятно</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ READINESS SHEET ============ -->
+    <sc-if value="{{ showReadiness }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:20;background:rgba(20,14,8,0.42);display:flex;align-items:flex-end;" onClick="{{ closeReadiness }}">
+        <div style="width:100%;background:var(--paper);border-radius:30px 30px 0 0;padding:24px 22px calc(22px + env(safe-area-inset-bottom));animation:sheetup .34s cubic-bezier(.2,.8,.2,1) both;" onClick="{{ stop }}">
+          <div style="width:40px;height:4px;border-radius:999px;background:var(--border);margin:0 auto 18px;"></div>
+          <div style="font:600 12px 'Space Grotesk';letter-spacing:0.12em;text-transform:uppercase;color:var(--ink3);">Перед началом</div>
+          <div class="ser" style="font-size:27px;font-weight:500;line-height:1.05;margin:4px 0 4px;color:var(--ink);">Как самочувствие?</div>
+          <p style="margin:0 0 18px;font-size:13px;color:var(--ink2);">Тренер подстроит нагрузку под готовность.</p>
+          <sc-for list="{{ readyRows }}" as="row" hint-placeholder-count="3">
+            <div style="margin-bottom:14px;">
+              <div style="font:600 13px 'Space Grotesk';color:var(--ink);margin-bottom:8px;">{{ row.label }}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <sc-for list="{{ row.opts }}" as="o" hint-placeholder-count="3">
+                  <button style="{{ o.style }}" onClick="{{ o.onClick }}">{{ o.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+          <button style="width:100%;margin-top:8px;padding:17px;border:0;border-radius:16px;background:var(--accent);color:#fff;font:600 16px 'Space Grotesk';opacity:{{ startOpacity }};" onClick="{{ confirmStart }}">Начать тренировку</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ LIBRARY SHEET ============ -->
+    <sc-if value="{{ showLibrary }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:20;background:rgba(20,14,8,0.42);display:flex;align-items:flex-end;" onClick="{{ closeLibrary }}">
+        <div style="width:100%;height:88%;background:var(--paper);border-radius:30px 30px 0 0;display:flex;flex-direction:column;animation:sheetup .34s cubic-bezier(.2,.8,.2,1) both;" onClick="{{ stop }}">
+          <div style="padding:18px 22px 12px;flex:0 0 auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div class="ser" style="font-size:27px;font-weight:500;color:var(--ink);">{{ libTitle }}</div>
+              <button style="width:34px;height:34px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--ink);display:grid;place-items:center;" onClick="{{ closeLibrary }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:14px;overflow-x:auto;padding-bottom:2px;" class="scroll">
+              <sc-for list="{{ libFilters }}" as="fl" hint-placeholder-count="6">
+                <button style="{{ fl.style }}" onClick="{{ fl.onClick }}">{{ fl.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div class="scroll" style="flex:1;overflow-y:auto;padding:0 22px 24px;">
+            <sc-for list="{{ libItems }}" as="it" hint-placeholder-count="8">
+              <button style="width:100%;display:flex;align-items:center;gap:14px;padding:14px 2px;border:0;border-bottom:1px solid var(--separator);background:transparent;text-align:left;" onClick="{{ it.onClick }}">
+                <div style="width:46px;height:46px;border-radius:12px;background:var(--surface-muted);flex:0 0 auto;display:grid;place-items:center;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.4 14.4 9.6 9.6M18.657 21.485l2.828-2.828M3.515 5.343 6.343 2.515M2.515 6.343 5.343 3.515M18.657 21.485 2.515 6.343"></path></svg>
+                </div>
+                <div style="flex:1;min-width:0;"><b class="ser" style="font-size:16px;font-weight:500;color:var(--ink);">{{ it.name }}</b><div style="font-size:12px;color:var(--ink3);">{{ it.group }}</div></div>
+                <sc-if value="{{ it.addMode }}" hint-placeholder-val="{{ false }}">
+                  <span style="flex:0 0 auto;display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);" data-comment-anchor="76ee252893-span">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+                  </span>
+                </sc-if>
+                <sc-if value="{{ it.browseMode }}" hint-placeholder-val="{{ true }}">
+                  <span style="color:var(--ink3);font-size:18px;flex:0 0 auto;">›</span>
+                </sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div style="font:500 12px 'Space Grotesk';color:var(--ink3);text-align:center;max-width:390px;">Нажимайте «Начать» → лог подходов, отдых, следующее упражнение → разбор. Нижняя навигация: Тренер · Зал · Прогресс · План.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:430,&quot;height&quot;:900},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;,&quot;section&quot;:&quot;Тема&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#DA5326&quot;,&quot;options&quot;:[&quot;#DA5326&quot;,&quot;#C2410C&quot;,&quot;#2A6FDB&quot;,&quot;#1F8A5B&quot;,&quot;#7A5AF8&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Тема&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.baseWorkout = [
+      { name:'Жим лёжа', group:'Грудь', target:3, weight:60, reps:10, step:2.5, rest:120, prev:'60×10/9/8', goal:'60×10/9/9', hint:{tag:'Держать', val:'60 кг × 10', note:'качество важнее веса'} },
+      { name:'Тяга верхнего блока', group:'Спина', target:3, weight:55, reps:12, step:2.5, rest:90, prev:'52×12/11/10', goal:'55×12/11/11', hint:{tag:'Прибавить', val:'55 кг × 12', note:'форма чистая — растём'} },
+      { name:'Жим гантелей на наклонной', group:'Грудь', target:3, weight:24, reps:10, step:2, rest:90, prev:'22×10/10/9', goal:'24×10/10/10', hint:{tag:'Держать', val:'24 кг × 10', note:'контроль на негативе'} },
+      { name:'Тяга горизонтального блока', group:'Спина', target:3, weight:60, reps:12, step:2.5, rest:90, prev:'57×12/12/11', goal:'60×12/12/12', hint:{tag:'Держать', val:'60 кг × 12', note:'сводим лопатки'} },
+      { name:'Разведения гантелей', group:'Грудь', target:2, weight:12, reps:15, step:1, rest:60, prev:'10×15/14', goal:'12×15/15', hint:{tag:'Лёгкий', val:'12 кг × 15', note:'добивка на объём'} },
+    ];
+    // каталог для добавления упражнений — дефолтные параметры от тренера
+    this.catalog = {
+      'Жим лёжа':{group:'Грудь',target:3,weight:60,reps:10,step:2.5,rest:120},
+      'Жим гантелей на наклонной':{group:'Грудь',target:3,weight:24,reps:10,step:2,rest:90},
+      'Разведения гантелей':{group:'Грудь',target:3,weight:12,reps:15,step:1,rest:60},
+      'Тяга верхнего блока':{group:'Спина',target:3,weight:55,reps:12,step:2.5,rest:90},
+      'Тяга штанги в наклоне':{group:'Спина',target:3,weight:50,reps:10,step:2.5,rest:120},
+      'Тяга горизонтального блока':{group:'Спина',target:3,weight:60,reps:12,step:2.5,rest:90},
+      'Присед со штангой':{group:'Ноги',target:4,weight:80,reps:8,step:5,rest:150},
+      'Жим ногами':{group:'Ноги',target:3,weight:140,reps:12,step:10,rest:120},
+      'Румынская тяга':{group:'Ноги',target:3,weight:70,reps:10,step:5,rest:120},
+      'Жим стоя':{group:'Плечи',target:3,weight:40,reps:8,step:2.5,rest:120},
+      'Махи гантелями в стороны':{group:'Плечи',target:3,weight:10,reps:15,step:1,rest:60},
+      'Сгибания на бицепс':{group:'Руки',target:3,weight:14,reps:12,step:1,rest:60},
+      'Разгибания на трицепс':{group:'Руки',target:3,weight:25,reps:12,step:2.5,rest:60},
+    };
+    // техника: подсказки тренера по каждому упражнению
+    this.technique = {
+      'Жим лёжа':['Лопатки сведены и прижаты к скамье весь подход.','Гриф опускается к нижней части груди, локти ~45°.','Стопы плотно в пол, лёгкий прогиб в пояснице.','Пауза внизу без отбива от груди.'],
+      'Тяга верхнего блока':['Грудь вверх, плечи опущены от ушей.','Тянем локтями вниз, сводим лопатки.','Рукоять к верху груди, без раскачки корпусом.','Контролируемый возврат вверх на 2 счёта.'],
+      'Жим гантелей на наклонной':['Скамья 30°, гантели над плечами.','Локти под запястьями, не разводить широко.','Опускать до растяжения груди, не глубже.','Свести гантели вверху без стука.'],
+      'Тяга горизонтального блока':['Спина прямая, лёгкий наклон от бёдер.','Тянем к низу живота, локти вдоль корпуса.','Сводим лопатки в конце, пауза 1 счёт.','Не откидывать корпус назад.'],
+      'Разведения гантелей':['Лёгкий сгиб в локтях фиксирован весь подход.','Разводим по дуге до уровня плеч.','Чувствуем растяжение грудных, без рывков.','Вес умеренный — работаем на технику.'],
+    };
+    this._defaultTech = ['Разминочный подход перед рабочим.','Полная амплитуда, контроль на негативе.','Дыхание: выдох на усилии.','Темп ровный, без рывков и раскачки.'];
+    // иллюстрации техники (реальные фото-гайды)
+    this.guides = {
+      'Жим лёжа':'exercise-guides/bench-press-gpt.png',
+      'Тяга верхнего блока':'exercise-guides/lat-pulldown-gpt.png',
+      'Жим гантелей на наклонной':'exercise-guides/incline-db-press-gpt.png',
+      'Тяга горизонтального блока':'exercise-guides/cable-row-gpt.png',
+      'Разведения гантелей':'exercise-guides/dumbbell-fly-gpt.png',
+      'Тяга штанги в наклоне':'exercise-guides/chest-supported-row-gpt.png',
+      'Присед со штангой':'exercise-guides/barbell-squat-gpt.png',
+      'Жим ногами':'exercise-guides/leg-press-gpt.png',
+      'Румынская тяга':'exercise-guides/romanian-deadlift-gpt.png',
+      'Жим стоя':'exercise-guides/db-shoulder-press-gpt.png',
+      'Махи гантелями в стороны':'exercise-guides/lateral-raises-gpt.png',
+      'Сгибания на бицепс':'exercise-guides/dumbbell-curl-gpt.png',
+      'Разгибания на трицепс':'exercise-guides/cable-triceps-pushdown-gpt.png',
+    };
+    const sysDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    this.state = {
+      theme: props.defaultTheme || (sysDark ? 'dark' : 'light'),
+      themeManual: !!props.defaultTheme, // авто по системе, пока пользователь не переопределил вручную
+      view: 'home',            // home | progress | plan | gym | review
+      overlay: 'none',         // none | library | readiness
+      libFilter: 'Все',
+      libMode: 'browse',       // browse | add
+      menuOpen: false,
+      planHorizon: 'week',     // week | meso
+      info: null,              // {kicker,title,lines[]} — детальный шит
+      dayOverrides: {},        // номер дня → 'plan' | 'rest' (запланировать/отменить)
+      dayNote: '',
+      // цели (многонедельные) — можно поставить и убрать
+      goals: [
+        { id:'g1', title:'Жим лёжа 70 кг', ex:'Жим лёжа', target:70, date:'к 15 сентября', note:'осталось +10 кг · тренер ведёт по циклу' },
+      ],
+      goalAdding: false,
+      draftGoalEx: 'Жим лёжа',
+      draftGoalWeight: 70,
+      activeProfile: 'v',
+      profileMenuOpen: false,
+      ready: { sleep:null, energy:null, muscles:null },
+      // gym
+      plan: this.baseWorkout.map(x => ({ ...x })),
+      i: 0,
+      w: this.baseWorkout[0].weight,
+      r: this.baseWorkout[0].reps,
+      rpe: null,           // 'easy' | 'ok' | 'hard' — как далось
+      logs: this.baseWorkout.map(() => []),
+      resting: false,
+      restLeft: 0,
+      restTotal: 0,
+      editing: null,
+    };
+  }
+
+  get workout() { return this.state.plan; }
+
+  _addExercise(name) {
+    const c = this.catalog[name];
+    if (!c) return;
+    const ex = { name, group:c.group, target:c.target, weight:c.weight, reps:c.reps, step:c.step, rest:c.rest,
+      prev:'—', goal:'новое', hint:{tag:'Добавлено', val:`${c.weight} кг × ${c.reps}`, note:'вне плана — по самочувствию'} };
+    this.setState(st => {
+      const at = st.i + 1; // вставляем сразу после текущего
+      const plan = st.plan.slice(); plan.splice(at, 0, ex);
+      const logs = st.logs.slice(); logs.splice(at, 0, []);
+      return { plan, logs, overlay:'none', libMode:'browse' };
+    });
+  }
+
+  _deleteExercise(idx) {
+    this.setState(st => {
+      if (st.plan.length <= 1) return { menuOpen:false }; // нельзя удалить последнее
+      const plan = st.plan.slice(); plan.splice(idx, 1);
+      const logs = st.logs.slice(); logs.splice(idx, 1);
+      const i = Math.min(st.i, plan.length - 1);
+      return { plan, logs, i, w:plan[i].weight, r:plan[i].reps, resting:false, restLeft:0, editing:null, menuOpen:false };
+    });
+  }
+
+  componentDidMount() {
+    // авто-режим: следуем за системной темой, пока пользователь не переключил вручную
+    if (window.matchMedia) {
+      this._mq = window.matchMedia('(prefers-color-scheme: dark)');
+      this._onScheme = (e) => { if (!this.state.themeManual) this.setState({ theme: e.matches ? 'dark' : 'light' }); };
+      if (this._mq.addEventListener) this._mq.addEventListener('change', this._onScheme);
+      else if (this._mq.addListener) this._mq.addListener(this._onScheme);
+    }
+    this._t = setInterval(() => {
+      if (this.state.resting && this.state.restLeft > 0) {
+        this.setState(s => {
+          const left = s.restLeft - 1;
+          return left <= 0 ? { restLeft: 0, resting: false } : { restLeft: left };
+        });
+      }
+    }, 1000);
+  }
+  componentWillUnmount() {
+    clearInterval(this._t);
+    if (this._mq && this._onScheme) {
+      if (this._mq.removeEventListener) this._mq.removeEventListener('change', this._onScheme);
+      else if (this._mq.removeListener) this._mq.removeListener(this._onScheme);
+    }
+  }
+
+  // ---- helpers ----
+  _startGym() {
+    const plan = this.baseWorkout.map(x => ({ ...x }));
+    this.setState({ view:'gym', overlay:'none', plan, i:0, w:plan[0].weight, r:plan[0].reps,
+      logs:plan.map(()=>[]), resting:false, restLeft:0, editing:null });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const W = this.workout;
+    const ex = W[s.i] || W[0];
+    const log = s.logs[s.i] || [];
+    const allDone = log.length >= ex.target;
+    const done = (n) => n === 1 ? '' : n; // unused
+
+    const clr = {
+      danger:'var(--danger)', warning:'var(--warning)', success:'var(--success)',
+    };
+
+    // ---- theme + nav styling ----
+    const segBase = 'padding:7px 15px;border:0;border-radius:999px;font:600 12px \'Space Grotesk\';';
+    const seg = (on) => segBase + (on
+      ? 'background:var(--ink);color:var(--paper);'
+      : 'background:transparent;color:var(--ink2);');
+    const navBase = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 0 7px;border:0;border-radius:15px;font:600 11px \'Space Grotesk\';';
+    const nav = (on) => navBase + (on
+      ? 'background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);'
+      : 'background:transparent;color:var(--ink3);');
+
+    // ---- gym chips ----
+    const editSet = (k) => this.setState(st => {
+      if (st.editing === k) return { editing:null }; // toggle off = cancel
+      const entry = (st.logs[st.i]||[])[k];
+      return entry ? { editing:k, w:entry.w, r:entry.r, rpe:entry.rpe || null } : {};
+    });
+    const chips = Array.from({length: ex.target}, (_, k) => {
+      const isEditing = s.editing === k;
+      if (k < log.length) {
+        return { label:`${k+1} · ${log[k].w}×${log[k].r}`, onClick:() => editSet(k),
+          bg: isEditing ? 'color-mix(in srgb,var(--warning) 20%,transparent)' : 'color-mix(in srgb,var(--success) 12%,transparent)',
+          border: isEditing ? 'var(--warning)' : 'color-mix(in srgb,var(--success) 30%,transparent)',
+          color: isEditing ? 'var(--warning)' : 'var(--success)' };
+      }
+      if (k === log.length && !allDone && s.editing === null) {
+        return { label:`${k+1} · сейчас`, onClick:() => {}, bg:'var(--accent)', border:'var(--accent)', color:'#fff' };
+      }
+      return { label:`${k+1}`, onClick:() => {}, bg:'var(--surface-muted)', border:'transparent', color:'var(--ink3)' };
+    });
+
+    const progressFrac = (s.i + Math.min(log.length, ex.target)/ex.target) / W.length;
+
+    // ---- rest ----
+    const mm = Math.floor(s.restLeft/60), ss = s.restLeft%60;
+    const restText = `${mm}:${String(ss).padStart(2,'0')}`;
+    const restPct = s.restTotal ? `${Math.max(0,(s.restLeft/s.restTotal))*100}%` : '0%';
+
+    // ---- readiness ----
+    const optStyle = (active, tone) => 'padding:13px 0;border-radius:13px;font:600 13px \'Space Grotesk\';border:1px solid ' +
+      (active
+        ? `color-mix(in srgb,${tone} 45%,transparent);background:color-mix(in srgb,${tone} 14%,transparent);color:${tone};`
+        : 'var(--border);background:var(--surface);color:var(--ink2);');
+    const mkRow = (key, label, opts) => ({
+      label,
+      opts: opts.map(o => ({
+        label:o.l, style:optStyle(s.ready[key]===o.v, o.tone),
+        onClick:() => this.setState({ ready: { ...s.ready, [key]:o.v } }),
+      })),
+    });
+    const readyRows = [
+      mkRow('sleep','Сон', [{l:'Плохо',v:'bad',tone:'var(--danger)'},{l:'Норм',v:'ok',tone:'var(--warning)'},{l:'Отлично',v:'good',tone:'var(--success)'}]),
+      mkRow('energy','Энергия', [{l:'Низкая',v:'bad',tone:'var(--danger)'},{l:'Норм',v:'ok',tone:'var(--warning)'},{l:'Высокая',v:'good',tone:'var(--success)'}]),
+      mkRow('muscles','Мышцы', [{l:'Болят',v:'bad',tone:'var(--danger)'},{l:'Ноют',v:'ok',tone:'var(--warning)'},{l:'Свежие',v:'good',tone:'var(--success)'}]),
+    ];
+    const readyCount = Object.values(s.ready).filter(Boolean).length;
+
+    // ---- library ----
+    const allItems = [
+      {name:'Жим лёжа',group:'Грудь'},{name:'Жим гантелей на наклонной',group:'Грудь'},{name:'Разведения гантелей',group:'Грудь'},
+      {name:'Тяга верхнего блока',group:'Спина'},{name:'Тяга штанги в наклоне',group:'Спина'},{name:'Тяга горизонтального блока',group:'Спина'},
+      {name:'Присед со штангой',group:'Ноги'},{name:'Жим ногами',group:'Ноги'},{name:'Румынская тяга',group:'Ноги'},
+      {name:'Жим стоя',group:'Плечи'},{name:'Махи гантелями в стороны',group:'Плечи'},
+      {name:'Сгибания на бицепс',group:'Руки'},{name:'Разгибания на трицепс',group:'Руки'},
+    ];
+    const groups = ['Все','Грудь','Спина','Ноги','Плечи','Руки'];
+    const filterStyle = (on) => 'flex:0 0 auto;padding:8px 15px;border-radius:999px;font:600 12px \'Space Grotesk\';border:1px solid ' +
+      (on ? 'var(--accent);background:var(--accent);color:#fff;' : 'var(--border);background:var(--surface);color:var(--ink2);');
+    const libFilters = groups.map(g => ({
+      label:g, style:filterStyle(s.libFilter===g), onClick:() => this.setState({ libFilter:g }),
+    }));
+    const libItems = allItems.filter(it => s.libFilter==='Все' || it.group===s.libFilter)
+      .map(it => ({
+        ...it,
+        addMode: s.libMode === 'add',
+        browseMode: s.libMode !== 'add',
+        inWorkout: s.plan.some(p => p.name === it.name),
+        onClick: () => {
+          if (s.libMode === 'add') { this._addExercise(it.name); return; }
+          this.setState({ info:{ kicker:`Техника · ${it.group}`, title:it.name,
+            image:this.guides[it.name] || '',
+            lines:(this.technique[it.name] || this._defaultTech) } });
+        },
+      }));
+
+    // ---- review ----
+    let revVol = 0, revSets = 0;
+    const revEx = W.map((e, idx) => {
+      const lg = s.logs[idx] || [];
+      lg.forEach(x => { revVol += x.w*x.r; revSets++; });
+      const complete = lg.length >= e.target;
+      const rpeLabel = { easy:'легко', ok:'нормально', hard:'тяжело', max:'на пределе' };
+      const rpes = lg.map(x => rpeLabel[x.rpe]).filter(Boolean);
+      const rpeText = rpes.length ? ` · ${rpes.join(', ')}` : '';
+      return {
+        name:e.name,
+        detail: lg.length ? lg.map(x=>x.r).join('/') + ` повт · ${lg[0].w} кг${rpeText}` : 'пропущено',
+        mark: complete ? '✓' : (lg.length ? '·' : '—'),
+        markColor: complete ? 'var(--success)' : 'var(--ink3)',
+      };
+    });
+    const revMin = 8 + revSets*3;
+
+    // ---- progress sparklines ----
+    const lifts = [
+      {name:'Присед со штангой', e1rm:'92', delta:'+4 кг', trend:'up', points:'0,26 24,24 48,18 72,15 96,9 120,5'},
+      {name:'Становая тяга', e1rm:'120', delta:'+6 кг', trend:'up', points:'0,28 24,23 48,22 72,14 96,12 120,6'},
+      {name:'Жим лёжа', e1rm:'78', delta:'стабильно', trend:'hold', points:'0,16 24,17 48,15 72,16 96,15 120,15'},
+      {name:'Жим стоя', e1rm:'47', delta:'−1 кг', trend:'down', points:'0,9 24,11 48,13 72,15 96,19 120,23'},
+    ].map(l => {
+      const tc = l.trend==='down' ? 'var(--danger)' : l.trend==='hold' ? 'var(--ink3)' : 'var(--success)';
+      const last = l.points.trim().split(' ').pop().split(',');
+      return { ...l, trendColor:tc, dotX:last[0], dotY:last[1] };
+    });
+
+    // ---- plan week strip (начинается с сегодня, только будущие дни) ----
+    const weekStrip = [
+      {wd:'Сб',day:'12',state:'today'},{wd:'Вс',day:'13',state:'rest'},{wd:'Пн',day:'14',state:'next'},
+      {wd:'Вт',day:'15',state:'rest'},{wd:'Ср',day:'16',state:'plan'},{wd:'Чт',day:'17',state:'rest'},{wd:'Пт',day:'18',state:'plan'},
+    ].map(d => {
+      const st = s.dayOverrides[d.day] || d.state; // возможна замена: plan ↔ rest
+      const map = {
+        today:{bg:'var(--hero-bg)',border:'var(--hero-bg)',labelColor:'var(--hero-tert)',numColor:'var(--hero-text)',dot:'var(--accent)'},
+        next:{bg:'color-mix(in srgb,var(--accent) 12%,transparent)',border:'color-mix(in srgb,var(--accent) 35%,transparent)',labelColor:'var(--accent)',numColor:'var(--accent)',dot:'var(--accent)'},
+        done:{bg:'var(--surface)',border:'var(--border)',labelColor:'var(--ink3)',numColor:'var(--ink)',dot:'var(--success)'},
+        plan:{bg:'var(--surface)',border:'var(--border)',labelColor:'var(--ink3)',numColor:'var(--ink)',dot:'color-mix(in srgb,var(--accent) 45%,transparent)'},
+        rest:{bg:'transparent',border:'var(--separator)',labelColor:'var(--ink3)',numColor:'var(--ink3)',dot:'transparent'},
+      };
+      // тап переключает тренировку/отдых на будущих днях; для остальных — поясняет статус
+      const toggleable = st === 'rest' || st === 'plan';
+      const noteFor = { today:`Сегодня · Грудь / спина · тренировка запланирована`, done:`${d.wd}, ${d.day} · тренировка пройдена`, next:`Ближайшая тренировка · ${d.wd}, ${d.day}` };
+      const onClick = toggleable ? () => this.setState(prev => {
+        const cur = prev.dayOverrides[d.day] || d.state;
+        const nextSt = cur === 'plan' ? 'rest' : 'plan';
+        return { dayOverrides: { ...prev.dayOverrides, [d.day]: nextSt },
+          dayNote: nextSt === 'plan' ? `Тренировка запланирована на ${d.wd}, ${d.day}` : `Тренировка на ${d.wd}, ${d.day} отменена` };
+      }) : () => this.setState({ dayNote: noteFor[st] || '' });
+      return { ...d, ...map[st], planned: st === 'plan', onClick };
+    });
+
+    return {
+      theme: s.theme,
+      accentVar: this.props.accent ? { '--accent': this.props.accent } : {},
+      // header switch
+      segLight: seg(s.themeManual && s.theme==='light'), segDark: seg(s.themeManual && s.theme==='dark'), segAuto: seg(!s.themeManual),
+      setLight:() => this.setState({theme:'light', themeManual:true}),
+      setDark:() => this.setState({theme:'dark', themeManual:true}),
+      setAuto:() => this.setState({ themeManual:false, theme: (this._mq && this._mq.matches) ? 'dark' : 'light' }),
+      // views
+      isHome: s.view==='home', isProgress: s.view==='progress', isPlan: s.view==='plan',
+      isGym: s.view==='gym', isReview: s.view==='review',
+      showNav: s.view!=='gym' && s.view!=='review',
+      showReadiness: s.overlay==='readiness', showLibrary: s.overlay==='library',
+      // nav
+      navHome: nav(s.view==='home'), navGym: nav(false), navProgress: nav(s.view==='progress'), navPlan: nav(s.view==='plan'),
+      goHome:() => this.setState({view:'home',overlay:'none'}),
+      goProgress:() => this.setState({view:'progress',overlay:'none'}),
+      goPlan:() => this.setState({view:'plan',overlay:'none'}),
+      startWorkoutTap:() => this.setState({overlay:'readiness'}),
+      openLibrary:() => this.setState({overlay:'library', libMode:'browse'}),
+      openAddExercise:() => this.setState({overlay:'library', libMode:'add', libFilter:'Все', menuOpen:false}),
+      closeLibrary:() => this.setState({overlay:'none', libMode:'browse'}),
+      closeReadiness:() => this.setState({overlay:'none'}),
+      stop: (e) => { if(e&&e.stopPropagation) e.stopPropagation(); },
+      // detail / info sheet
+      showInfo: !!s.info,
+      infoKicker: s.info ? s.info.kicker : '',
+      infoTitle: s.info ? s.info.title : '',
+      infoImage: s.info ? (s.info.image || '') : '',
+      hasInfoImage: !!(s.info && s.info.image),
+      infoLines: s.info ? s.info.lines.map((t, idx) => ({ n: String(idx+1), text: t })) : [],
+      closeInfo:() => this.setState({ info:null }),
+      openComposition:() => this.setState({ info:{ kicker:'Состав · Восстановительная',
+        title:'5 упражнений', lines:this.baseWorkout.map(e => `${e.name} · ${e.group} · ${e.target}×${e.reps}`) } }),
+      openTechnique:() => {
+        const e = this.workout[this.state.i] || this.workout[0];
+        this.setState({ info:{ kicker:`Техника · ${e.group}`, title:e.name,
+          image:this.guides[e.name] || '',
+          lines:(this.technique[e.name] || this._defaultTech) } });
+      },
+      // home data
+      profileInitial: s.activeProfile === 'v' ? 'В' : 'О',
+      profileMenuOpen: s.profileMenuOpen,
+      toggleProfileMenu:() => this.setState(st => ({ profileMenuOpen: !st.profileMenuOpen })),
+      profiles: [
+        { id:'v', name:'Вячеслав', initial:'В' },
+        { id:'o', name:'Олег', initial:'О' },
+      ].map(p => ({
+        name:p.name, initial:p.initial,
+        style:'width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-radius:11px;background:' +
+          (s.activeProfile===p.id ? 'var(--surface-muted);' : 'transparent;'),
+        checkStyle:'font-size:14px;color:var(--accent);flex:0 0 auto;opacity:' + (s.activeProfile===p.id ? '1' : '0'),
+        onClick:() => this.setState({ activeProfile:p.id, profileMenuOpen:false }),
+      })),
+      goals: s.goals.map(g => ({ ...g, remove:() => this.setState(st => ({ goals: st.goals.filter(x => x.id !== g.id) })) })),
+      hasGoals: s.goals.length > 0,
+      noGoals: s.goals.length === 0,
+      showGoalSheet: s.goalAdding,
+      goalAdding: s.goalAdding,
+      openGoalAdd:() => this.setState({ goalAdding:true }),
+      cancelGoalAdd:() => this.setState({ goalAdding:false }),
+      draftGoalWeight: String(s.draftGoalWeight),
+      draftGoalEx: s.draftGoalEx,
+      goalExChips: Object.keys(this.catalog).map(name => ({
+        name,
+        style: 'flex:0 0 auto;padding:8px 13px;border-radius:999px;font:600 12px \'Space Grotesk\';border:1px solid ' +
+          (s.draftGoalEx === name ? 'var(--accent);background:var(--accent);color:#fff;' : 'var(--border);background:var(--surface);color:var(--ink2);'),
+        onClick:() => this.setState({ draftGoalEx: name }),
+      })),
+      goalWeightUp:() => this.setState(st => ({ draftGoalWeight: st.draftGoalWeight + 2.5 })),
+      goalWeightDown:() => this.setState(st => ({ draftGoalWeight: Math.max(0, st.draftGoalWeight - 2.5) })),
+      saveGoal:() => this.setState(st => {
+        const w = st.draftGoalWeight;
+        const g = { id:'g'+Date.now(), title:`${st.draftGoalEx} ${w} кг`, ex:st.draftGoalEx, target:w,
+          date:'без срока', note:'тренер оценит прогресс после ближайших тренировок' };
+        return { goals:[...st.goals, g], goalAdding:false };
+      }),
+      reviewRows:[
+        {title:'Жим гантелей → жим штанги', meta:'приоритет · сила', color:'var(--danger)',
+          onClick:() => this.setState({ info:{ kicker:'Разбор тренера · приоритет', title:'Жим гантелей → жим штанги',
+            lines:['Штанга даёт больше нагрузки и лучше растит силу жима.','Гантели оставляем как вспомогательное во второй половине.','Начинаем с 60 кг — по прошлым данным это твой рабочий вес.'] } }) },
+        {title:'Ноги: повторы до 10–12', meta:'объём · выносливость', color:'var(--warning)',
+          onClick:() => this.setState({ info:{ kicker:'Разбор тренера · объём', title:'Ноги: повторы до 10–12',
+            lines:['Поднимаем диапазон повторов для объёма и выносливости.','Вес снижаем на 5–10%, техника в приоритете.','Отдых между подходами сокращаем до 90 секунд.'] } }) },
+        {title:'Больше объёма и силы', meta:'фокус недели', color:'var(--success)',
+          onClick:() => this.setState({ info:{ kicker:'Фокус недели', title:'Больше объёма и силы',
+            lines:['Общий тоннаж недели растёт примерно на 5%.','Базовые движения — с прибавкой веса.','Изоляция — на качество и полную амплитуду.'] } }) },
+      ],
+      nextItems:[{badge:'B', title:'Ноги', meta:'День B · 4 упражнения'}],
+      history:[
+        {name:'День A · Грудь/спина', date:'10 июля', vol:'8 200 кг'},
+        {name:'День B · Ноги', date:'8 июля', vol:'11 400 кг'},
+        {name:'День A · Грудь/спина', date:'6 июля', vol:'7 900 кг'},
+      ],
+      // progress
+      focusRows:[
+        {n:1, name:'Присед со штангой', note:'можно +2.5 кг', tag:'растёт', tagBg:'color-mix(in srgb,var(--success) 14%,transparent)', tagColor:'var(--success)'},
+        {n:2, name:'Жим лёжа', note:'добрать 10/9/9', tag:'держим', tagBg:'var(--surface-muted)', tagColor:'var(--ink2)'},
+      ],
+      lifts,
+      // plan
+      weekStrip,
+      dayNote: s.dayNote,
+      hasDayNote: !!s.dayNote,
+      planHorizon: s.planHorizon,
+      isWeekHorizon: s.planHorizon === 'week',
+      isMesoHorizon: s.planHorizon === 'meso',
+      segWeek: 'flex:1;padding:9px 0;border:0;border-radius:11px;font:600 13px \'Space Grotesk\';' + (s.planHorizon==='week' ? 'background:var(--ink);color:var(--paper);' : 'background:transparent;color:var(--ink2);'),
+      segMeso: 'flex:1;padding:9px 0;border:0;border-radius:11px;font:600 13px \'Space Grotesk\';' + (s.planHorizon==='meso' ? 'background:var(--ink);color:var(--paper);' : 'background:transparent;color:var(--ink2);'),
+      setHorizonWeek:() => this.setState({planHorizon:'week'}),
+      setHorizonMeso:() => this.setState({planHorizon:'meso'}),
+      mesoWeeks:[
+        {label:'Неделя 1 · втягивание', tag:'пройдена', state:'done', vol:'26 500 кг', days:'3 тренировки · RPE 7'},
+        {label:'Неделя 2 · накопление', tag:'сейчас', state:'now', vol:'27 800 кг', days:'3 тренировки · RPE 8'},
+        {label:'Неделя 3 · пик', tag:'план', state:'plan', vol:'≈ 30 000 кг', days:'3 тренировки · RPE 8–9'},
+        {label:'Неделя 4 · разгрузка', tag:'план', state:'plan', vol:'≈ 18 000 кг', days:'2 тренировки · RPE 6'},
+      ].map(m => {
+        const map = {
+          done:{dot:'var(--success)', tagBg:'var(--surface-muted)', tagColor:'var(--ink2)'},
+          now:{dot:'var(--accent)', tagBg:'color-mix(in srgb,var(--accent) 14%,transparent)', tagColor:'var(--accent)'},
+          plan:{dot:'color-mix(in srgb,var(--accent) 40%,transparent)', tagBg:'var(--surface-muted)', tagColor:'var(--ink3)'},
+        };
+        return { ...m, ...map[m.state] };
+      }),
+      planCards:[
+        {day:'Сб\n11.07', name:'Ноги', meta:'4 упражнения · присед, выпады', mins:'55'},
+        {day:'Пн\n13.07', name:'Верх тела', meta:'6 упражнений · плечи, руки', mins:'60'},
+        {day:'Ср\n15.07', name:'Грудь / спина', meta:'5 упражнений · пиковая неделя', mins:'52'},
+      ],
+      // readiness
+      readyRows, startOpacity: readyCount===3 ? '1' : '0.5',
+      confirmStart:() => this._startGym(),
+      // library
+      libFilters, libItems,
+      // gym
+      exName: ex.name, exGroup: ex.group,
+      exSetLabel: `${ex.group} · подход ${Math.min(log.length+1, ex.target)} из ${ex.target}`,
+      exCounter: `${s.i+1} / ${W.length}`,
+      progressPct: `${Math.round(progressFrac*100)}%`,
+      curWeight: String(s.w), curReps: String(s.r),
+      weightUp:() => this.setState({w: +(s.w + ex.step).toFixed(1)}),
+      weightDown:() => this.setState({w: Math.max(0, +(s.w - ex.step).toFixed(1))}),
+      repUp:() => this.setState({r: s.r+1}),
+      repDown:() => this.setState({r: Math.max(1, s.r-1)}),
+      chips, allDone,
+      // exercise menu + add/delete
+      menuOpen: s.menuOpen,
+      toggleMenu:() => this.setState(st => ({ menuOpen: !st.menuOpen })),
+      closeMenu:() => this.setState({ menuOpen:false }),
+      canDelete: s.plan.length > 1,
+      deleteExercise:() => this._deleteExercise(s.i),
+      openAddFromMenu:() => this.setState({overlay:'library', libMode:'add', libFilter:'Все', menuOpen:false}),
+      // library mode
+      libAddMode: s.libMode === 'add',
+      libTitle: s.libMode === 'add' ? 'Добавить упражнение' : 'Библиотека',
+      showLogger: s.editing !== null || (!s.resting && !allDone),
+      isEditingSet: s.editing !== null,
+      editHint: s.editing !== null ? `Правка подхода ${s.editing+1}` : '',
+      chipsHint: (s.editing === null && log.length && !allDone) ? 'Нажмите на записанный подход, чтобы поправить'
+        : (s.editing === null && allDone) ? 'Нажмите на подход, чтобы поправить' : '',
+      cancelEdit:() => this.setState({ editing:null }),
+      // RPE — оценка тяжести подхода (тренер учитывает её в рекомендациях)
+      // «Сколько ещё сделаешь?» — запас повторов (RIR), шкала 4 точки: слева 4+, справа 0
+      rirPoints: [
+        {key:'easy', rir:'4+', tone:'var(--success)'},
+        {key:'ok', rir:'3', tone:'var(--success)'},
+        {key:'hard', rir:'1–2', tone:'var(--warning)'},
+        {key:'max', rir:'0', tone:'var(--danger)'},
+      ].map(o => {
+        const on = s.rpe === o.key;
+        return {
+          rir:o.rir,
+          dotStyle:'width:26px;height:26px;border-radius:999px;display:grid;place-items:center;transition:all .15s;border:2px solid ' +
+            (on ? `${o.tone};background:${o.tone};` : 'var(--ink3);background:var(--paper);'),
+          innerStyle:'width:9px;height:9px;border-radius:999px;background:' + (on ? '#fff' : 'transparent'),
+          numStyle:'font:600 13px \'Space Grotesk\';font-variant-numeric:tabular-nums;color:' + (on ? o.tone : 'var(--ink2)'),
+          onClick:() => this.setState({ rpe:o.key }),
+        };
+      }),
+      rirCaptionRemoved: true,
+      doneOpacity: s.rpe ? '1' : '0.5',
+      doneLabel: s.editing !== null
+        ? `Сохранить подход ${s.editing+1}`
+        : `Готово · подход ${Math.min(log.length+1, ex.target)}`,
+      hintTag: '→ ' + ex.hint.tag, hintVal: ex.hint.val, hintNote: ex.hint.note,
+      exPrev: ex.prev, exGoal: ex.goal,
+      restText, restPct, resting: s.resting && s.editing === null,
+      skipRest:() => this.setState({resting:false, restLeft:0}),
+      addRest:() => this.setState(st => ({restLeft: st.restLeft+30, restTotal: st.restTotal+30})),
+      nextName: W[s.i+1] ? W[s.i+1].name : 'Завершить тренировку',
+      nextCta: allDone ? (W[s.i+1] ? 'Следующее упражнение →' : 'К разбору →') : 'Пропустить →',
+      markDone:() => {
+        if (!this.state.rpe) return; // нужно оценить тяжесть
+        this.setState(st => {
+          const lg = st.logs.map(a => a.slice());
+          const cur = this.workout[st.i];
+          // editing an existing set: overwrite, no rest timer
+          if (st.editing !== null && lg[st.i][st.editing]) {
+            lg[st.i][st.editing] = { w: st.w, r: st.r, rpe: st.rpe };
+            return { logs: lg, editing: null, rpe: null };
+          }
+          if (lg[st.i].length < cur.target) lg[st.i].push({ w: st.w, r: st.r, rpe: st.rpe });
+          const nowDone = lg[st.i].length >= cur.target;
+          return {
+            logs: lg,
+            rpe: null,
+            resting: !nowDone,
+            restLeft: nowDone ? 0 : cur.rest,
+            restTotal: nowDone ? 0 : cur.rest,
+          };
+        });
+      },
+      nextExercise:() => {
+        this.setState(st => {
+          const ni = st.i + 1;
+          if (ni >= this.workout.length) return { view:'review', editing:null };
+          return { i:ni, w:this.workout[ni].weight, r:this.workout[ni].reps, resting:false, restLeft:0, editing:null };
+        });
+      },
+      exitWorkout:() => this.setState({view:'home', resting:false, restLeft:0, editing:null}),
+      finishWorkout:() => this.setState({view:'review', resting:false, restLeft:0, editing:null}),
+      // review
+      revMin: String(revMin), revSets: String(revSets), revVol: revVol.toLocaleString('ru-RU'), revEx,
+      finishReview:() => this.setState(st => {
+        const plan = this.baseWorkout.map(x => ({ ...x }));
+        return { view:'home', overlay:'none', plan, i:0, w:plan[0].weight, r:plan[0].reps,
+          logs:plan.map(()=>[]), resting:false, restLeft:0, editing:null, ready:{sleep:null,energy:null,muscles:null} };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

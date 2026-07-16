@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react'
+
 type Metric = {
   label: string
-  value: string
+  value: string | ReactNode
   trend?: string
 }
 
@@ -14,7 +16,9 @@ export function MetricPair({ metrics }: MetricPairProps) {
       {metrics.map((metric, index) => (
         <div className="metric-card" key={`${metric.label}-${index}`}>
           <span>{metric.label}</span>
-          <b>{metric.value}</b>
+          {typeof metric.value === 'string'
+            ? <b>{metric.value}</b>
+            : <b>{metric.value}</b>}
           {metric.trend && <small>{metric.trend}</small>}
         </div>
       ))}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ProgressDashboard } from '../domain/progressDashboard'
-import { HeroStatus, ScreenHeader, SectionList } from './ui'
+import { ScreenHeader, SectionList } from './ui'
 import { isProgramApiConfigured } from '../data/programApi'
 
 type ProgressScreenProps = {
@@ -107,7 +107,6 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
     .slice(0, 3)
   const recentWorkouts = progressDashboard.recentWorkouts.slice(0, 3)
   const coachDecisions = progressDashboard.coachDecisions.slice(0, 2)
-  const painSignal = progressDashboard.overview.painMarks === 0 ? 'без боли' : `${progressDashboard.overview.painMarks} сигнал`
 
   // Issue #108: fetch the latest training record's decision.changes to show
   // "what the coach changed" instead of raw analysis text (plateaus/warnings).
@@ -140,7 +139,7 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
 
   return (
     <section className="screen active progress-screen">
-      <ScreenHeader eyebrow="Прогресс" title="Динамика" />
+      <ScreenHeader eyebrow="Прогресс · 14 дней" title="Динамика" />
       <span className="sr-only">Панель динамики</span>
 
       {/* Issue #108: "Что изменил тренер" — shows decision.changes from the
@@ -192,19 +191,24 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
         </SectionList>
       )}
 
-      <HeroStatus
-        eyebrow="14 дней"
-        title={progressHeadline(progressDashboard)}
-        metadata={`${progressDashboard.overview.workouts14d} трен. · ${volume14d}`}
-        metric={(
-          <div className="progress-orb" aria-hidden="true">
-            <span>{weeklyTargetText(progressDashboard.overview.workouts14d)}</span>
-            <small>{rhythmLabel(progressDashboard.overview.workouts14d)}</small>
+      <div className="progress-hero">
+        <div className="progress-hero__left">
+          <div className="progress-hero__title">{progressHeadline(progressDashboard)}</div>
+          <div className="progress-hero__meta">{progressDashboard.overview.workouts14d} из {progressDashboard.overview.workouts14d < 3 ? 3 : 6} тренировок · {volume14d}</div>
+        </div>
+        <div className="progress-hero__orb">
+          <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="40" cy="40" r="34" fill="none" stroke="color-mix(in srgb, var(--hero-text) 16%, transparent)" strokeWidth="7" />
+            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--success)" strokeWidth="7" strokeLinecap="round" strokeDasharray="213.6" strokeDashoffset={213.6 * (1 - Math.min(progressDashboard.overview.workouts14d / 6, 1))} />
+          </svg>
+          <div className="progress-hero__orb-text">
+            <div>
+              <div className="progress-hero__orb-num">{weeklyTargetText(progressDashboard.overview.workouts14d)}</div>
+              <div className="progress-hero__orb-label">{rhythmLabel(progressDashboard.overview.workouts14d)}</div>
+            </div>
           </div>
-        )}
-        primaryAction={<span className="badge">{progressDashboard.overview.exercisesGrowing} растёт</span>}
-        secondaryAction={<span className="badge">{painSignal}</span>}
-      />
+        </div>
+      </div>
 
       <SectionList title="Следующий фокус">
         {focusItems.length === 0 ? (
@@ -213,61 +217,80 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
           </div>
         ) : (
           <div className="progress-task-list">
-            {focusItems.map((item, index) => (
-              <article className="progress-task" key={item.exerciseId}>
-                <div className="progress-task__index">{index + 1}</div>
-                <div>
-                  <b>{item.exerciseName}</b>
-                  <div className="muted">{item.text}</div>
-                </div>
-                <span className="badge">{item.status}</span>
-              </article>
-            ))}
+            {focusItems.map((item, index) => {
+              // Issue #124: color-coded tag based on status
+              const tagClass = item.status === 'растёт' || item.status === 'можно повысить'
+                ? 'focus-tag focus-tag--success'
+                : item.status === 'закрепляем' || item.status === 'застой'
+                  ? 'focus-tag focus-tag--warning'
+                  : item.status === 'перегрузка' || item.status === 'была боль'
+                    ? 'focus-tag focus-tag--danger'
+                    : 'focus-tag focus-tag--neutral'
+              return (
+                <article className="progress-task" key={item.exerciseId}>
+                  <div className="progress-task__index">{index + 1}</div>
+                  <div>
+                    <b>{item.exerciseName}</b>
+                    <div className="muted">{item.text}</div>
+                  </div>
+                  <span className={tagClass}>{item.status}</span>
+                </article>
+              )
+            })}
           </div>
         )}
       </SectionList>
 
-      {/* e1RM Sparklines — Strength Trends.
-          Issue #55: only show exercises with >= 2 data points.
-          Exercises with 1 or 0 points have no useful visualization. */}
-      {progressDashboard.e1RMHistories.filter((ex) => ex.sparkline.length >= 2).length > 0 && (
-        <SectionList title="Сила (e1RM)">
-          <div className="e1rm-sparkline-grid">
-            {progressDashboard.e1RMHistories
-              .filter((ex) => ex.sparkline.length >= 2)
-              .map((ex) => (
-              <article className="e1rm-sparkline-card" key={ex.exerciseId}>
-                <div className="e1rm-sparkline-card__header">
-                  <b>{ex.exerciseName}</b>
-                  <span className="e1rm-sparkline-card__best">{formatKg(ex.currentBest)}</span>
-                </div>
-                <div className="e1rm-sparkline-card__chart">
-                  <SparklineSVG
-                    points={ex.sparkline}
-                    trendDirection={ex.trendDirection}
-                    width={140}
-                    height={36}
-                  />
-                </div>
-                <div className="e1rm-sparkline-card__footer">
-                  <small className="e1rm-sparkline-card__muscle">{ex.muscleGroup}</small>
-                  {ex.trendDirection !== 'insufficient_data' && (
-                    <small className={
-                      ex.trendDirection === 'up' ? 'e1rm-trend--up'
-                      : ex.trendDirection === 'down' ? 'e1rm-trend--down'
-                      : 'muted'
-                    }>
-                      {ex.trendText}
-                    </small>
-                  )}
-                </div>
-              </article>
-            ))}
+      {/* Issue #124: Strength section — e1RM sparklines + delta.
+          Only show exercises with >= 2 data points (need a trend).
+          Clean empty state when no data. */}
+      <div className="ser" style={{ fontSize: 22, fontWeight: 500, color: 'var(--text-primary)', margin: '22px 0 2px' }}>Сила</div>
+      <div style={{ font: '500 12px var(--font-ui)', color: 'var(--text-tertiary)', marginBottom: 10 }}>Расчётный максимум на 1 повтор, кг</div>
+      {progressDashboard.e1RMHistories.filter((ex) => ex.sparkline.length >= 2).length > 0 ? (
+        <div className="e1rm-sparkline-grid">
+          {progressDashboard.e1RMHistories
+            .filter((ex) => ex.sparkline.length >= 2)
+            .map((ex) => {
+                // Issue #124: compute delta from sparkline first → last
+                const points = ex.sparkline
+                const firstY = points[0]?.y ?? 0
+                const lastY = points[points.length - 1]?.y ?? 0
+                const delta = lastY - firstY
+                const deltaText = delta > 0 ? `+${formatKg(delta)}` : delta < 0 ? `−${formatKg(Math.abs(delta))}` : '0'
+                const deltaClass = delta > 0 ? 'e1rm-trend--up' : delta < 0 ? 'e1rm-trend--down' : 'muted'
+                return (
+                  <article className="e1rm-sparkline-card" key={ex.exerciseId}>
+                    <div className="e1rm-sparkline-card__header">
+                      <b>{ex.exerciseName}</b>
+                      <span className="e1rm-sparkline-card__best">{formatKg(ex.currentBest)}</span>
+                    </div>
+                    <div className="e1rm-sparkline-card__chart">
+                      <SparklineSVG
+                        points={ex.sparkline}
+                        trendDirection={ex.trendDirection}
+                        width={140}
+                        height={36}
+                      />
+                    </div>
+                    <div className="e1rm-sparkline-card__footer">
+                      <small className="e1rm-sparkline-card__muscle">{ex.muscleGroup}</small>
+                      {ex.trendDirection !== 'insufficient_data' && (
+                        <small className={deltaClass}>
+                          {deltaText} кг · {ex.trendText}
+                        </small>
+                      )}
+                    </div>
+                  </article>
+                )
+              })}
           </div>
-        </SectionList>
-      )}
-
-      {/* Secondary sections — collapsed by default (issue #47) */}
+        ) : (
+          <div className="muted" style={{ padding: '1rem 0', textAlign: 'center' }}>
+            Нужно 2+ тренировки для графика силы
+          </div>
+		        )}
+	
+	      {/* Secondary sections — collapsed by default (issue #47) */}
       <details className="progress-details">
         <summary>
           <span>Лучшие движения</span>

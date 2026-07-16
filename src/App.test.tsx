@@ -25,10 +25,13 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /открыть библиотеку упражнений/i }))
     expect(screen.getByRole('searchbox', { name: /поиск упражнения/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /все группы/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Все' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Тренер' }))
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    // #116: avatar dropdown — open it, then tap the active user to open the
+    // questionnaire (the old direct "Профиль" button is gone).
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     expect(screen.getByText('Анкета пользователя')).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toBeInTheDocument()
   })
@@ -37,7 +40,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByText('Перед тренировкой')).toBeInTheDocument()
     expect(screen.getByText('Как тренируемся сегодня?')).toBeInTheDocument()
@@ -63,7 +66,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /забиты мышцы/i }))
     await user.click(screen.getByRole('button', { name: /забиты мышцы: грудь/i }))
     await user.click(screen.getByRole('button', { name: /забиты мышцы: плечи/i }))
@@ -82,7 +85,7 @@ describe('Coach Timeline workout flow', () => {
 
     expect(screen.getByRole('heading', { name: 'Тренер' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
     expect(screen.getByText('Жим лёжа')).toBeInTheDocument()
@@ -100,16 +103,16 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByLabelText('Вес, подход 2')).toBeInTheDocument()
     expect(screen.queryByLabelText('Вес, подход 3')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /перейти к следующему упражнению/i }))
+    await user.click(screen.getByRole('button', { name: /пропустить упражнение/i }))
     expect(screen.getByText('Сейчас · 2 из 5')).toBeInTheDocument()
     expect(screen.getByText('Тяга верхнего блока')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
-    expect(screen.getByText('Разбор тренировки')).toBeInTheDocument()
-    expect(screen.getByText(/Что меняем дальше/i)).toBeInTheDocument()
+    expect(screen.getByText('Отличная работа')).toBeInTheDocument()
+    expect(screen.getByText(/сохранить и на главную/i)).toBeInTheDocument()
 
     await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: 'Прогресс' }))
-    expect(screen.getByText('Разбор тренировки')).toBeInTheDocument()
+    expect(screen.getByText('Отличная работа')).toBeInTheDocument()
     expect(screen.getByText(/Сначала сохрани тренировку/i)).toBeInTheDocument()
   })
 
@@ -120,13 +123,13 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /выбрать день b/i }))
     expect(screen.getByText(/Выбран День B/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     expect(screen.getByText('Вкладка «Зал» · День B')).toBeInTheDocument()
     expect(screen.getByText('Присед со штангой')).toBeInTheDocument()
     expect(screen.getByText('Сейчас · 1 из 4')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /перейти к следующему упражнению/i }))
+    await user.click(screen.getByRole('button', { name: /пропустить упражнение/i }))
     expect(screen.getByText('Румынская тяга')).toBeInTheDocument()
     expect(screen.getByText('Сейчас · 2 из 4')).toBeInTheDocument()
   })
@@ -135,7 +138,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /открыть описание упражнения: жим лёжа/i }))
 
@@ -180,7 +183,7 @@ describe('Coach Timeline workout flow', () => {
     ]))
 
     render(<App />)
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByText('Прошлый раз: 50×9 / 50×9 / 50×9')).toBeInTheDocument()
@@ -205,7 +208,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     const weight = screen.getByLabelText('Вес, подход 1')
     await user.clear(weight)
@@ -223,7 +226,7 @@ describe('Coach Timeline workout flow', () => {
 
     unmount()
     render(<App />)
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByText(/Подход 1 · 52,5×8/i)).toBeInTheDocument()
     expect(screen.getByLabelText('Вес, подход 2')).toBeInTheDocument()
@@ -233,7 +236,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     const weight = screen.getByLabelText('Вес, подход 1')
     await user.clear(weight)
@@ -248,7 +251,7 @@ describe('Coach Timeline workout flow', () => {
 
     unmount()
     render(<App />)
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('47.5')
     expect(screen.getByLabelText('Повторы, подход 1')).toHaveValue('7')
@@ -258,7 +261,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     expect(screen.getByRole('button', { name: '+5 кг' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '-5 кг' })).toBeInTheDocument()
@@ -291,7 +294,8 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     const workoutsInput = screen.getByLabelText('Тренировок в неделю')
     await user.clear(workoutsInput)
     await user.type(workoutsInput, '2')
@@ -303,7 +307,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /добавить день c/i }))
     expect(screen.getByRole('button', { name: /выбрать день c/i })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /добавить упражнение/i }))
     await user.click(screen.getByRole('button', { name: /добавить жим лёжа/i }))
@@ -314,7 +318,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByText('Тренер предлагает добавить')).toBeInTheDocument()
@@ -327,7 +331,7 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     for (const index of [1, 2, 3]) {
@@ -344,17 +348,17 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
     expect(screen.getByText(/Жим лёжа: все подходы/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
-    // Issue #57: history simplified — name + date in <b>, volume in <div class="muted">
-    expect(screen.getByText(/День A · \d{2}\.\d{2}, \d{2}:\d{2}/i)).toBeInTheDocument()
+    expect(screen.getAllByText('День A').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/\.\d{2} · \d+/).length).toBeGreaterThan(0)
     const savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
     expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 3, energy: 3, availableMinutes: 60 }))
 
     unmount()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     // Issue #33: weight pre-filled from plan (targetWeight=60), not from
     // history (nextRecommendedWeight=62.5).
@@ -429,10 +433,12 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    expect(screen.getByRole('option', { name: 'Вячеслав' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Олег' })).toBeInTheDocument()
+    // #116: users live behind the avatar dropdown now.
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    expect(screen.getByRole('menuitemradio', { name: /Вячеслав/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('menuitemradio', { name: /Олег/ })).toHaveAttribute('aria-checked', 'false')
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     for (const index of [1, 2, 3]) {
       const reps = screen.getByLabelText(`Повторы, подход ${index}`)
@@ -441,14 +447,16 @@ describe('Coach Timeline workout flow', () => {
       await user.click(screen.getByRole('button', { name: `Записать подход ${index}` }))
     }
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
-    await user.click(screen.getByRole('button', { name: /сохранить тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
     // Issue #57: history simplified — no more "X кг дальше" text
     expect(screen.getByRole('heading', { name: 'История' })).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Пользователь'), 'oleg')
+    // Switch to Oleg via the avatar dropdown.
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
     expect(screen.queryByRole('heading', { name: 'История' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
   })
@@ -457,7 +465,10 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    // #116: open the avatar dropdown, then tap the active user to open the
+    // questionnaire (was a direct "Профиль" button).
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     expect(screen.getByText('Анкета пользователя')).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toHaveValue('3')
 
@@ -475,8 +486,13 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText(/Программа обновлена: 4 тренировки\/нед/i)).toBeInTheDocument()
     expect(screen.getAllByText(/4 тренировки\/нед/i).length).toBeGreaterThan(0)
 
-    await user.selectOptions(screen.getByLabelText('Пользователь'), 'oleg')
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    // Switch to Oleg via the avatar dropdown (back on the home screen) and
+    // re-open his questionnaire.
+    await user.click(screen.getByRole('button', { name: 'Тренер' }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
+    await user.click(screen.getByRole('button', { name: /профиль олег/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
     expect(screen.getByLabelText('Тренировок в неделю')).toHaveValue('3')
   })
 
@@ -484,20 +500,21 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     await user.click(screen.getByRole('button', { name: '2×/нед' }))
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))
 
     expect(screen.getByText(/Программа обновлена: 2 тренировки\/нед/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'План' }))
-    expect(screen.getByText('День A')).toBeInTheDocument()
-    expect(screen.getByText('День B')).toBeInTheDocument()
+    expect(screen.getAllByText('День A').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('День B').length).toBeGreaterThan(0)
     expect(screen.queryByText('День C')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Тренер' }))
     expect(screen.queryByRole('button', { name: /выбрать день c/i })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /открыть тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
   })
@@ -506,17 +523,19 @@ describe('Coach Timeline workout flow', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /профиль/i }))
+    await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
     await user.click(screen.getByRole('button', { name: 'Четверг' }))
     await user.click(screen.getByRole('button', { name: 'Воскресенье' }))
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))
 
     await user.click(screen.getByRole('button', { name: 'План' }))
-    expect(screen.getByText('План тренировок')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^План$/ })).toBeInTheDocument()
     expect(screen.getByText('Даты')).toBeInTheDocument()
     expect(screen.getAllByText(/3 тренировки\/нед/i).length).toBeGreaterThan(0)
-    await user.click(screen.getAllByRole('button', { name: /запланировать тренировку вт,/i })[0])
-    await user.click(screen.getAllByRole('button', { name: /запланировать тренировку сб,/i })[0])
+    // #120: week strip — plan two rest days to populate the calendar.
+    await user.click(screen.getAllByRole('button', { name: /ср,.*отдых/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /сб,.*отдых/i })[0])
     expect(screen.getAllByText('2 в календаре').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Следующая тренировка/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/День A/i).length).toBeGreaterThan(0)

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ExercisePlan, UserProfile, WorkoutDay  } from '../../shared/types'
 import type { CoachState, PlannedWorkout } from '../data/programApi'
@@ -55,6 +56,14 @@ const user: UserProfile = {
   initials: 'В',
   goal: 'сила',
   streak: '4',
+}
+
+const secondUser: UserProfile = {
+  id: 'anna',
+  name: 'Анна',
+  initials: 'А',
+  goal: 'масса',
+  streak: '2',
 }
 
 // Default props for tests — override only what each test cares about.
@@ -142,13 +151,92 @@ describe('CoachHome', () => {
   })
 })
 
-describe('MesocycleIndicator', () => {
-  it('renders deload variant with "Разгрузка" text and trigger reason', () => {
+describe('CoachHome — profile avatar dropdown (#116)', () => {
+  it('renders a single avatar button and no raw <select>', () => {
+    render(<CoachHome {...baseProps} users={[user]} />)
+    expect(screen.getByRole('button', { name: 'Профиль Вячеслав' })).toBeInTheDocument()
+    // The old native select is gone.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Пользователь')).not.toBeInTheDocument()
+  })
+
+  it('opens the user menu on tap and lists users with the active one checked', async () => {
+    const userEv = userEvent.setup()
+    render(<CoachHome {...baseProps} users={[user, secondUser]} activeUserId="vyacheslav" />)
+
+    const avatar = screen.getByRole('button', { name: 'Профиль Вячеслав' })
+    expect(avatar).toHaveAttribute('aria-expanded', 'false')
+
+    await userEv.click(avatar)
+    expect(avatar).toHaveAttribute('aria-expanded', 'true')
+
+    const menu = screen.getByRole('menu', { name: 'Профиль' })
+    expect(menu).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: /Анна/ })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('menuitemradio', { name: /Вячеслав/ })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('switches profile and closes the menu when a different user is chosen', async () => {
+    const userEv = userEvent.setup()
+    const onSelectUser = vi.fn()
+    render(<CoachHome {...baseProps} users={[user, secondUser]} activeUserId="vyacheslav" onSelectUser={onSelectUser} />)
+
+    await userEv.click(screen.getByRole('button', { name: 'Профиль Вячеслав' }))
+    await userEv.click(screen.getByRole('menuitemradio', { name: /Анна/ }))
+
+    expect(onSelectUser).toHaveBeenCalledTimes(1)
+    expect(onSelectUser).toHaveBeenLastCalledWith('anna')
+    // Menu closed and focus returned to the avatar.
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('closes on Escape and restores focus to the avatar', async () => {
+    const userEv = userEvent.setup()
+    render(<CoachHome {...baseProps} users={[user, secondUser]} />)
+
+    const avatar = screen.getByRole('button', { name: 'Профиль Вячеслав' })
+    await userEv.click(avatar)
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+
+    await userEv.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(avatar).toHaveFocus()
+  })
+
+  it('closes on outside click', async () => {
+    const userEv = userEvent.setup()
+    render(
+      <div>
+        <button>outside</button>
+        <CoachHome {...baseProps} users={[user, secondUser]} />
+      </div>,
+    )
+
+    await userEv.click(screen.getByRole('button', { name: 'Профиль Вячеслав' }))
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+
+    await userEv.click(screen.getByText('outside'))
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('shows a localized «Сегодня · DD месяц» eyebrow', () => {
+    render(<CoachHome {...baseProps} />)
+    // Today's date in ru genitive, e.g. «Сегодня · 13 июля». We match the
+    // prefix + a day number + a month name from the known set.
+    const eyebrow = screen.getByText(/^Сегодня · \d{1,2} /)
+    expect(eyebrow).toBeInTheDocument()
+    expect(eyebrow.textContent).toMatch(/января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря/)
+  })
+})
+
+describe('MesocycleCard', () => {
+  it('renders deload variant with "разгрузка" text', () => {
     const coachState = makeCoachState({
       mesocycle: makeMesocycleState({
         phase: 'deload',
         phaseDescription: 'Разгрузочная неделя — снижение объёма и интенсивности',
         weekInCycle: 5,
+        cycleLength: 5,
         isDeload: true,
         deloadScheduled: false,
         triggerReason: 'Запланированная разгрузка по календарю мезоцикла.',
@@ -157,66 +245,35 @@ describe('MesocycleIndicator', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Разгрузка')).toBeInTheDocument()
-    expect(screen.getByText('Запланированная разгрузка по календарю мезоцикла.')).toBeInTheDocument()
+    expect(screen.getByText('Мезоцикл · разгрузка')).toBeInTheDocument()
+    expect(screen.getByText('неделя 5 / 5')).toBeInTheDocument()
   })
 
-  it('renders loading variant on week 1 of 4', () => {
+  it('renders loading variant on week 1 of 5', () => {
     const coachState = makeCoachState({
       mesocycle: makeMesocycleState({
         phase: 'loading',
         weekInCycle: 1,
-        loadingWeeks: 4,
+        cycleLength: 5,
+        phaseDescription: 'Накопление — первая неделя',
       }),
     })
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.getByText('Нед 1/5')).toBeInTheDocument()
+    expect(screen.getByText('Мезоцикл · загрузка')).toBeInTheDocument()
+    expect(screen.getByText('неделя 1 / 5')).toBeInTheDocument()
   })
 
-  it('renders intensification variant on the last loading week', () => {
-    const coachState = makeCoachState({
-      mesocycle: makeMesocycleState({
-        phase: 'intensification',
-        weekInCycle: 4,
-        loadingWeeks: 4,
-        phaseDescription: 'Интенсификация — пик нагрузки мезоцикла',
-      }),
-    })
-
-    render(<CoachHome {...baseProps} coachState={coachState} />)
-
-    expect(screen.getByText('Нед 4/5')).toBeInTheDocument()
-    expect(screen.getByText('Интенсификация — пик нагрузки мезоцикла')).toBeInTheDocument()
-  })
-
-  it('renders scheduled variant when deloadScheduled is true (last loading week, not yet deload)', () => {
-    const coachState = makeCoachState({
-      mesocycle: makeMesocycleState({
-        phase: 'intensification',
-        weekInCycle: 4,
-        loadingWeeks: 4,
-        isDeload: false,
-        deloadScheduled: true,
-        phaseDescription: 'Интенсификация — пик нагрузки мезоцикла',
-      }),
-    })
-
-    render(<CoachHome {...baseProps} coachState={coachState} />)
-
-    expect(screen.getByText('Нед 4/5')).toBeInTheDocument()
-  })
-
-  it('hides indicator when mesocycle is null', () => {
+  it('hides card when mesocycle is null', () => {
     const coachState = makeCoachState({ mesocycle: null })
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.queryByText(/Нед \d\/\d/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Разгрузка')).not.toBeInTheDocument()
+    expect(screen.queryByText(/неделя \d/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Мезоцикл/)).not.toBeInTheDocument()
   })
 
-  it('hides indicator when phase is "idle" (new user, no history)', () => {
+  it('hides card when phase is "idle" (new user, no history)', () => {
     const coachState = makeCoachState({
       mesocycle: makeMesocycleState({
         phase: 'idle',
@@ -227,7 +284,7 @@ describe('MesocycleIndicator', () => {
 
     render(<CoachHome {...baseProps} coachState={coachState} />)
 
-    expect(screen.queryByText(/Нед \d\/\d/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Ожидание первой тренировки')).not.toBeInTheDocument()
+    expect(screen.queryByText(/неделя \d/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Ожидание/)).not.toBeInTheDocument()
   })
 })

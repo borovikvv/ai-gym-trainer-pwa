@@ -75,13 +75,13 @@ export function ExerciseGuideModal({ exercise, onClose }: ExerciseGuideModalProp
       <div className="overlay show" onClick={onClose} />
       <div className="sheet show exercise-guide-sheet" role="dialog" aria-modal="true" aria-label={`Описание упражнения ${exercise.name}`}>
         <div className="sheet-handle" aria-hidden="true" />
-        <div className="guide-header">
+        <div className="sheet-header">
           <div>
             <div className="kicker">Описание упражнения</div>
             <h2>{exercise.name}</h2>
             <div className="muted">{exercise.muscleGroup}{prescriptionText ? ` · ${prescriptionText}` : ''}</div>
           </div>
-          <button className="secondary compact" onClick={onClose} aria-label="Закрыть описание упражнения">×</button>
+          <button className="sheet-close" type="button" onClick={onClose} aria-label="Закрыть описание упражнения">×</button>
         </div>
 
         <div className="movement-diagram visual-guide" aria-label={`Схема движения: ${exercise.name}`}>

@@ -321,13 +321,13 @@ function App() {
     setEditingPlannedWorkoutId,
     setEditingPlannedDate,
     weekDateOptions,
-    toggleWeekDate,
-    shiftPlanningWeek,
-    savePlannedWorkoutDate,
-    regeneratePlannedWorkout,
-    cancelPlannedWorkout,
-    resetPlanningStart,
-  } = usePlannedWorkouts({
+	    toggleWeekDate,
+	    shiftPlanningWeek: _shiftPlanningWeek,
+	    savePlannedWorkoutDate,
+	    regeneratePlannedWorkout,
+	    cancelPlannedWorkout,
+	    resetPlanningStart: _resetPlanningStart,
+	  } = usePlannedWorkouts({
     activeUserId,
     plannedWorkouts,
     setPlannedWorkouts,
@@ -584,8 +584,7 @@ function App() {
             weekDateOptions={weekDateOptions}
             editingPlannedWorkoutId={editingPlannedWorkoutId}
             editingPlannedDate={editingPlannedDate}
-            onShiftPlanningWeek={shiftPlanningWeek}
-            onResetPlanningStart={resetPlanningStart}
+            coachState={coachState}
             onToggleWeekDate={toggleWeekDate}
             setEditingPlannedWorkoutId={setEditingPlannedWorkoutId}
             setEditingPlannedDate={setEditingPlannedDate}
