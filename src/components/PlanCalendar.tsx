@@ -395,11 +395,7 @@ export function PlanCalendar({
           <div className="plan-composition-grid">
             <div className="plan-composition-card plan-composition-card--focus">
               <span>Фокус</span>
-              <b>{(() => {
-                const raw = toHumanCoachText(activeWorkoutDay.description) || activeWorkoutDay.label
-                const dot = raw.indexOf('.')
-                return dot > 0 && dot <= 60 ? raw.slice(0, dot) : raw.length > 50 ? raw.slice(0, 50) + '…' : raw
-              })()}</b>
+              <b>{[...new Set(activeWorkoutDay.exercises.map((ex) => ex.muscleGroup).filter(Boolean))].slice(0, 3).join(' · ') || activeWorkoutDay.label}</b>
             </div>
             <div className="plan-composition-card">
               <span>Время</span>

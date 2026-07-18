@@ -30,3 +30,6 @@ references/
 *.sln
 *.sw?
 .playwright-cli/
+test-results/
+.env
+.env.local

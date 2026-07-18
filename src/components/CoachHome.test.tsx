@@ -238,7 +238,7 @@ describe('MesocycleCard', () => {
         weekInCycle: 5,
         cycleLength: 5,
         isDeload: true,
-        deloadScheduled: false,
+        deloadScheduled: true,
         triggerReason: 'Запланированная разгрузка по календарю мезоцикла.',
       }),
     })
