@@ -30,3 +30,4 @@ references/
 *.sln
 *.sw?
 .playwright-cli/
+.env

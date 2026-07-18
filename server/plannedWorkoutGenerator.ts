@@ -351,13 +351,13 @@ export async function buildGeneratedPlannedWorkout({
     exerciseTarget,
   })
   const orderedSelected = orderExercisesForWorkout(selectedWithCoreFinisher)
-  const workoutKind = lowReadiness ? 'восстановительная персональная' : 'персональная тренировка'
+  const workoutKind = lowReadiness ? 'Разгрузка' : 'Силовая'
   return {
     scheduledDate,
     status: 'generated',
     source: 'coach',
     workoutDayId: null,
-    workoutDayName: lowReadiness ? 'восстановительная персональная' : 'персональная тренировка',
+    workoutDayName: lowReadiness ? 'Разгрузка' : 'Силовая',
     goal: lowReadiness
       ? `восстановительная нагрузка под цель: ${profile?.goal ?? 'общий прогресс'}`
       : `эффективная ${workoutKind} под цель: ${profile?.goal ?? 'общий прогресс'}`,

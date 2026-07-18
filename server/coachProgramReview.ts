@@ -225,7 +225,7 @@ function ruleBasedReview(input: ProgramReviewInput): ProgramReview {
     if (fatigued.length >= 2) {
       changes.push({
         type: 'change_focus',
-        description: `Сменить фокус: избегать ${fatigued.join(', ')}`,
+        description: `Сменить фокус: избегать ${fatigued.map((m: string) => MUSCLE_RU[m.toLowerCase()] || m).join(', ')}`,
         rationale: `${fatigued.length} групп мышц с высокой усталостью.`,
         priority: 'medium',
       })
