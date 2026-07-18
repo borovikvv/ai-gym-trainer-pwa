@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## Agent OS — контракт
-Прочитай и выполняй агентский контракт (`contract_version: 1.0`): локально `~/my-wiki/topics/agent-contract.md`, удалённо `https://wiki.borovikvv.ru/topics/agent-contract`.
+Прочитай и выполняй агентский контракт (`contract_version: 1.1`): локально `~/my-wiki/topics/agent-contract.md`, удалённо `https://wiki.borovikvv.ru/topics/agent-contract`.
 
 ## База знаний
 Контекст проекта — в wiki: `projects/ai-gym-trainer/` (overview, architecture, features, chats). Начинай со страницы overview; значимые результаты сессии сохраняй по контракту в `raw/new/`.
