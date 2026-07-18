@@ -122,9 +122,10 @@ describe('coach planning service', () => {
       ],
     })
 
-    // Issue #107: advance past BOTH timeouts — analyzeProgress (5s) and
-    // requestLlmCoachPlan (5s). They run sequentially, so 11s covers both.
-    await vi.advanceTimersByTimeAsync(11000)
+    // Issue #107: advance past BOTH timeouts — analyzeProgress (smart tier,
+    // 12s) and requestLlmCoachPlan (5s). They run sequentially, so 18s covers
+    // both with margin.
+    await vi.advanceTimersByTimeAsync(18000)
     const result = await planPromise
 
     // LLM was called but timed out — we should get a rules-based plan back

@@ -531,15 +531,19 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'План' }))
     expect(screen.getByRole('heading', { name: /^План$/ })).toBeInTheDocument()
-    expect(screen.getByText('Даты')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Дни недели для тренировок' })).toBeInTheDocument()
     expect(screen.getAllByText(/3 тренировки\/нед/i).length).toBeGreaterThan(0)
-    // #120: week strip — plan two rest days to populate the calendar.
-    await user.click(screen.getAllByRole('button', { name: /ср,.*отдых/i })[0])
-    await user.click(screen.getAllByRole('button', { name: /сб,.*отдых/i })[0])
-    expect(screen.getAllByText('2 в календаре').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Следующая тренировка/i).length).toBeGreaterThan(0)
+    // #120: week strip — plan two rest days to populate the calendar. Pick the
+    // first available rest day twice (re-querying after each click, since a
+    // toggled day flips its label to «тренировка»). Using whichever rest days
+    // are on offer keeps this independent of today's weekday.
+    await user.click(screen.getAllByRole('button', { name: /· отдых$/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /· отдых$/i })[0])
+    // Two planned workouts now populate the «Расписание» section: the soonest
+    // shows as «Следующая · <дата>», the later one as «Потом · <дата>».
+    expect(screen.getAllByText(/Следующая ·/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Потом ·/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/День A/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Потом/i).length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Зал' }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))

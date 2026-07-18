@@ -153,7 +153,9 @@ describe('PlanCalendar', () => {
 
     renderPlanCalendar(day)
 
-    expect(screen.getByText('Сегодня восстановление снижено. Делаем умеренную тренировку без отказа.')).toBeInTheDocument()
+    // The focus card summarises muscle groups from the day's exercises, never
+    // the raw coach description — so internal coach state can't leak here.
+    expect(screen.getByText('Грудь')).toBeInTheDocument()
     expect(screen.queryByText(/Профиль тренера/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Coach State/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/readiness/i)).not.toBeInTheDocument()
