@@ -11,3 +11,6 @@
 
 ## О проекте
 Персональный AI-тренер (PWA): React + TypeScript + Vite, Node.js API, PostgreSQL. Репо: https://github.com/borovikvv/ai-gym-trainer-pwa.
+
+## Правила тестов (ревизия 2026-07-19)
+Тесты не должны зависеть от текста UI-элементов и хардкода дат/дней недели: используй `data-testid`, `aria-label` или роль элемента. Смена надписи в интерфейсе не должна ронять CI.
