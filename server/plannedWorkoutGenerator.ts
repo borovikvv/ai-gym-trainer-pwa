@@ -357,7 +357,10 @@ export async function buildGeneratedPlannedWorkout({
     status: 'generated',
     source: 'coach',
     workoutDayId: null,
-    workoutDayName: lowReadiness ? 'восстановительная персональная' : 'персональная тренировка',
+    // Short canonical name — the calendar renders workoutDayName as a compact label
+    // (and uses its first letter as a badge). Match the names used by user-source
+    // workouts ("Силовая"); for low-readiness recovery days use "Разгрузка".
+    workoutDayName: lowReadiness ? 'Разгрузка' : 'Силовая',
     goal: lowReadiness
       ? `восстановительная нагрузка под цель: ${profile?.goal ?? 'общий прогресс'}`
       : `эффективная ${workoutKind} под цель: ${profile?.goal ?? 'общий прогресс'}`,

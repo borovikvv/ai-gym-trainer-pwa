@@ -46,7 +46,8 @@ describe('planned workout generator', () => {
 
     expect(plan.status).toBe('generated')
     expect(plan.source).toBe('coach')
-    expect(plan.workoutDayName).toContain('персональная')
+    // readinessScore 68 → not low readiness → canonical short name "Силовая"
+    expect(plan.workoutDayName).toBe('Силовая')
     expect(plan.coachReason).toBeTruthy()
     const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
     expect(exerciseIds).toEqual(expect.arrayContaining([
@@ -395,7 +396,8 @@ describe('planned workout generator', () => {
       previousGeneratedWorkouts,
     })
 
-    expect(plan.workoutDayName).toBe('персональная тренировка')
+    // normal readiness → canonical short name "Силовая" (matches user-source workouts in calendar)
+    expect(plan.workoutDayName).toBe('Силовая')
     expect(plan.coachReason).toBeTruthy()
     expect(plan.coachReason).toBeTruthy()
     expect(plan.coachReason).not.toContain('3/2 тренировок за 7 дней')
@@ -1472,6 +1474,8 @@ describe('Issue #106: plannedWorkoutGenerator consumes analysis flags', () => {
 
     // lowReadiness should be forced → coachReason should mention lighter/easier work
     expect(plan.coachReason).toBeTruthy()
+    // lowReadiness → canonical short recovery name "Разгрузка"
+    expect(plan.workoutDayName).toBe('Разгрузка')
     // The plan should still generate exercises (non-fatal)
     expect(plan.exercises.length).toBeGreaterThan(0)
   })

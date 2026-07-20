@@ -141,7 +141,7 @@ describe('генерация зависит от фактического раз
     // 2 дня: приседания в пределах 3-дневного окна свежей нагрузки —
     // то же упражнение не повторяем
     expect(planAfter2Days.exercises.map((exercise) => exercise.exerciseId)).not.toContain('barbell-squat')
-    expect(planAfter2Days.workoutDayName).toContain('персональная')
+    expect(planAfter2Days.workoutDayName).toBe('Силовая')
 
     // 1 день после тренировки: calendarRecoveryLimited → облегчённая
     // восстановительная тренировка, а не обычная
@@ -152,7 +152,7 @@ describe('генерация зависит от фактического раз
       exerciseLibrary,
       history: [legsWorkout],
     })
-    expect(planAfter1Day.workoutDayName).toContain('восстановительная')
+    expect(planAfter1Day.workoutDayName).toBe('Разгрузка')
 
     // 5 дней: обычная полная тренировка
     const planAfter5Days = await buildGeneratedPlannedWorkout({
@@ -162,7 +162,7 @@ describe('генерация зависит от фактического раз
       exerciseLibrary,
       history: [legsWorkout],
     })
-    expect(planAfter5Days.workoutDayName).toContain('персональная')
-    expect(planAfter5Days.workoutDayName).not.toContain('восстановительная')
+    expect(planAfter5Days.workoutDayName).toBe('Силовая')
+    expect(planAfter5Days.workoutDayName).not.toBe('Разгрузка')
   })
 })
