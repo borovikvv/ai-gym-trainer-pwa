@@ -80,7 +80,7 @@ export async function analyzeProgress(input: ProgressAnalysisInput): Promise<Pro
     tier: 'smart',
     caller: 'coachProgressAnalysis',
     temperature: 0.3,
-    maxTokens: 500,
+    maxTokens: 2500,
     system:
       'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""],"exerciseFlags":[{"exerciseId":"","exerciseName":"","status":"plateau|trending_up|trending_down|stable|insufficient_data","weeksStagnant":0,"slopePerWeek":0,"recommendation":"swap_exercise|increase_weight|hold_weight|decrease_weight|consolidate|monitor","reason":""}],"globalFlags":{"overtraining":false,"overtrainingReason":"","muscleImbalance":[{"muscleGroup":"","status":"overworked|underworked"}],"recommendedDeload":false}}. Пиши на русском. exerciseFlags — по каждому упражнению из e1RM данных. globalFlags.overtraining=true только если НЕ deload-неделя и e1RM падает при высоком RPE.',
     prompt: buildLlmPrompt(input),

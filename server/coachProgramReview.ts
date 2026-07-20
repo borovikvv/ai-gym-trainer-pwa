@@ -68,7 +68,7 @@ export async function reviewProgram(input: ProgramReviewInput): Promise<ProgramR
     tier: 'smart',
     caller: 'coachProgramReview',
     temperature: 0.3,
-    maxTokens: 500,
+    maxTokens: 1500,
     system:
       'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Если у атлета есть цели и по ним видно отставание от графика — предлагай изменения, приближающие к цели (приоритет целевого упражнения, объём на нужную группу), и отрази путь к цели в nextWeekFocus. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"priority":"high|medium|low"}],"nextWeekFocus":""}. Пиши на русском. Максимум 3 изменения.',
     prompt: buildLlmPrompt(input),

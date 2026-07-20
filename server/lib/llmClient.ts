@@ -69,11 +69,120 @@ export async function requestLlmText(options: LlmRequestOptions): Promise<string
  * object or null on any failure — never throws, so callers keep their rules
  * fallback.
  */
+/**
+ * Try to repair truncated JSON by progressively stripping the last
+ * incomplete value and closing braces.
+ */
+function tryRepairJson(text: string): string | null {
+  // Fast path
+  try { JSON.parse(text); return text } catch { /* go to repair */ }
+
+  // Truncated string value: ends with `"something` without closing quote
+  // or ends with `}` or `,` inside a string.
+  // Strategy: remove the last incomplete pair, then try to close braces.
+  const openBraces = (text.match(/\{/g) || []).length
+  const closeBraces = (text.match(/\}/g) || []).length
+  const openBrackets = (text.match(/\[/g) || []).length
+  const closeBrackets = (text.match(/\]/g) || []).length
+
+  // If there's an unclosed string at the end, try stripping it
+  // Pattern: ends with `"...` where the last `"` is opening a string value
+  const unclosedStringMatch = text.match(/:\s*"[^"]*$/)
+  if (unclosedStringMatch) {
+    // Strip the unclosed string value and try with empty string
+    const truncated = text.slice(0, unclosedStringMatch.index)
+    const missingBraces = Math.max(0, openBraces - closeBraces)
+    const missingBrackets = Math.max(0, openBrackets - closeBrackets)
+    const variants = [
+      truncated + ':""' + ']'.repeat(missingBrackets) + '}'.repeat(missingBraces),
+      truncated + ':""' + '}'.repeat(missingBraces) + ']'.repeat(missingBrackets),
+    ]
+    for (const repaired of variants) {
+      try { JSON.parse(repaired); return repaired } catch { /* try next */ }
+    }
+  }
+
+  // General repair: add missing braces and brackets
+  let attempt = text
+  const missingBraces = Math.max(0, openBraces - closeBraces)
+  const missingBrackets = Math.max(0, openBrackets - closeBrackets)
+  // Try various closing orders (brackets before braces, or interleaved)
+  const variants = [
+    ']'.repeat(missingBrackets) + '}'.repeat(missingBraces),
+    '}'.repeat(missingBraces) + ']'.repeat(missingBrackets),
+  ]
+  // Also try removing incomplete trailing chars one by one
+  for (const suffix of variants) {
+    try { JSON.parse(attempt + suffix); return attempt + suffix } catch { /* try next */ }
+  }
+
+  // Last resort: truncate character by character from the end
+  for (let i = text.length - 1; i > 0; i--) {
+    const candidate = text.slice(0, i)
+    for (const suffix of variants) {
+      try { JSON.parse(candidate + suffix); return candidate + suffix } catch { /* continue */ }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Try to extract JSON from a string that may be wrapped in markdown code
+ * fences (```json ... ```) or otherwise surrounded by non-JSON text.
+ * Falls back to brute-force search for the first { … } or [ … ] pair.
+ */
+function extractJson(text: string): string | null {
+  // Fast path — direct parse works (OpenAI models with response_format: json_object)
+  try { JSON.parse(text); return text } catch { /* fall through */ }
+
+  // Markdown code fences: ```json ... ```
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+  if (fenceMatch) {
+    const candidate = fenceMatch[1].trim()
+    const repaired = tryRepairJson(candidate)
+    if (repaired) return repaired
+  }
+
+  // Incomplete fence: starts with ```json but closing ``` missing (truncated)
+  if (/^```(?:json)?\s*\n?/.test(text)) {
+    const afterFence = text.replace(/^```(?:json)?\s*\n?/, '')
+    const firstBrace = afterFence.indexOf('{')
+    if (firstBrace !== -1) {
+      const repaired = tryRepairJson(afterFence.slice(firstBrace).trim())
+      if (repaired) return repaired
+    }
+  }
+
+  // Brute-force: find the first { and last } (JSON object)
+  const firstBrace = text.indexOf('{')
+  const lastBrace = text.lastIndexOf('}')
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const repaired = tryRepairJson(text.slice(firstBrace, lastBrace + 1))
+    if (repaired) return repaired
+  }
+
+  // Brute-force: find the first [ and last ] (JSON array)
+  const firstBracket = text.indexOf('[')
+  const lastBracket = text.lastIndexOf(']')
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    const candidate = text.slice(firstBracket, lastBracket + 1)
+    try { JSON.parse(candidate); return candidate } catch { /* fall through */ }
+  }
+
+  return null
+}
+
 export async function requestLlmJson<T = unknown>(options: LlmRequestOptions): Promise<T | null> {
   const content = await requestLlmContent(options, true)
   if (!content) return null
+  const extracted = extractJson(content)
+  if (!extracted) {
+    logActivity('llm.call', { caller: options.caller, tier: options.tier, ok: false, error: 'invalid_json' })
+    return null
+  }
   try {
-    return JSON.parse(content) as T
+    return JSON.parse(extracted) as T
   } catch {
     logActivity('llm.call', { caller: options.caller, tier: options.tier, ok: false, error: 'invalid_json' })
     return null
