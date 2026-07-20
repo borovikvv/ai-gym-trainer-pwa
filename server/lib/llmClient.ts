@@ -103,7 +103,7 @@ function tryRepairJson(text: string): string | null {
   }
 
   // General repair: add missing braces and brackets
-  let attempt = text
+  const attempt = text
   const missingBraces = Math.max(0, openBraces - closeBraces)
   const missingBrackets = Math.max(0, openBrackets - closeBrackets)
   // Try various closing orders (brackets before braces, or interleaved)
