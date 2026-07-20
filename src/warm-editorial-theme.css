@@ -241,6 +241,19 @@
 .review-card__dot--high { background: var(--danger); }
 .review-card__dot--medium { background: var(--warning); }
 .review-card__dot--low { background: var(--success); }
+/* Focus week row: 🎯 instead of a priority dot, not a button — nothing to expand */
+.review-card__row--focus {
+  cursor: default;
+  gap: 14px; /* emoji is wider than the 8px dot, match the rhythm */
+}
+.review-card__icon {
+  font-size: 16px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.review-card__row--focus .review-card__title {
+  font-weight: 500; /* slightly lighter than change rows (600) to differentiate */
+}
 .review-card__body {
   flex: 1;
   min-width: 0;
