@@ -8,6 +8,7 @@ import { GoalsCard } from './GoalsCard'
 import { useEffect, useState } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { isProgramApiConfigured } from '../data/programApi'
+import { changeAction, changeTitle, reviewTypeLabel } from './weeklyReview'
 
 /**
  * Compute streak (consecutive weeks with at least 1 workout) from history.
@@ -199,6 +200,7 @@ export function CoachHome({
       type: string
       description: string
       rationale: string
+      exerciseName?: string
       priority: string
     }>
     nextWeekFocus: string
@@ -347,41 +349,50 @@ export function CoachHome({
       {/* Фаза 2: многонедельные цели — тренер ведёт к ним через макроцикл */}
       <GoalsCard userId={activeUserId} exerciseOptions={goalExerciseOptions(exerciseLibrary, allUserWorkoutDays)} />
 
-      {/* Issue #85: AI weekly program review — прототип: кнопки с двумя строками + › */}
-      {programReview && programReview.changes.length > 0 && (
+      {/* Issue #85 (rev. 2026-07-20): weekly review = mini-summary of the week.
+          Focus week is the lead row (🎯, not a button — nothing to expand);
+          coach's adjustments follow as structured rows: exercise name as the
+          title, type + short action as the subtitle. */}
+      {programReview && (programReview.changes.length > 0 || programReview.nextWeekFocus) && (
         <SectionList
           title="Недельный разбор"
-          action={<span className="muted">{programReview.changes.length} правок</span>}
+          action={programReview.changes.length > 0
+            ? <span className="muted">{programReview.changes.length} правок</span>
+            : null}
         >
           <div className="review-card">
+            {programReview.nextWeekFocus && (
+              <div className="review-card__row review-card__row--focus" data-testid="weekly-review-focus">
+                <span className="review-card__icon" aria-hidden="true">🎯</span>
+                <div className="review-card__body">
+                  <div className="review-card__title">{programReview.nextWeekFocus}</div>
+                  <div className="review-card__meta">фокус недели</div>
+                </div>
+              </div>
+            )}
             {programReview.changes.map((change, i) => (
-              <button key={i} className="review-card__row" type="button" onClick={() => setReviewDetail({
-                kicker: reviewTypeLabel(change.type),
-                title: shortTitle(change.description),
-                body: change.rationale,
-              })}>
+              <button
+                key={i}
+                className="review-card__row"
+                type="button"
+                data-testid="weekly-review-change"
+                aria-label={`${changeTitle(change)}: ${reviewTypeLabel(change.type)}`}
+                onClick={() => setReviewDetail({
+                  kicker: reviewTypeLabel(change.type),
+                  title: changeTitle(change),
+                  body: change.rationale,
+                })}
+              >
                 <span className={`review-card__dot review-card__dot--${change.priority}`} aria-hidden="true" />
                 <div className="review-card__body">
-                  <div className="review-card__title">{shortTitle(change.description)}</div>
-                  <div className="review-card__meta">{reviewTypeLabel(change.type)}</div>
+                  <div className="review-card__title">{changeTitle(change)}</div>
+                  <div className="review-card__meta">
+                    {reviewTypeLabel(change.type)}{changeAction(change) ? ` · ${changeAction(change)}` : ''}
+                  </div>
                 </div>
                 <span className="review-card__arrow" aria-hidden="true">›</span>
               </button>
             ))}
-            {programReview.nextWeekFocus && (
-              <button className="review-card__row" type="button" onClick={() => setReviewDetail({
-                kicker: 'Фокус недели',
-                title: programReview.nextWeekFocus!,
-                body: programReview.nextWeekFocus!,
-              })}>
-                <span className="review-card__dot review-card__dot--low" aria-hidden="true" />
-                <div className="review-card__body">
-                  <div className="review-card__title">{shortTitle(programReview.nextWeekFocus)}</div>
-                  <div className="review-card__meta">фокус недели</div>
-                </div>
-                <span className="review-card__arrow" aria-hidden="true">›</span>
-              </button>
-            )}
           </div>
         </SectionList>
       )}
@@ -531,23 +542,4 @@ function goalExerciseOptions(
   )
 }
 
-// Issue #104: shortTitle — first ~40 chars up to the first period, for
-// scannable one-line review rows instead of full paragraphs.
-// Маппинг типов правок с английского на русский
-const TYPE_RU: Record<string, string> = {
-  adjust_volume: 'объём',
-  change_focus: 'смена фокуса',
-  swap_exercise: 'замена',
-  add_deload: 'разгрузка',
-}
-function reviewTypeLabel(type: string): string {
-  return TYPE_RU[type] || type
-}
-
-function shortTitle(text: string): string {
-  const trimmed = (text ?? '').trim()
-  if (!trimmed) return ''
-  const dotIndex = trimmed.indexOf('.')
-  const short = dotIndex > 0 && dotIndex <= 50 ? trimmed.slice(0, dotIndex) : trimmed
-  return short.length > 40 ? short.slice(0, 40).trim() + '…' : short
-}
+// Issue #104 (rev. 2026-07-20): weekly review formatting lives in weeklyReview.ts

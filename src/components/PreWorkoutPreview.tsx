@@ -8,6 +8,7 @@ import {
 import { exerciseGuideImageSrc } from './ExerciseGuideModal'
 import { InfoHint } from './ui'
 import { isTimedExercise } from '../domain/exerciseMetrics'
+import { formatDayMonth } from '../lib/format'
 
 const soreMuscleGroupOptions = ['Грудь', 'Спина', 'Ноги', 'Плечи', 'Руки', 'Кор']
 const painAreaOptions = ['Плечо', 'Локоть/рука', 'Спина', 'Колено/нога', 'Другое']
@@ -93,7 +94,7 @@ export function PreWorkoutPreview({
         <div className="label">Сегодня</div>
         <h1>
           <InfoHint hint={humanDescription} />
-          {workoutDay.label}: {workoutDay.exercises.length} упражнений, ~{estimateWorkoutMinutes(workoutDay)} минут.
+          {formatDayMonth(workoutDay.label)}: {workoutDay.exercises.length} упражнений, ~{estimateWorkoutMinutes(workoutDay)} минут.
         </h1>
       </div>
 

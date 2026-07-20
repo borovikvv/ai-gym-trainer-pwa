@@ -47,3 +47,17 @@ export function formatDateTime(isoDate: string): string {
   }).format(date).replace(" г.,", ",")
 }
 
+/**
+ * Format an ISO date(-only) string as "DD.MM" — no weekday, no time.
+ * Parses the date-only portion directly so the result is stable across
+ * timezones (unlike `new Date('2026-07-19')`, which can shift a day in UTC-N).
+ * Used for compact labels like the pre-workout hero.
+ */
+export function formatDayMonth(isoDate: string): string {
+  if (!isoDate) return isoDate
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate)
+  if (!match) return isoDate
+  const [, , month, day] = match
+  return `${day}.${month}`
+}
+
