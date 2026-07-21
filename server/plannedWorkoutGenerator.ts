@@ -657,12 +657,19 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     coachMemory?.exerciseProfiles?.[exercise.id]?.currentWorkingWeight ?? NaN,
   )
   // historicWeight must be > 0 to be considered valid (0 means no
-  // progression recommendation was recorded, e.g. first session or deload)
-  const baseWeight = Number.isFinite(historicWeight) && historicWeight > 0
-    ? historicWeight
-    : Number.isFinite(coachWorkingWeight) && coachWorkingWeight > 0
-      ? coachWorkingWeight
-      : exercise.targetWeight
+  // progression recommendation was recorded, e.g. first session or deload).
+  //
+  // Issue #136: раньше historicWeight (nextRecommendedWeight последней сессии)
+  // имел безусловный приоритет над coachWorkingWeight. После разгрузки
+  // nextRecommendedWeight занижен (напр. 47.5), а фактический рабочий вес был
+  // выше (60кг подняли легко) — план ставил вес НИЖЕ факта. coachMemory уже
+  // считает currentWorkingWeight как MAX топ-подхода за 3 сессии (#99), поэтому
+  // берём максимум: обычная прогрессия сохраняется (historicWeight обычно ≥
+  // рабочего), а после разгрузки не проваливаемся ниже реального рабочего веса.
+  const weightCandidates = [historicWeight, coachWorkingWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
+  const baseWeight = weightCandidates.length > 0
+    ? Math.max(...weightCandidates)
+    : exercise.targetWeight
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
     : clamp(exercise.setsCount, 2, preferences.sessionStyle === 'heavy_short' ? 3 : 4)

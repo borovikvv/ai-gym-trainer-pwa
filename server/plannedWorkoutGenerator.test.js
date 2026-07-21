@@ -135,6 +135,55 @@ describe('planned workout generator', () => {
     expect(pulldown?.targetWeight).toBe(47.5)
   })
 
+  // Issue #136: после разгрузки nextRecommendedWeight занижен, но coachMemory
+  // помнит реальный рабочий вес (MAX за 3 сессии, #99). План должен ставить
+  // рабочий вес, а не заниженный вес разгрузки.
+  it('Issue #136: uses the remembered working weight after a deload, not the low deload weight', async () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    // Последняя сессия — разгрузка: nextRecommendedWeight занижен (47.5),
+    // хотя по факту жали 60 кг легко.
+    const history = [
+      {
+        completedAt: '2026-06-05T20:00:00.000Z',
+        workoutDayName: 'Разгрузка',
+        exercises: [
+          { exerciseId: 'bench-press', nextRecommendedWeight: 47.5, sets: [{ completed: true, weight: 60, reps: 10, rpe: 7 }] },
+        ],
+      },
+    ]
+    const coachMemory = {
+      exerciseProfiles: {
+        'bench-press': { id: 'bench-press', currentWorkingWeight: 60 },
+      },
+    }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: { ...profile, preferences: { focusAreas: ['грудь'], sessionStyle: 'moderate_stable' } },
+      scheduledDate: '2026-06-08',
+      coachState,
+      coachMemory,
+      exerciseLibrary,
+      history,
+    })
+
+    const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+    // Без фикса было бы 47.5 (заниженный вес разгрузки).
+    expect(bench?.targetWeight).toBe(60)
+  })
+
   it('uses profile preferences to avoid banned exercises and prioritize focus areas', async () => {
     const coachState = {
       recoveryStatus: 'ready',

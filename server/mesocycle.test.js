@@ -152,6 +152,39 @@ describe('computeMesocycleState — phase names', () => {
     expect(result.phase).toBe('deload')
     expect(result.phaseDescription).toContain('Разгрузочная')
   })
+
+  // Issue #138: мезоцикл учитывает ТИП тренировок. Неделя, где все тренировки
+  // разгрузочные («Разгрузка»), показывается как deload — не как
+  // intensification по номеру календарной недели.
+  //
+  // Одна тренировка на неделю с шагом 7 дней → чистые (не смешанные) бакеты
+  // недель, чтобы разгрузочная неделя детектировалась однозначно.
+  const weeklyNamedSessions = (now, namesMostRecentFirst) =>
+    namesMostRecentFirst.map((workoutDayName, index) =>
+      session(new Date(now.getTime() - index * 7 * 86_400_000).toISOString(), { workoutDayName }),
+    )
+
+  it('Issue #138: a week of deload-named workouts reads as deload, not intensification', () => {
+    const now = new Date('2026-07-20T12:00:00Z')
+    // 4 недели adult-цикла: 3 силовые + текущая разгрузочная.
+    const history = weeklyNamedSessions(now, ['Разгрузка', 'Силовая', 'Силовая', 'Силовая'])
+
+    const result = computeMesocycleState({ profile: { userId: 'vyacheslav', age: 30 }, history, coachMemory: null, now })
+    // Без учёта типа это была бы 4-я неделя adult-цикла = intensification.
+    expect(result.phase).toBe('deload')
+    expect(result.isDeload).toBe(true)
+  })
+
+  it('Issue #138: the first working week after a deload starts a new cycle (loading)', () => {
+    const now = new Date('2026-07-20T12:00:00Z')
+    // силовая (текущая) ← разгрузка ← силовая ← силовая.
+    const history = weeklyNamedSessions(now, ['Силовая', 'Разгрузка', 'Силовая', 'Силовая'])
+
+    const result = computeMesocycleState({ profile: { userId: 'vyacheslav', age: 30 }, history, coachMemory: null, now })
+    expect(result.weekInCycle).toBe(1)
+    expect(result.phase).toBe('loading')
+    expect(result.isDeload).toBe(false)
+  })
 })
 
 // ---------------------------------------------------------------------------
