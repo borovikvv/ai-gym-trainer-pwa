@@ -24,7 +24,7 @@ type CurrentStepCardProps = {
   timedExercise: boolean
   formatWeight: (weight: number) => string
   updateSet: (setIndex: number, patch: Partial<WorkoutSetInput>) => void
-  markSetDone: (setIndex: number) => void
+  markSetDone: (setIndex: number, patch?: Partial<WorkoutSetInput>) => void
   extendRest: (seconds: number) => void
   skipRest: () => void
 }
@@ -82,8 +82,9 @@ export function CurrentStepCard({
 
   function handleDone() {
     if (selectedRir === null) return
-    updateSet(activeSetIndex, { rpe: selectedRir })
-    markSetDone(activeSetIndex)
+    // Issue #133: RPE передаётся прямо в markSetDone, чтобы попасть в тот же
+    // setLogs, что и completed. Отдельный updateSet затирался staleSnapshot'ом.
+    markSetDone(activeSetIndex, { rpe: selectedRir })
   }
 
   if (resting) {
