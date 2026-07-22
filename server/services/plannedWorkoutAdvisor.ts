@@ -2,13 +2,18 @@
 //
 // Паттерн повторяет server/coachSetAdvisor.ts (per-set): детерминированный
 // генератор (plannedWorkoutGenerator) собирает baseline-план — подбор
-// упражнений и предписания. Здесь LLM УТОЧНЯЕТ предписания уже выбранных
-// упражнений (вес, повторы, подходы, короткий фокус), а результат жёстко
-// клампится теми же правилами, что и baseline (мезоцикл/разгрузка, шаг веса,
-// не ниже рабочего веса — инвариант #136, ограничение прыжка по политике
-// пользователя). На любой ошибке LLM возвращаем baseline без изменений
-// (graceful degradation). Набор упражнений LLM не меняет — отбор остаётся
-// детерминированным.
+// упражнений и предписания. Здесь LLM:
+//   1) может ЗАМЕНИТЬ упражнение слота на безопасную альтернативу из
+//      детерминированного whitelist (та же мышечная группа, не забанено, не
+//      забито, не в восстановлении) — набор кандидатов формирует генератор;
+//   2) УТОЧНЯЕТ предписания оставшихся упражнений (вес, повторы, подходы,
+//      короткий фокус).
+// Свапы валидируются pure-функцией resolvePlannedSwaps (id из whitelist, та же
+// группа, без дублей). Предписания клампятся теми же границами, что и baseline
+// (мезоцикл/разгрузка, шаг веса, не ниже рабочего веса — инвариант #136,
+// скачок по политике). На любой ошибке LLM возвращаем baseline без изменений
+// (graceful degradation). Применение свапа (пере-предписание нового
+// упражнения) делает генератор — он владеет applyPrescription/периодизацией.
 import { isLlmConfigured, requestLlmJson } from '../lib/llmClient.js'
 import { roundWeight } from '../lib/format.js'
 
@@ -17,6 +22,8 @@ export interface PlannedExercisePrescription {
   exerciseId: string
   exerciseName: string
   muscleGroup: string
+  /** Нормализованный ключ группы — по нему сверяем допустимость свапа. */
+  muscleKey: string
   setsCount: number
   repMin: number
   repMax: number
@@ -28,9 +35,18 @@ export interface PlannedExercisePrescription {
   currentWorkingWeight?: number | null
 }
 
-/** Сырое предложение LLM по одному упражнению (все поля опциональны). */
+/** Безопасная альтернатива для свапа (из детерминированного whitelist). */
+export interface AllowedAlternative {
+  exerciseId: string
+  exerciseName: string
+  muscleKey: string
+}
+
+/** Сырое предложение LLM по одному слоту (все поля опциональны). */
 export interface LlmPrescriptionProposal {
   exerciseId?: string
+  /** id упражнения из whitelist, на которое LLM предлагает заменить слот. */
+  replaceWithExerciseId?: string
   targetWeight?: number
   setsCount?: number
   repMin?: number
@@ -59,12 +75,16 @@ export interface RefinePlannedWorkoutContext {
 export interface RefinePlannedWorkoutInput {
   scheduledDate: string
   baseline: PlannedExercisePrescription[]
+  allowedAlternatives?: AllowedAlternative[]
   options: ClampPlannedOptions
   context: RefinePlannedWorkoutContext
 }
 
 export interface RefinePlannedWorkoutResult {
+  /** Клампованные предписания (для НЕ заменённых слотов). */
   exercises: PlannedExercisePrescription[]
+  /** slotExerciseId → newExerciseId — валидные свапы, применяет генератор. */
+  swaps: Map<string, string>
   source: 'llm' | 'rules'
 }
 
@@ -72,25 +92,69 @@ const LLM_TIMEOUT_MS = 6000
 
 const SYSTEM_PROMPT = [
   'Ты персональный силовой тренер. Тебе дан черновик следующей тренировки атлета,',
-  'собранный по правилам (подбор упражнений и предписания). Твоя задача — уточнить',
-  'ПРЕДПИСАНИЯ уже выбранных упражнений под конкретного атлета: рабочий вес, повторы,',
-  'число подходов и короткий фокус. Набор упражнений НЕ меняй и не добавляй новых.',
-  'Безопасность, техника и восстановление важнее объёма. Не предлагай резких скачков',
-  'веса. Если предписание правил разумно — оставь его. Учитывай рабочий вес, фазу',
-  'цикла, готовность и усталость групп.',
+  'собранный по правилам: список упражнений и предписания, плюс список безопасных',
+  'альтернатив для замены. Твоя задача:',
+  '1) при желании ЗАМЕНИТЬ упражнение на более подходящую альтернативу — только из',
+  '   присланного списка альтернатив и только той же мышечной группы (replaceWithExerciseId);',
+  '2) уточнить ПРЕДПИСАНИЯ (рабочий вес, повторы, подходы, короткий фокус).',
+  'Не добавляй и не удаляй упражнения, не меняй их количество. Безопасность, техника и',
+  'восстановление важнее объёма. Не предлагай резких скачков веса. Если правила разумны —',
+  'оставь как есть. Учитывай рабочий вес, фазу цикла, готовность и усталость групп.',
   'Верни СТРОГО JSON без пояснений:',
-  '{"exercises":[{"exerciseId":"...","targetWeight":60,"setsCount":3,"repMin":6,"repMax":8,"coachFocus":"короткая фраза"}]}',
+  '{"exercises":[{"exerciseId":"...","replaceWithExerciseId":null,"targetWeight":60,"setsCount":3,"repMin":6,"repMax":8,"coachFocus":"короткая фраза"}]}',
 ].join('\n')
 
 /**
- * Пул-чистый кламп: применяет предложение LLM к baseline и держит каждое
- * значение в безопасных границах относительно baseline. Никогда не бросает.
- * Экспортируется отдельно для прямого юнит-тестирования (как clampNextSetDecision).
+ * Пул-чистая валидация свапов: возвращает Map slotExerciseId → newExerciseId
+ * для тех предложений LLM, где замена безопасна:
+ *  - новое упражнение есть в whitelist безопасных альтернатив;
+ *  - та же мышечная группа, что у заменяемого слота;
+ *  - оно не дублирует уже выбранное в плане и не занято другим свапом.
+ * Никогда не бросает. Экспортируется для прямого юнит-тестирования.
+ */
+export function resolvePlannedSwaps(
+  baseline: PlannedExercisePrescription[],
+  proposals: LlmPrescriptionProposal[] | null | undefined,
+  allowedAlternatives: AllowedAlternative[] | null | undefined,
+): Map<string, string> {
+  const swaps = new Map<string, string>()
+  const allowedById = new Map<string, AllowedAlternative>()
+  for (const alt of allowedAlternatives ?? []) {
+    const id = String(alt?.exerciseId ?? '')
+    if (id) allowedById.set(id, alt)
+  }
+  const proposalBySlot = new Map<string, LlmPrescriptionProposal>()
+  for (const proposal of proposals ?? []) {
+    const slot = String(proposal?.exerciseId ?? '')
+    if (slot) proposalBySlot.set(slot, proposal)
+  }
+  const baselineIds = new Set(baseline.map((exercise) => exercise.exerciseId))
+  const claimed = new Set<string>()
+
+  for (const slot of baseline) {
+    const proposal = proposalBySlot.get(slot.exerciseId)
+    const newId = String(proposal?.replaceWithExerciseId ?? '')
+    if (!newId || newId === slot.exerciseId) continue
+    const alt = allowedById.get(newId)
+    if (!alt) continue // не из безопасного списка
+    if (alt.muscleKey !== slot.muscleKey) continue // только та же группа
+    if (baselineIds.has(newId) || claimed.has(newId)) continue // без дублей
+    swaps.set(slot.exerciseId, newId)
+    claimed.add(newId)
+  }
+  return swaps
+}
+
+/**
+ * Пул-чистый кламп предписаний: применяет предложение LLM к baseline и держит
+ * каждое значение в безопасных границах относительно baseline. Никогда не
+ * бросает. Заменённые слоты (swaps) пропускает — их пере-предписывает генератор.
  */
 export function clampRefinedPlannedExercises(
   baseline: PlannedExercisePrescription[],
   proposals: LlmPrescriptionProposal[] | null | undefined,
   options: ClampPlannedOptions,
+  swaps: Map<string, string> = new Map(),
 ): { exercises: PlannedExercisePrescription[]; changed: boolean } {
   const byId = new Map<string, LlmPrescriptionProposal>()
   for (const proposal of proposals ?? []) {
@@ -101,6 +165,8 @@ export function clampRefinedPlannedExercises(
   let changed = false
 
   const exercises = baseline.map((base) => {
+    // Заменённый слот пере-предписывает генератор — LLM-числа сюда не тянем.
+    if (swaps.has(base.exerciseId)) return base
     const proposal = byId.get(base.exerciseId)
     if (!proposal) return base
 
@@ -157,31 +223,30 @@ export function clampRefinedPlannedExercises(
 }
 
 /**
- * Уточнить предписания baseline-плана через LLM. Возвращает baseline без
- * изменений, если LLM не сконфигурирован, упал, ответил мусором или пустой
- * список упражнений — вызывающий код всегда получает валидный план.
+ * Уточнить план через LLM: возможные свапы (валидируются по whitelist) +
+ * уточнение предписаний. Возвращает baseline без изменений, если LLM не
+ * сконфигурирован, упал, ответил мусором или пустой список — вызывающий код
+ * всегда получает валидный план.
  */
 export async function refinePlannedWorkoutPrescriptions(input: RefinePlannedWorkoutInput): Promise<RefinePlannedWorkoutResult> {
   const baseline = input.baseline ?? []
-  if (baseline.length === 0 || !isLlmConfigured()) {
-    return { exercises: baseline, source: 'rules' }
-  }
+  const empty: RefinePlannedWorkoutResult = { exercises: baseline, swaps: new Map(), source: 'rules' }
+  if (baseline.length === 0 || !isLlmConfigured()) return empty
 
   const proposal = await requestLlmJson<{ exercises?: LlmPrescriptionProposal[] }>({
     tier: 'mid',
     caller: 'plannedWorkoutAdvisor',
     timeoutMs: LLM_TIMEOUT_MS,
     temperature: 0.2,
-    maxTokens: 700,
+    maxTokens: 800,
     system: SYSTEM_PROMPT,
     prompt: buildPrompt(input),
   })
-  if (!proposal || !Array.isArray(proposal.exercises)) {
-    return { exercises: baseline, source: 'rules' }
-  }
+  if (!proposal || !Array.isArray(proposal.exercises)) return empty
 
-  const { exercises, changed } = clampRefinedPlannedExercises(baseline, proposal.exercises, input.options)
-  return { exercises, source: changed ? 'llm' : 'rules' }
+  const swaps = resolvePlannedSwaps(baseline, proposal.exercises, input.allowedAlternatives)
+  const { exercises, changed } = clampRefinedPlannedExercises(baseline, proposal.exercises, input.options, swaps)
+  return { exercises, swaps, source: swaps.size > 0 || changed ? 'llm' : 'rules' }
 }
 
 function buildPrompt(input: RefinePlannedWorkoutInput): string {
@@ -201,6 +266,11 @@ function buildPrompt(input: RefinePlannedWorkoutInput): string {
       return `- ${e.exerciseId} (${e.exerciseName}, ${e.muscleGroup}): ${e.setsCount}×${e.repMin}-${e.repMax}, ${weight}${working}`
     })
     .join('\n')
+  const alternatives = (input.allowedAlternatives ?? []).length > 0
+    ? (input.allowedAlternatives ?? [])
+        .map((a) => `- ${a.exerciseId} (${a.exerciseName}, группа ${a.muscleKey})`)
+        .join('\n')
+    : 'нет'
 
   return `Дата: ${input.scheduledDate}
 Цель: ${c.goal ?? 'общий прогресс'}
@@ -215,7 +285,10 @@ ${deloadHint}
 Черновик тренировки (правила):
 ${exercises}
 
-Уточни предписания под атлета. Верни JSON с массивом exercises (только те же exerciseId).`
+Безопасные альтернативы для замены (только та же группа):
+${alternatives}
+
+Уточни план. Верни JSON с массивом exercises (по тем же exerciseId; replaceWithExerciseId — только из списка альтернатив или null).`
 }
 
 function clampNumber(value: number, min: number, max: number): number {

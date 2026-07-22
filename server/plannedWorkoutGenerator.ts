@@ -359,9 +359,22 @@ export async function buildGeneratedPlannedWorkout({
   })
   const baselineOrdered = orderExercisesForWorkout(selectedWithCoreFinisher)
 
-  // Issue #139: LLM уточняет предписания baseline-плана (вес/повторы/подходы/
-  // фокус), результат клампится теми же границами (мезоцикл/разгрузка, шаг
-  // веса, не ниже рабочего веса #136, скачок по политике). Фолбэк — baseline.
+  // Issue #139: LLM может (1) заменить упражнение слота на безопасную
+  // альтернативу из детерминированного whitelist и (2) уточнить предписания
+  // (вес/повторы/подходы/фокус). Всё клампится границами baseline (мезоцикл/
+  // разгрузка, шаг веса, не ниже рабочего веса #136, скачок по политике).
+  // Фолбэк — baseline. Whitelist и пере-предписание нового упражнения делает
+  // генератор — он владеет фильтрами безопасности и applyPrescription.
+  const usedInPlan = new Set(baselineOrdered.map((exercise) => exercise.exerciseId))
+  const allowedAlternatives = library
+    .filter((exercise) => !usedInPlan.has(exercise.id))
+    .filter((exercise) => !isBannedExercise(exercise, preferences))
+    .filter((exercise) => !isRecoveryRestricted(exercise.muscleKey, weeklyContext))
+    .filter((exercise) => !isCoachMemoryRestricted(exercise.muscleKey, coachMemory))
+    .filter((exercise) => !isCoachDecisionRestricted(exercise, decision))
+    .filter((exercise) => !isHighFatigue(exercise.muscleKey, coachState))
+  const represcribe = (exercise: NormalizedLibraryExercise): GeneratedExercise =>
+    applyPrescription({ exercise, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, exerciseFlag: findFlag(exercise.id) })
   const { orderedSelected, planSource } = await refineBaselinePrescriptions({
     baseline: baselineOrdered,
     refineWithLlm,
@@ -371,6 +384,8 @@ export async function buildGeneratedPlannedWorkout({
     userTrainingPolicy,
     lowReadiness,
     profile,
+    allowedAlternatives,
+    represcribe,
   })
   const workoutKind = lowReadiness ? 'восстановительная персональная' : 'персональная тренировка'
   return {
@@ -425,11 +440,18 @@ interface RefineBaselineParams {
   userTrainingPolicy: UserTrainingPolicyForGenerator | null
   lowReadiness: boolean
   profile: ProfileForGenerator
+  /** Безопасные кандидаты на замену (детерминированный whitelist генератора). */
+  allowedAlternatives: NormalizedLibraryExercise[]
+  /** Пере-предписать новое упражнение через applyPrescription (для свапов). */
+  represcribe: (exercise: NormalizedLibraryExercise) => GeneratedExercise
 }
 
-// Issue #139: прогоняем baseline-предписания через LLM-советник и мержим
-// уточнённые поля обратно в GeneratedExercise по exerciseId. Отбор упражнений
-// и все прочие поля (intensityTarget, restSeconds, reason) остаются от правил.
+// Issue #139: прогоняем baseline через LLM-советник. Советник может (1)
+// заменить упражнение слота на безопасную альтернативу из whitelist и (2)
+// уточнить предписания. Свапы применяем здесь через represcribe (новое
+// упражнение получает детерминированное #136-корректное предписание —
+// периодизацию/разгрузку/рабочий вес), уточнения — мержим по exerciseId.
+// Прочие поля (intensityTarget, restSeconds, reason) остаются от правил.
 async function refineBaselinePrescriptions({
   baseline,
   refineWithLlm,
@@ -439,6 +461,8 @@ async function refineBaselinePrescriptions({
   userTrainingPolicy,
   lowReadiness,
   profile,
+  allowedAlternatives,
+  represcribe,
 }: RefineBaselineParams): Promise<{ orderedSelected: GeneratedExercise[]; planSource: 'llm' | 'rules' }> {
   if (!refineWithLlm || baseline.length === 0) {
     return { orderedSelected: baseline, planSource: 'rules' }
@@ -448,6 +472,7 @@ async function refineBaselinePrescriptions({
     exerciseId: exercise.exerciseId,
     exerciseName: exercise.exerciseName,
     muscleGroup: exercise.muscleGroup,
+    muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`),
     setsCount: exercise.setsCount,
     repMin: exercise.repMin,
     repMax: exercise.repMax,
@@ -456,11 +481,17 @@ async function refineBaselinePrescriptions({
     coachFocus: exercise.coachFocus,
     currentWorkingWeight: Number(coachMemory?.exerciseProfiles?.[exercise.exerciseId]?.currentWorkingWeight ?? NaN) || null,
   }))
+  const alternativesById = new Map(allowedAlternatives.map((exercise) => [exercise.id, exercise]))
 
   const mesocycle = coachState?.mesocycle
-  const { exercises: refined, source } = await refinePlannedWorkoutPrescriptions({
+  const { exercises: refined, swaps, source } = await refinePlannedWorkoutPrescriptions({
     scheduledDate,
     baseline: prescriptions,
+    allowedAlternatives: allowedAlternatives.map((exercise) => ({
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      muscleKey: exercise.muscleKey,
+    })),
     options: {
       isDeload: Boolean(mesocycle?.isDeload) || mesocycle?.phase === 'deload',
       maxWeightJumpSteps: Number(userTrainingPolicy?.maxWeightJumpSteps ?? 1),
@@ -480,6 +511,13 @@ async function refineBaselinePrescriptions({
 
   const refinedById = new Map(refined.map((exercise) => [exercise.exerciseId, exercise]))
   const orderedSelected = baseline.map((exercise) => {
+    // (1) Свап: слот заменён на альтернативу — пере-предписываем её детерминированно.
+    const swapId = swaps.get(exercise.exerciseId)
+    if (swapId) {
+      const alt = alternativesById.get(swapId)
+      if (alt) return represcribe(alt)
+    }
+    // (2) Уточнение предписаний оставшегося упражнения.
     const update = refinedById.get(exercise.exerciseId)
     if (!update) return exercise
     return {

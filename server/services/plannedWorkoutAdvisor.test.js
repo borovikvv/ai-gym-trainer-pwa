@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clampRefinedPlannedExercises, refinePlannedWorkoutPrescriptions } from './plannedWorkoutAdvisor.js'
+import { clampRefinedPlannedExercises, refinePlannedWorkoutPrescriptions, resolvePlannedSwaps } from './plannedWorkoutAdvisor.js'
 
 const bench = {
   exerciseId: 'bench-press',
   exerciseName: 'Жим лёжа',
   muscleGroup: 'Грудь',
+  muscleKey: 'chest',
   setsCount: 3,
   repMin: 6,
   repMax: 8,
@@ -116,6 +117,84 @@ describe('clampRefinedPlannedExercises', () => {
       { isDeload: false, maxWeightJumpSteps: 2 },
     )
     expect(exercises[0].coachFocus).toBe('base focus')
+  })
+})
+
+describe('resolvePlannedSwaps', () => {
+  const inclineChest = { exerciseId: 'incline-press', exerciseName: 'Жим на наклонной', muscleKey: 'chest' }
+  const backRow = { exerciseId: 'barbell-row', exerciseName: 'Тяга штанги', muscleKey: 'back' }
+
+  it('accepts a same-muscle swap to an allowed alternative', () => {
+    const swaps = resolvePlannedSwaps(
+      [bench],
+      [{ exerciseId: 'bench-press', replaceWithExerciseId: 'incline-press' }],
+      [inclineChest, backRow],
+    )
+    expect(swaps.get('bench-press')).toBe('incline-press')
+  })
+
+  it('rejects a swap to an exercise that is not in the safe whitelist', () => {
+    const swaps = resolvePlannedSwaps(
+      [bench],
+      [{ exerciseId: 'bench-press', replaceWithExerciseId: 'unknown-machine' }],
+      [inclineChest],
+    )
+    expect(swaps.size).toBe(0)
+  })
+
+  it('rejects a swap that changes the muscle group', () => {
+    const swaps = resolvePlannedSwaps(
+      [bench],
+      [{ exerciseId: 'bench-press', replaceWithExerciseId: 'barbell-row' }],
+      [inclineChest, backRow],
+    )
+    expect(swaps.size).toBe(0)
+  })
+
+  it('rejects a swap to an exercise already present in the plan', () => {
+    const dips = { ...bench, exerciseId: 'dips', exerciseName: 'Отжимания на брусьях' }
+    const swaps = resolvePlannedSwaps(
+      [bench, dips],
+      [{ exerciseId: 'bench-press', replaceWithExerciseId: 'dips' }],
+      [inclineChest, { exerciseId: 'dips', exerciseName: 'Отжимания на брусьях', muscleKey: 'chest' }],
+    )
+    expect(swaps.has('bench-press')).toBe(false)
+  })
+
+  it('does not let two slots claim the same replacement', () => {
+    const dips = { ...bench, exerciseId: 'dips', exerciseName: 'Отжимания на брусьях' }
+    const swaps = resolvePlannedSwaps(
+      [bench, dips],
+      [
+        { exerciseId: 'bench-press', replaceWithExerciseId: 'incline-press' },
+        { exerciseId: 'dips', replaceWithExerciseId: 'incline-press' },
+      ],
+      [inclineChest],
+    )
+    expect(swaps.get('bench-press')).toBe('incline-press')
+    expect(swaps.has('dips')).toBe(false)
+  })
+
+  it('ignores a no-op swap to the same exercise', () => {
+    const swaps = resolvePlannedSwaps(
+      [bench],
+      [{ exerciseId: 'bench-press', replaceWithExerciseId: 'bench-press' }],
+      [inclineChest],
+    )
+    expect(swaps.size).toBe(0)
+  })
+
+  it('skips prescription refinement for a swapped slot (generator re-prescribes it)', () => {
+    const swaps = resolvePlannedSwaps([bench], [{ exerciseId: 'bench-press', replaceWithExerciseId: 'incline-press' }], [inclineChest])
+    const { exercises, changed } = clampRefinedPlannedExercises(
+      [bench],
+      [{ exerciseId: 'bench-press', replaceWithExerciseId: 'incline-press', targetWeight: 200 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+      swaps,
+    )
+    // Слот заменён → LLM-числа к нему не применяются, baseline не искажён.
+    expect(exercises[0]).toEqual(bench)
+    expect(changed).toBe(false)
   })
 })
 
