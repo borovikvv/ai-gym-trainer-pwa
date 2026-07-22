@@ -812,7 +812,15 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   // считает currentWorkingWeight как MAX топ-подхода за 3 сессии (#99), поэтому
   // берём максимум: обычная прогрессия сохраняется (historicWeight обычно ≥
   // рабочего), а после разгрузки не проваливаемся ниже реального рабочего веса.
-  const weightCandidates = [historicWeight, coachWorkingWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
+  // Issue #139 (единый источник весов): exercise.targetWeight здесь — это вес из
+  // program_exercises, который LLM-планировщик (planAndApplyNextWorkout →
+  // applyPlanAndLog) обновляет после КАЖДОЙ тренировки и клампит
+  // (clampCoachPlanToNextWorkout). Берём его авторитетным кандидатом базы —
+  // так решение LLM о прогрессии программы доходит до видимого плана календаря,
+  // а не расходится с ним (корень #136/#137). Максимум с рабочим весом
+  // сохраняет инвариант #136: план не опускается ниже фактического рабочего веса.
+  const programWeight = Number(exercise.targetWeight)
+  const weightCandidates = [historicWeight, coachWorkingWeight, programWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
   const baseWeight = weightCandidates.length > 0
     ? Math.max(...weightCandidates)
     : exercise.targetWeight

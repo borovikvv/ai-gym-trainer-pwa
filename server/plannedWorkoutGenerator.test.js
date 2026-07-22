@@ -223,6 +223,48 @@ describe('planned workout generator', () => {
     })
   })
 
+  // Issue #139 (единый источник весов): вес из program_exercises (решение
+  // LLM-планировщика, приходит в exercise.targetWeight) авторитетен — прогрессия
+  // программы выше рабочего веса доходит до видимого плана календаря.
+  it('Issue #139: propagates the LLM program progression (targetWeight above working weight) to the plan', async () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' }, back: { fatigue: 'low' }, legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' }, arms: { fatigue: 'low' }, core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    // Программа (LLM) подняла жим до 65; фактический рабочий вес пока 60.
+    const library = [
+      { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 65, weightStep: 2.5, restSeconds: 150, instruction: 'жим' },
+    ]
+    const history = [
+      {
+        completedAt: '2026-06-05T20:00:00.000Z',
+        workoutDayName: 'Силовая',
+        exercises: [
+          { exerciseId: 'bench-press', nextRecommendedWeight: 60, sets: [{ completed: true, weight: 60, reps: 8, rpe: 8 }] },
+        ],
+      },
+    ]
+    const coachMemory = { exerciseProfiles: { 'bench-press': { id: 'bench-press', currentWorkingWeight: 60 } } }
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: { ...profile, preferences: { focusAreas: ['грудь'], sessionStyle: 'moderate_stable' } },
+      scheduledDate: '2026-06-08',
+      coachState,
+      coachMemory,
+      exerciseLibrary: library,
+      history,
+    })
+
+    const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+    expect(bench?.targetWeight).toBe(65) // program (LLM) weight wins over working 60
+  })
+
   it('uses profile preferences to avoid banned exercises and prioritize focus areas', async () => {
     const coachState = {
       recoveryStatus: 'ready',
