@@ -74,6 +74,8 @@ interface RegeneratePlannedWorkoutParams {
   plannedWorkoutId: string
   userId: string
   scheduledDate: string
+  // Issue #139: включить LLM-уточнение предписаний для этой тренировки.
+  refineWithLlm?: boolean
 }
 
 interface ReplacePlannedTrainingRangeParams {
@@ -274,13 +276,19 @@ export async function cascadeRegenerateFutureWorkouts(
     [userId, String(Math.max(1, Math.floor(horizonDays)))],
   )
   let regenerated = 0
+  // Issue #139: LLM-уточнение включаем только для ближайшей (первой по дате)
+  // тренировки — она следующая для пользователя. Остальные остаются
+  // детерминированными, чтобы не делать N синхронных LLM-вызовов после save.
+  let llmSlotUsed = false
   for (const row of future.rows as Array<{ id: unknown; scheduled_date: unknown; source: unknown }>) {
     if (String(row.source) === 'user') continue
     const scheduledDate = dateToDateOnly(row.scheduled_date as Date)
+    const refineWithLlm = !llmSlotUsed
+    llmSlotUsed = true
     try {
       // Последовательно по датам: каждая перегенерация читает предыдущие
       // через loadPreviousGeneratedWorkoutContext и видит свежие изменения.
-      await regeneratePlannedWorkout(client, { plannedWorkoutId: String(row.id), userId, scheduledDate })
+      await regeneratePlannedWorkout(client, { plannedWorkoutId: String(row.id), userId, scheduledDate, refineWithLlm })
       regenerated += 1
     } catch (err) {
       // Неудача одной тренировки не должна валить каскад целиком.
@@ -290,7 +298,7 @@ export async function cascadeRegenerateFutureWorkouts(
   return regenerated
 }
 
-export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkoutId, userId, scheduledDate }: RegeneratePlannedWorkoutParams): Promise<void> {
+export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkoutId, userId, scheduledDate, refineWithLlm = false }: RegeneratePlannedWorkoutParams): Promise<void> {
   const [profile, workoutDays, exerciseLibrary, history] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
@@ -301,7 +309,7 @@ export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkou
   const previousGeneratedWorkouts = await loadPreviousGeneratedWorkoutContext(client, { userId, scheduledDate, excludeId: plannedWorkoutId })
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
   const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
-  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: await loadLongTermMemoryBlock(client, userId) })
+  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: await loadLongTermMemoryBlock(client, userId), refineWithLlm })
   await client.query('delete from public.planned_workout_exercises where planned_workout_id = $1', [plannedWorkoutId])
   await updateGeneratedPlannedWorkout(client, { id: plannedWorkoutId, generated })
 }

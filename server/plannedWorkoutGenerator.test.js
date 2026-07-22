@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildGeneratedPlannedWorkout } from './plannedWorkoutGenerator.js'
 
 const profile = {
@@ -182,6 +182,45 @@ describe('planned workout generator', () => {
     const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
     // Без фикса было бы 47.5 (заниженный вес разгрузки).
     expect(bench?.targetWeight).toBe(60)
+  })
+
+  // Issue #139: refineWithLlm включает LLM-уточнение предписаний, но без
+  // сконфигурированного LLM генератор остаётся детерминированным (фолбэк).
+  describe('Issue #139: LLM refinement falls back to deterministic baseline without a key', () => {
+    let savedOpenAi
+    let savedLlm
+    beforeEach(() => {
+      savedOpenAi = process.env.OPENAI_API_KEY
+      savedLlm = process.env.LLM_API_KEY
+      delete process.env.OPENAI_API_KEY
+      delete process.env.LLM_API_KEY
+    })
+    afterEach(() => {
+      if (savedOpenAi === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = savedOpenAi
+      if (savedLlm === undefined) delete process.env.LLM_API_KEY
+      else process.env.LLM_API_KEY = savedLlm
+    })
+
+    it('produces the same deterministic plan and marks planSource=rules', async () => {
+      const coachState = {
+        recoveryStatus: 'ready',
+        readinessScore: 82,
+        weeklyLoadStatus: 'on_plan',
+        muscleGroups: {
+          chest: { fatigue: 'low' }, back: { fatigue: 'low' }, legs: { fatigue: 'low' },
+          shoulders: { fatigue: 'low' }, arms: { fatigue: 'low' }, core: { fatigue: 'low' },
+        },
+        exercises: {},
+      }
+      const args = { profile, scheduledDate: '2026-06-09', coachState, exerciseLibrary, history: [] }
+      const deterministic = await buildGeneratedPlannedWorkout(args)
+      const refined = await buildGeneratedPlannedWorkout({ ...args, refineWithLlm: true })
+
+      expect(refined.readinessSnapshot.planSource).toBe('rules')
+      expect(refined.exercises.map((e) => ({ id: e.exerciseId, w: e.targetWeight, s: e.setsCount, rmin: e.repMin, rmax: e.repMax })))
+        .toEqual(deterministic.exercises.map((e) => ({ id: e.exerciseId, w: e.targetWeight, s: e.setsCount, rmin: e.repMin, rmax: e.repMax })))
+    })
   })
 
   it('uses profile preferences to avoid banned exercises and prioritize focus areas', async () => {

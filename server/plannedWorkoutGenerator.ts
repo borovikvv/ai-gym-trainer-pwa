@@ -24,6 +24,8 @@ import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
 import { russianWeekdayName } from './utils.js'
 import { generateCoachNarration } from './coachNarrator.js'
+// Issue #139: LLM уточняет предписания baseline-плана, кламп держит их в границах.
+import { refinePlannedWorkoutPrescriptions, type PlannedExercisePrescription } from './services/plannedWorkoutAdvisor.js'
 // Issue #106: consume structured analysis flags from coachProgressAnalysis (#105)
 import type { ProgressAnalysis, ExerciseAnalysisFlag } from './coachProgressAnalysis.js'
 
@@ -165,6 +167,10 @@ interface BuildGeneratedPlannedWorkoutInput {
   analysisResult?: ProgressAnalysis | null
   // Фаза 2: блок долгосрочной памяти для нарратора
   longTermMemory?: string
+  // Issue #139: включить LLM-уточнение предписаний (baseline остаётся клампом
+  // и фолбэком). По умолчанию выключено — вызывающий включает только для
+  // ближайшей тренировки, чтобы не делать N LLM-вызовов в каскаде.
+  refineWithLlm?: boolean
 }
 
 interface GeneratedExercise {
@@ -283,6 +289,7 @@ export async function buildGeneratedPlannedWorkout({
   previousGeneratedWorkouts = [],
   analysisResult = null,
   longTermMemory = '',
+  refineWithLlm = false,
 }: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
@@ -350,7 +357,21 @@ export async function buildGeneratedPlannedWorkout({
     profile,
     exerciseTarget,
   })
-  const orderedSelected = orderExercisesForWorkout(selectedWithCoreFinisher)
+  const baselineOrdered = orderExercisesForWorkout(selectedWithCoreFinisher)
+
+  // Issue #139: LLM уточняет предписания baseline-плана (вес/повторы/подходы/
+  // фокус), результат клампится теми же границами (мезоцикл/разгрузка, шаг
+  // веса, не ниже рабочего веса #136, скачок по политике). Фолбэк — baseline.
+  const { orderedSelected, planSource } = await refineBaselinePrescriptions({
+    baseline: baselineOrdered,
+    refineWithLlm,
+    scheduledDate,
+    coachState,
+    coachMemory,
+    userTrainingPolicy,
+    lowReadiness,
+    profile,
+  })
   const workoutKind = lowReadiness ? 'восстановительная персональная' : 'персональная тренировка'
   return {
     scheduledDate,
@@ -390,9 +411,96 @@ export async function buildGeneratedPlannedWorkout({
         focusAreas: preferences.focusAreas,
       },
     }),
-    readinessSnapshot: { ...(coachState ?? {}), coachDecision: decision, userTrainingPolicy },
+    readinessSnapshot: { ...(coachState ?? {}), coachDecision: decision, userTrainingPolicy, planSource },
     exercises: orderedSelected.map((exercise, index) => ({ ...exercise, sortOrder: index + 1 })),
   }
+}
+
+interface RefineBaselineParams {
+  baseline: GeneratedExercise[]
+  refineWithLlm: boolean
+  scheduledDate: string
+  coachState: CoachState | null
+  coachMemory: CoachMemoryForGenerator | null
+  userTrainingPolicy: UserTrainingPolicyForGenerator | null
+  lowReadiness: boolean
+  profile: ProfileForGenerator
+}
+
+// Issue #139: прогоняем baseline-предписания через LLM-советник и мержим
+// уточнённые поля обратно в GeneratedExercise по exerciseId. Отбор упражнений
+// и все прочие поля (intensityTarget, restSeconds, reason) остаются от правил.
+async function refineBaselinePrescriptions({
+  baseline,
+  refineWithLlm,
+  scheduledDate,
+  coachState,
+  coachMemory,
+  userTrainingPolicy,
+  lowReadiness,
+  profile,
+}: RefineBaselineParams): Promise<{ orderedSelected: GeneratedExercise[]; planSource: 'llm' | 'rules' }> {
+  if (!refineWithLlm || baseline.length === 0) {
+    return { orderedSelected: baseline, planSource: 'rules' }
+  }
+
+  const prescriptions: PlannedExercisePrescription[] = baseline.map((exercise) => ({
+    exerciseId: exercise.exerciseId,
+    exerciseName: exercise.exerciseName,
+    muscleGroup: exercise.muscleGroup,
+    setsCount: exercise.setsCount,
+    repMin: exercise.repMin,
+    repMax: exercise.repMax,
+    targetWeight: exercise.targetWeight,
+    weightStep: exercise.weightStep,
+    coachFocus: exercise.coachFocus,
+    currentWorkingWeight: Number(coachMemory?.exerciseProfiles?.[exercise.exerciseId]?.currentWorkingWeight ?? NaN) || null,
+  }))
+
+  const mesocycle = coachState?.mesocycle
+  const { exercises: refined, source } = await refinePlannedWorkoutPrescriptions({
+    scheduledDate,
+    baseline: prescriptions,
+    options: {
+      isDeload: Boolean(mesocycle?.isDeload) || mesocycle?.phase === 'deload',
+      maxWeightJumpSteps: Number(userTrainingPolicy?.maxWeightJumpSteps ?? 1),
+    },
+    context: {
+      goal: profile?.goal,
+      level: profile?.level,
+      readinessScore: Number(coachState?.readinessScore ?? 70),
+      recoveryStatus: String(coachState?.recoveryStatus ?? 'unknown'),
+      mesocyclePhase: mesocycle?.phase,
+      weekInCycle: mesocycle?.weekInCycle,
+      cycleLength: mesocycle?.cycleLength,
+      lowReadiness,
+      muscleFatigue: summarizeMuscleFatigue(coachState),
+    },
+  })
+
+  const refinedById = new Map(refined.map((exercise) => [exercise.exerciseId, exercise]))
+  const orderedSelected = baseline.map((exercise) => {
+    const update = refinedById.get(exercise.exerciseId)
+    if (!update) return exercise
+    return {
+      ...exercise,
+      setsCount: update.setsCount,
+      repMin: update.repMin,
+      repMax: update.repMax,
+      targetWeight: update.targetWeight,
+      coachFocus: update.coachFocus,
+    }
+  })
+  return { orderedSelected, planSource: source }
+}
+
+function summarizeMuscleFatigue(coachState: CoachState | null): string {
+  const groups = coachState?.muscleGroups
+  if (!groups) return 'нет данных'
+  const flagged = Object.entries(groups)
+    .filter(([, group]) => group?.fatigue === 'high' || group?.fatigue === 'medium')
+    .map(([key, group]) => `${key}: ${group?.fatigue}`)
+  return flagged.length > 0 ? flagged.join(', ') : 'низкая'
 }
 
 function targetExerciseCount({ targetMinutes, preferences = emptyPreferences() }: { targetMinutes: number | null | undefined; preferences?: NormalizedPreferences }): number {
