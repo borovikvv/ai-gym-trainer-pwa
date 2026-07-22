@@ -77,10 +77,11 @@ describe('CurrentStepCard', () => {
     // Now Готово is enabled
     expect(doneBtn).not.toBeDisabled()
 
-    // Tap Готово
+    // Tap Готово — Issue #133: RPE передаётся прямо в markSetDone (в один
+    // setLogs с completed), отдельного updateSet больше нет.
     await user.click(doneBtn)
-    expect(updateSet).toHaveBeenCalledWith(1, { rpe: 8 })
-    expect(markSetDone).toHaveBeenCalledWith(1)
+    expect(markSetDone).toHaveBeenCalledWith(1, { rpe: 8 })
+    expect(updateSet).not.toHaveBeenCalled()
   })
 
   it('режим отдыха: таймер, цель следующего подхода, +30 с и пропуск', async () => {

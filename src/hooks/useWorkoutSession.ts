@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { dropUnfinishedSets } from '../domain/liveCoachDecisionActions'
@@ -111,6 +111,13 @@ export function useWorkoutSetActions({
   persistWorkoutDraft,
   notify,
 }: UseWorkoutSetActionsOptions) {
+  // Issue #134: следим за актуальным упражнением, чтобы поздний ответ
+  // сервера по предыдущему упражнению не затирал подсказку нового.
+  const activeExerciseIdRef = useRef(activeExercise.id)
+  useEffect(() => {
+    activeExerciseIdRef.current = activeExercise.id
+  }, [activeExercise.id])
+
   const createExerciseLog = (exercise: ExercisePlan): ExerciseLog => ({
     exerciseId: exercise.id,
     pain: false,
@@ -176,9 +183,13 @@ export function useWorkoutSetActions({
     notify('Подход удалён')
   }
 
-  function markSetDone(setIndex: number) {
+  function markSetDone(setIndex: number, patch?: Partial<SetDraft>) {
+    const targetExerciseId = activeExercise.id
     const existing = logs[activeExercise.id] ?? createExerciseLog(activeExercise)
-    const completedSets = existing.sets.map((set, index) => (index === setIndex ? { ...set, completed: true } : set))
+    // Issue #133: применяем patch (например RPE из RIR-кружков) в том же
+    // setLogs, что и completed — иначе отдельный updateSet и markSetDone
+    // батчатся и последний (со staleSnapshot) затирает выбранное усилие.
+    const completedSets = existing.sets.map((set, index) => (index === setIndex ? { ...set, ...patch, completed: true } : set))
     const completedOnly = completedSets.filter((set) => set.completed) as SetDraft[]
     const recommendation = getLocalNextSetRecommendation(completedOnly)
     const sets = completedSets.map((set, index) => {
@@ -210,6 +221,9 @@ export function useWorkoutSetActions({
       pain: Boolean(existing.pain),
     })
       .then((serverRecommendation) => {
+        // Issue #134: пользователь уже переключился на другое упражнение —
+        // ответ по предыдущему устарел, не трогаем свежую подсказку.
+        if (activeExerciseIdRef.current !== targetExerciseId) return
         if (!serverRecommendation) {
           setCoachNextSetHint(recommendation ? { weight: recommendation.weight, reps: recommendation.reps, restSeconds: activeExercise.restSeconds, reason: recommendation.reason, action: 'local' } : null)
           return
@@ -232,6 +246,8 @@ export function useWorkoutSetActions({
         }
       })
       .catch(() => {
+        // Issue #134: игнорируем ответ по уже покинутому упражнению.
+        if (activeExerciseIdRef.current !== targetExerciseId) return
         // Сервер не ответил (офлайн/таймаут/отменён) — локальная подсказка
         // остаётся, просто снимаем индикатор ожидания.
         setCoachNextSetHint(recommendation ? { weight: recommendation.weight, reps: recommendation.reps, restSeconds: activeExercise.restSeconds, reason: recommendation.reason, action: 'local' } : null)

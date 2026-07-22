@@ -247,6 +247,24 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
     }, input.remainingSets)
   }
 
+  // Issue #135: верх диапазона взят с явным запасом (reps ≥ repMax+2) и подход
+  // был лёгким (RPE ≤ 6) — пора добавить вес, а не повторять тот же. Величина
+  // скачка ограничена политикой пользователя (maxWeightJumpSteps): агрессивным
+  // (≥2) при большом запасе (reps ≥ repMax+4) разрешаем +2 шага, остальным +1.
+  // Это остаётся в пределах clampNextSetDecision (up-скачок разрешён при низком
+  // RPE), поэтому безопасно и для режима без отказа.
+  if (lastReps >= repMax + 2 && lastRpe <= 6 && step > 0) {
+    const maxSteps = Math.max(1, Math.floor(safeNumber(userTrainingPolicy?.maxWeightJumpSteps, 1)))
+    const steps = lastReps >= repMax + 4 && maxSteps >= 2 ? 2 : 1
+    return withRemainingSetUpdates({
+      action: 'continue',
+      recommendedWeight: roundWeight(lastWeight + steps * step),
+      recommendedReps: repMin,
+      recommendedRestSeconds: baseRest,
+      reason: `верх диапазона взят с запасом (${lastReps} повторов, легко) — повышаем вес на ${steps * step} кг и возвращаемся к нижней границе повторов`,
+    }, input.remainingSets)
+  }
+
   if (lastReps >= repMax && lastRpe <= 6 && (input.remainingSets ?? 1) > 1) {
     return withRemainingSetUpdates({
       action: 'continue',

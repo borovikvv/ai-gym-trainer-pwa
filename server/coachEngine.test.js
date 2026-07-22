@@ -80,6 +80,53 @@ describe('Coach Engine v1 next-set recommendations', () => {
     expect(result.reason).toContain('под контролем')
   })
 
+  // Issue #135: rules engine теперь повышает вес, если верх диапазона взят с
+  // явным запасом (reps ≥ repMax+2) и подход был лёгким (RPE ≤ 6).
+  it('raises the weight when reps clear the top of the range easily (repMax+2, RPE<=6)', () => {
+    const result = recommendNextSet({
+      exercise: bench, // repMin 6, repMax 8, step 2.5
+      completedSets: [{ weight: 40, reps: 11, rpe: 6, completed: true }],
+      remainingSets: 2,
+    })
+
+    expect(result).toMatchObject({
+      action: 'continue',
+      recommendedWeight: 42.5, // +1 step
+      recommendedReps: 6, // back to repMin
+    })
+    expect(result.reason).toContain('повышаем вес')
+  })
+
+  it('raises the weight by two steps for an aggressive user on a big rep surplus (repMax+4)', () => {
+    const result = recommendNextSet({
+      userId: 'vyacheslav', // maxWeightJumpSteps 2
+      exercise: bench,
+      completedSets: [{ weight: 40, reps: 13, rpe: 5, completed: true }],
+      remainingSets: 2,
+    })
+
+    expect(result).toMatchObject({
+      action: 'continue',
+      recommendedWeight: 45, // +2 steps
+      recommendedReps: 6,
+    })
+  })
+
+  it('holds the weight (does not jump) when reps only just reach repMax (repMax+1)', () => {
+    const result = recommendNextSet({
+      exercise: bench,
+      completedSets: [{ weight: 40, reps: 9, rpe: 6, completed: true }],
+      remainingSets: 2,
+    })
+
+    // reps 9 = repMax+1 < repMax+2 threshold → old "hold at repMax" branch
+    expect(result).toMatchObject({
+      action: 'continue',
+      recommendedWeight: 40,
+      recommendedReps: 8,
+    })
+  })
+
   it('starts lighter when coach state says recovery is low or the target muscle is highly fatigued', () => {
     const result = recommendNextSet({
       exercise: { ...bench, muscleGroup: 'грудь' },

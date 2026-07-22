@@ -24,6 +24,8 @@ import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
 import { russianWeekdayName } from './utils.js'
 import { generateCoachNarration } from './coachNarrator.js'
+// Issue #139: LLM уточняет предписания baseline-плана, кламп держит их в границах.
+import { refinePlannedWorkoutPrescriptions, type PlannedExercisePrescription } from './services/plannedWorkoutAdvisor.js'
 // Issue #106: consume structured analysis flags from coachProgressAnalysis (#105)
 import type { ProgressAnalysis, ExerciseAnalysisFlag } from './coachProgressAnalysis.js'
 
@@ -165,6 +167,10 @@ interface BuildGeneratedPlannedWorkoutInput {
   analysisResult?: ProgressAnalysis | null
   // Фаза 2: блок долгосрочной памяти для нарратора
   longTermMemory?: string
+  // Issue #139: включить LLM-уточнение предписаний (baseline остаётся клампом
+  // и фолбэком). По умолчанию выключено — вызывающий включает только для
+  // ближайшей тренировки, чтобы не делать N LLM-вызовов в каскаде.
+  refineWithLlm?: boolean
 }
 
 interface GeneratedExercise {
@@ -283,6 +289,7 @@ export async function buildGeneratedPlannedWorkout({
   previousGeneratedWorkouts = [],
   analysisResult = null,
   longTermMemory = '',
+  refineWithLlm = false,
 }: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
@@ -350,7 +357,36 @@ export async function buildGeneratedPlannedWorkout({
     profile,
     exerciseTarget,
   })
-  const orderedSelected = orderExercisesForWorkout(selectedWithCoreFinisher)
+  const baselineOrdered = orderExercisesForWorkout(selectedWithCoreFinisher)
+
+  // Issue #139: LLM может (1) заменить упражнение слота на безопасную
+  // альтернативу из детерминированного whitelist и (2) уточнить предписания
+  // (вес/повторы/подходы/фокус). Всё клампится границами baseline (мезоцикл/
+  // разгрузка, шаг веса, не ниже рабочего веса #136, скачок по политике).
+  // Фолбэк — baseline. Whitelist и пере-предписание нового упражнения делает
+  // генератор — он владеет фильтрами безопасности и applyPrescription.
+  const usedInPlan = new Set(baselineOrdered.map((exercise) => exercise.exerciseId))
+  const allowedAlternatives = library
+    .filter((exercise) => !usedInPlan.has(exercise.id))
+    .filter((exercise) => !isBannedExercise(exercise, preferences))
+    .filter((exercise) => !isRecoveryRestricted(exercise.muscleKey, weeklyContext))
+    .filter((exercise) => !isCoachMemoryRestricted(exercise.muscleKey, coachMemory))
+    .filter((exercise) => !isCoachDecisionRestricted(exercise, decision))
+    .filter((exercise) => !isHighFatigue(exercise.muscleKey, coachState))
+  const represcribe = (exercise: NormalizedLibraryExercise): GeneratedExercise =>
+    applyPrescription({ exercise, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, exerciseFlag: findFlag(exercise.id) })
+  const { orderedSelected, planSource } = await refineBaselinePrescriptions({
+    baseline: baselineOrdered,
+    refineWithLlm,
+    scheduledDate,
+    coachState,
+    coachMemory,
+    userTrainingPolicy,
+    lowReadiness,
+    profile,
+    allowedAlternatives,
+    represcribe,
+  })
   const workoutKind = lowReadiness ? 'восстановительная персональная' : 'персональная тренировка'
   return {
     scheduledDate,
@@ -390,9 +426,119 @@ export async function buildGeneratedPlannedWorkout({
         focusAreas: preferences.focusAreas,
       },
     }),
-    readinessSnapshot: { ...(coachState ?? {}), coachDecision: decision, userTrainingPolicy },
+    readinessSnapshot: { ...(coachState ?? {}), coachDecision: decision, userTrainingPolicy, planSource },
     exercises: orderedSelected.map((exercise, index) => ({ ...exercise, sortOrder: index + 1 })),
   }
+}
+
+interface RefineBaselineParams {
+  baseline: GeneratedExercise[]
+  refineWithLlm: boolean
+  scheduledDate: string
+  coachState: CoachState | null
+  coachMemory: CoachMemoryForGenerator | null
+  userTrainingPolicy: UserTrainingPolicyForGenerator | null
+  lowReadiness: boolean
+  profile: ProfileForGenerator
+  /** Безопасные кандидаты на замену (детерминированный whitelist генератора). */
+  allowedAlternatives: NormalizedLibraryExercise[]
+  /** Пере-предписать новое упражнение через applyPrescription (для свапов). */
+  represcribe: (exercise: NormalizedLibraryExercise) => GeneratedExercise
+}
+
+// Issue #139: прогоняем baseline через LLM-советник. Советник может (1)
+// заменить упражнение слота на безопасную альтернативу из whitelist и (2)
+// уточнить предписания. Свапы применяем здесь через represcribe (новое
+// упражнение получает детерминированное #136-корректное предписание —
+// периодизацию/разгрузку/рабочий вес), уточнения — мержим по exerciseId.
+// Прочие поля (intensityTarget, restSeconds, reason) остаются от правил.
+async function refineBaselinePrescriptions({
+  baseline,
+  refineWithLlm,
+  scheduledDate,
+  coachState,
+  coachMemory,
+  userTrainingPolicy,
+  lowReadiness,
+  profile,
+  allowedAlternatives,
+  represcribe,
+}: RefineBaselineParams): Promise<{ orderedSelected: GeneratedExercise[]; planSource: 'llm' | 'rules' }> {
+  if (!refineWithLlm || baseline.length === 0) {
+    return { orderedSelected: baseline, planSource: 'rules' }
+  }
+
+  const prescriptions: PlannedExercisePrescription[] = baseline.map((exercise) => ({
+    exerciseId: exercise.exerciseId,
+    exerciseName: exercise.exerciseName,
+    muscleGroup: exercise.muscleGroup,
+    muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`),
+    setsCount: exercise.setsCount,
+    repMin: exercise.repMin,
+    repMax: exercise.repMax,
+    targetWeight: exercise.targetWeight,
+    weightStep: exercise.weightStep,
+    coachFocus: exercise.coachFocus,
+    currentWorkingWeight: Number(coachMemory?.exerciseProfiles?.[exercise.exerciseId]?.currentWorkingWeight ?? NaN) || null,
+  }))
+  const alternativesById = new Map(allowedAlternatives.map((exercise) => [exercise.id, exercise]))
+
+  const mesocycle = coachState?.mesocycle
+  const { exercises: refined, swaps, source } = await refinePlannedWorkoutPrescriptions({
+    scheduledDate,
+    baseline: prescriptions,
+    allowedAlternatives: allowedAlternatives.map((exercise) => ({
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      muscleKey: exercise.muscleKey,
+    })),
+    options: {
+      isDeload: Boolean(mesocycle?.isDeload) || mesocycle?.phase === 'deload',
+      maxWeightJumpSteps: Number(userTrainingPolicy?.maxWeightJumpSteps ?? 1),
+    },
+    context: {
+      goal: profile?.goal,
+      level: profile?.level,
+      readinessScore: Number(coachState?.readinessScore ?? 70),
+      recoveryStatus: String(coachState?.recoveryStatus ?? 'unknown'),
+      mesocyclePhase: mesocycle?.phase,
+      weekInCycle: mesocycle?.weekInCycle,
+      cycleLength: mesocycle?.cycleLength,
+      lowReadiness,
+      muscleFatigue: summarizeMuscleFatigue(coachState),
+    },
+  })
+
+  const refinedById = new Map(refined.map((exercise) => [exercise.exerciseId, exercise]))
+  const orderedSelected = baseline.map((exercise) => {
+    // (1) Свап: слот заменён на альтернативу — пере-предписываем её детерминированно.
+    const swapId = swaps.get(exercise.exerciseId)
+    if (swapId) {
+      const alt = alternativesById.get(swapId)
+      if (alt) return represcribe(alt)
+    }
+    // (2) Уточнение предписаний оставшегося упражнения.
+    const update = refinedById.get(exercise.exerciseId)
+    if (!update) return exercise
+    return {
+      ...exercise,
+      setsCount: update.setsCount,
+      repMin: update.repMin,
+      repMax: update.repMax,
+      targetWeight: update.targetWeight,
+      coachFocus: update.coachFocus,
+    }
+  })
+  return { orderedSelected, planSource: source }
+}
+
+function summarizeMuscleFatigue(coachState: CoachState | null): string {
+  const groups = coachState?.muscleGroups
+  if (!groups) return 'нет данных'
+  const flagged = Object.entries(groups)
+    .filter(([, group]) => group?.fatigue === 'high' || group?.fatigue === 'medium')
+    .map(([key, group]) => `${key}: ${group?.fatigue}`)
+  return flagged.length > 0 ? flagged.join(', ') : 'низкая'
 }
 
 function targetExerciseCount({ targetMinutes, preferences = emptyPreferences() }: { targetMinutes: number | null | undefined; preferences?: NormalizedPreferences }): number {
@@ -657,12 +803,27 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     coachMemory?.exerciseProfiles?.[exercise.id]?.currentWorkingWeight ?? NaN,
   )
   // historicWeight must be > 0 to be considered valid (0 means no
-  // progression recommendation was recorded, e.g. first session or deload)
-  const baseWeight = Number.isFinite(historicWeight) && historicWeight > 0
-    ? historicWeight
-    : Number.isFinite(coachWorkingWeight) && coachWorkingWeight > 0
-      ? coachWorkingWeight
-      : exercise.targetWeight
+  // progression recommendation was recorded, e.g. first session or deload).
+  //
+  // Issue #136: раньше historicWeight (nextRecommendedWeight последней сессии)
+  // имел безусловный приоритет над coachWorkingWeight. После разгрузки
+  // nextRecommendedWeight занижен (напр. 47.5), а фактический рабочий вес был
+  // выше (60кг подняли легко) — план ставил вес НИЖЕ факта. coachMemory уже
+  // считает currentWorkingWeight как MAX топ-подхода за 3 сессии (#99), поэтому
+  // берём максимум: обычная прогрессия сохраняется (historicWeight обычно ≥
+  // рабочего), а после разгрузки не проваливаемся ниже реального рабочего веса.
+  // Issue #139 (единый источник весов): exercise.targetWeight здесь — это вес из
+  // program_exercises, который LLM-планировщик (planAndApplyNextWorkout →
+  // applyPlanAndLog) обновляет после КАЖДОЙ тренировки и клампит
+  // (clampCoachPlanToNextWorkout). Берём его авторитетным кандидатом базы —
+  // так решение LLM о прогрессии программы доходит до видимого плана календаря,
+  // а не расходится с ним (корень #136/#137). Максимум с рабочим весом
+  // сохраняет инвариант #136: план не опускается ниже фактического рабочего веса.
+  const programWeight = Number(exercise.targetWeight)
+  const weightCandidates = [historicWeight, coachWorkingWeight, programWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
+  const baseWeight = weightCandidates.length > 0
+    ? Math.max(...weightCandidates)
+    : exercise.targetWeight
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
     : clamp(exercise.setsCount, 2, preferences.sessionStyle === 'heavy_short' ? 3 : 4)

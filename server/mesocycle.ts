@@ -328,51 +328,64 @@ function findCyclePosition(
   let cycleStartIndex = 0
   let workoutsThisCycle = 0
   let plannedThisCycle = 0
+  // Issue #138: разгрузочная неделя завершает цикл — запоминаем, была ли
+  // предыдущая неделя разгрузочной, чтобы следующая рабочая открыла новый цикл.
+  let prevWasDeload = false
+
+  const startNewCycle = (i: number) => {
+    weekInCycle = 1
+    cycleStartIndex = i
+    workoutsThisCycle = sorted[i].workouts.length
+    plannedThisCycle = workoutsPerWeek
+  }
 
   for (let i = 0; i < sorted.length; i++) {
+    const currIsDeload = weekIsDeload(sorted[i])
+
     if (i === 0) {
       // First (oldest) week starts a new cycle
-      weekInCycle = 1
-      cycleStartIndex = 0
-      workoutsThisCycle = sorted[i].workouts.length
-      plannedThisCycle = workoutsPerWeek
-      continue
+      startNewCycle(i)
+    } else {
+      // Check gap between previous (older) week and this (newer) week
+      const prevStart = sorted[i - 1].start
+      const prevEnd = sorted[i - 1].end
+      const currStart = sorted[i].start
+      const gapDays = (currStart.getTime() - prevEnd.getTime()) / 86_400_000
+      // Issue #74: phantom weeks — count ISO weeks between consecutive buckets
+      const weekDiffMs = currStart.getTime() - prevStart.getTime()
+      const weekDiff = Math.round(weekDiffMs / (7 * 86_400_000))
+      const missingWeeks = Math.max(0, weekDiff - 1)
+
+      if (gapDays > 21) {
+        // Issue #96: extended break — this week starts a new cycle
+        startNewCycle(i)
+      } else if (prevWasDeload) {
+        // Issue #138: предыдущая неделя была разгрузочной — мезоцикл завершён,
+        // эта рабочая неделя открывает новый цикл (loading), даже если по
+        // календарю loadingWeeks ещё не достигнут.
+        startNewCycle(i)
+      } else {
+        // Add phantom weeks then this real week
+        weekInCycle += missingWeeks + 1
+        plannedThisCycle += (missingWeeks + 1) * workoutsPerWeek
+        workoutsThisCycle += sorted[i].workouts.length
+
+        // Check if we've crossed the cycle boundary
+        if (weekInCycle > cycleLength) {
+          // This week starts a new cycle
+          startNewCycle(i)
+        }
+      }
     }
 
-    // Check gap between previous (older) week and this (newer) week
-    const prevStart = sorted[i - 1].start
-    const prevEnd = sorted[i - 1].end
-    const currStart = sorted[i].start
-    const gapDays = (currStart.getTime() - prevEnd.getTime()) / 86_400_000
-    // Issue #74: phantom weeks — count ISO weeks between consecutive buckets
-    const weekDiffMs = currStart.getTime() - prevStart.getTime()
-    const weekDiff = Math.round(weekDiffMs / (7 * 86_400_000))
-    const missingWeeks = Math.max(0, weekDiff - 1)
-
-    // Extended break: 3+ weeks gap (was 10 days, which incorrectly fired
-    // for normal deload weeks with no workouts).
-    if (gapDays > 21) {
-      // Issue #96: extended break — this week starts a new cycle
-      weekInCycle = 1
-      cycleStartIndex = i
-      workoutsThisCycle = sorted[i].workouts.length
-      plannedThisCycle = workoutsPerWeek
-      continue
+    // Issue #138: разгрузочная неделя — финальная (deload) неделя цикла.
+    // Фиксируем её на deload-слоте, чтобы фаза считалась 'deload', а не
+    // 'intensification'/'accumulation' по номеру календарной недели.
+    if (currIsDeload) {
+      weekInCycle = cycleLength
     }
 
-    // Add phantom weeks then this real week
-    weekInCycle += missingWeeks + 1
-    plannedThisCycle += (missingWeeks + 1) * workoutsPerWeek
-    workoutsThisCycle += sorted[i].workouts.length
-
-    // Check if we've crossed the cycle boundary
-    if (weekInCycle > cycleLength) {
-      // This week starts a new cycle
-      weekInCycle = 1
-      cycleStartIndex = i
-      workoutsThisCycle = sorted[i].workouts.length
-      plannedThisCycle = workoutsPerWeek
-    }
+    prevWasDeload = currIsDeload
   }
 
   // cycleStartIndex is into `sorted` (oldest-first). Convert back to the
@@ -381,6 +394,24 @@ function findCyclePosition(
   const cycleStartWeekIndex = weeks.length - 1 - cycleStartIndex
 
   return { weekInCycle, cycleStartWeekIndex, workoutsThisCycle, plannedThisCycle }
+}
+
+/**
+ * Issue #138: неделя считается разгрузочной, если в ней есть тренировки и ВСЕ
+ * они — разгрузочные (по названию дня, напр. «Разгрузка», которое проставляет
+ * генератор для low-readiness дней и пользователь для ручных разгрузок).
+ * Пустые недели (например, добавленный бакет текущей ISO-недели без тренировок)
+ * разгрузочными не считаются.
+ */
+function weekIsDeload(bucket: WeekBucket): boolean {
+  const workouts = bucket.workouts ?? []
+  if (workouts.length === 0) return false
+  return workouts.every((workout) => isDeloadWorkoutName(workout.workoutDayName))
+}
+
+function isDeloadWorkoutName(name: unknown): boolean {
+  const text = String(name ?? '').toLowerCase()
+  return text.includes('разгруз') || text.includes('deload')
 }
 
 interface EarlyDeloadInput {
