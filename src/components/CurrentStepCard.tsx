@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react'
 import type { ExercisePlan } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
 import type { WorkoutSetInput } from '../domain/progression'
-import { formatRestSeconds, type NextSetHint } from './gymTypes'
+import { formatRestSeconds, type NextSetHint, type SetDraft } from './gymTypes'
 import { Stepper } from './ui'
 
 type CurrentStepCardProps = {
@@ -23,7 +23,9 @@ type CurrentStepCardProps = {
   restRemainingSeconds: number
   timedExercise: boolean
   formatWeight: (weight: number) => string
-  updateSet: (setIndex: number, patch: Partial<WorkoutSetInput>) => void
+  updateSetWeight: (setIndex: number, value: string) => void
+  updateSetReps: (setIndex: number, value: string) => void
+  addSet: () => void
   markSetDone: (setIndex: number, patch?: Partial<WorkoutSetInput>) => void
   extendRest: (seconds: number) => void
   skipRest: () => void
@@ -37,8 +39,10 @@ export function CurrentStepCard({
   recommendation,
   restRemainingSeconds,
   timedExercise,
-  formatWeight: _formatWeight,
-  updateSet,
+  formatWeight,
+  updateSetWeight,
+  updateSetReps,
+  addSet,
   markSetDone,
   extendRest,
   skipRest,
@@ -72,7 +76,7 @@ export function CurrentStepCard({
 
   if (allSetsCompleted) return null
 
-  const activeSet = activeLog.sets[activeSetIndex]
+  const activeSet = activeLog.sets[activeSetIndex] as SetDraft | undefined
   const setNumber = activeSetIndex + 1
   const totalSets = activeLog.sets.length
 
@@ -131,27 +135,34 @@ export function CurrentStepCard({
     <div className="card current-step current-step--logger">
       <div className="current-step__eyebrow">Подход {setNumber} из {totalSets}</div>
 
-      {/* Issue #123: ± steppers for weight and reps */}
+      {/* Issue #123: ± steppers for weight and reps.
+          Manual typing is supported via onInputChange — parent parses the
+          raw string (decimal for weight, integer for reps) and stores both
+          the string buffer and the parsed number in the set draft. */}
       <div className="current-step__steppers">
         {!timedExercise && (
           <Stepper
             value={currentWeight}
             step={weightStep}
             min={0}
-            onChange={(v) => updateSet(activeSetIndex, { weight: v })}
             label="Вес (кг)"
             variant="big"
             aria-label="Вес"
+            inputValue={activeSet?.weightInput ?? formatWeight(currentWeight)}
+            onInputChange={(raw) => updateSetWeight(activeSetIndex, raw)}
+            inputMode="decimal"
           />
         )}
         <Stepper
           value={currentReps}
           step={1}
           min={0}
-          onChange={(v) => updateSet(activeSetIndex, { reps: v })}
           label={timedExercise ? 'Секунды' : 'Повторы'}
           variant="big"
           aria-label="Повторы"
+          inputValue={activeSet?.repsInput ?? (currentReps > 0 ? String(currentReps) : '')}
+          onInputChange={(raw) => updateSetReps(activeSetIndex, raw)}
+          inputMode="numeric"
         />
       </div>
 
@@ -199,6 +210,14 @@ export function CurrentStepCard({
         aria-label={`Подход ${setNumber} выполнен`}
       >
         {selectedRir !== null ? `Готово · подход ${setNumber}` : 'Выбери остаток повторов'}
+      </button>
+
+      <button
+        className="secondary wide current-step__add-set"
+        type="button"
+        onClick={addSet}
+      >
+        Добавить подход
       </button>
     </div>
   )

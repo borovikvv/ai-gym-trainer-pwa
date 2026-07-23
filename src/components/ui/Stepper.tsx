@@ -18,7 +18,7 @@ type StepperProps = {
   min?: number
   /** Optional inclusive upper bound. */
   max?: number
-  onChange: (next: number) => void
+  onChange?: (next: number) => void
   /** Accessible label for the whole control, e.g. «Вес». */
   'aria-label'?: string
   /** Optional small label rendered above the value (e.g. «кг»). */
@@ -27,6 +27,16 @@ type StepperProps = {
   variant?: 'default' | 'big'
   /** Disable both buttons + value. */
   disabled?: boolean
+  /**
+   * When provided, the value becomes an editable <input> (manual typing)
+   * instead of a read-only <output>. `inputValue` is the raw string buffer
+   * (e.g. "20" or "20.5" mid-typing); `onInputChange` receives the raw string
+   * — the parent parses it (decimal/integer) and stores both the string and
+   * the parsed number. The ± buttons still operate on `value` (number).
+   */
+  inputValue?: string
+  onInputChange?: (raw: string) => void
+  inputMode?: 'decimal' | 'numeric'
 }
 
 function clampStep(value: number, step: number, min: number): number {
@@ -45,13 +55,21 @@ export function Stepper({
   label,
   variant = 'default',
   disabled = false,
+  inputValue,
+  onInputChange,
+  inputMode,
 }: StepperProps) {
   function update(direction: 1 | -1) {
     const stepped = clampStep(value, step, min)
     let next = stepped + direction * step
     if (Number.isFinite(min)) next = Math.max(min, next)
     if (max !== undefined && Number.isFinite(max)) next = Math.min(max, next)
-    if (next !== value) onChange(next)
+    if (next === value) return
+    // When the value is an editable input, route ± through onInputChange too,
+    // so the string buffer (weightInput/repsInput) stays in sync with the
+    // parsed number. Otherwise fall back to the numeric onChange.
+    if (onInputChange) onInputChange(String(next))
+    else onChange?.(next)
   }
 
   const big = variant === 'big'
@@ -71,9 +89,20 @@ export function Stepper({
         >
           −
         </button>
-        <output className="stepper__value" aria-live="polite">
-          {value}
-        </output>
+        {onInputChange ? (
+          <input
+            className="stepper__value stepper__value--input"
+            value={inputValue ?? String(value)}
+            inputMode={inputMode ?? 'numeric'}
+            aria-label={ariaLabel}
+            disabled={disabled}
+            onChange={(event) => onInputChange(event.target.value)}
+          />
+        ) : (
+          <output className="stepper__value" aria-live="polite">
+            {value}
+          </output>
+        )}
         <button
           type="button"
           className="stepper__btn stepper__btn--plus"

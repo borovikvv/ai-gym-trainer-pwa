@@ -147,16 +147,11 @@ export function GymPage(props: GymPageProps) {
           openExerciseGuide={() => setExerciseGuideOpen(true)}
           openReplacementSheet={() => setSheetOpen(true)}
           openExercisePicker={() => setExercisePickerOpen(true)}
-          copyPrevious={props.onCopyPrevious}
-          adjustWeight={props.onAdjustWeight}
-          markPain={props.onMarkPain}
           clearRestTimer={props.onClearRestTimer}
           extendRest={props.onExtendRest}
           editCompletedSet={props.onEditCompletedSet}
-          removeSet={props.onRemoveSet}
           updateSetWeight={props.onUpdateSetWeight}
           updateSetReps={props.onUpdateSetReps}
-          updateSet={props.onUpdateSet}
           markSetDone={props.onMarkSetDone}
           addSet={props.onAddSet}
           removeCurrentExercise={props.onRemoveCurrentExercise}
