@@ -11,11 +11,24 @@ beforeEach(() => {
   window.localStorage.setItem('ai-gym-trainer:v0.1:onboarding-completed', '1')
 })
 
-// TODO(test-migration): 10 tests below are .skip'd because they relied on the
-// removed WorkoutSetList block (selectors 'Вес, подход N', 'Сложность: …',
-// 'Записать подход N'). The new unified logger in CurrentStepCard uses different
-// selectors ('Вес', RIR dots 'Тяж — 1–2 в запасе', 'Подход N выполнен') and
-// requires selecting RIR before clicking Готово. Migrate in a follow-up.
+/**
+ * Record the current set in the unified gym logger: pick a RIR dot (required
+ * to enable "Готово"), then click the "Подход N выполнен" button. If a rest
+ * timer appears afterwards, skip it so the logger is ready for the next set
+ * (or for finishing the workout). After the LAST set there is no rest — the
+ * card switches to the "next/finish" state — so the rest skip is best-effort.
+ * `setNumber` is 1-based and must match the eyebrow counter shown in the card.
+ */
+async function recordCurrentSet(user: ReturnType<typeof userEvent.setup>, setNumber: number) {
+  await user.click(screen.getByRole('button', { name: 'Норм — 3 в запасе' }))
+  await user.click(screen.getByRole('button', { name: `Подход ${setNumber} выполнен` }))
+  // Rest mode shows a "Пропустить" button to end the rest early — but only when
+  // there are more sets to do. After the last set the card switches state, so
+  // skip is best-effort.
+  const skipRest = screen.queryByRole('button', { name: 'Пропустить' })
+  if (skipRest) await user.click(skipRest)
+}
+
 describe('Coach Timeline workout flow', () => {
   it('keeps the bottom navigation focused and opens profile/library from the coach home', async () => {
     const user = userEvent.setup()
@@ -41,7 +54,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByLabelText('Тренировок в неделю')).toBeInTheDocument()
   })
 
-  it.skip('shows a pre-workout preview and adapts the session after the user chooses today readiness', async () => {
+  it('shows a pre-workout preview and adapts the session after the user chooses today readiness', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -64,7 +77,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('57,5')
+    expect(screen.getByLabelText('Вес')).toHaveValue('57,5')
   })
 
   it('lets the user specify sore muscles and pain areas before training', async () => {
@@ -84,7 +97,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByRole('button', { name: /^Очень легко$/i })).toHaveClass('active')
   })
 
-  it.skip('lets the user open the gym, record a set, move to the next exercise, and finish the workout', async () => {
+  it('lets the user open the gym, record a set, move to the next exercise, and finish the workout', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -95,18 +108,17 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
     expect(screen.getByText('Жим лёжа')).toBeInTheDocument()
     expect(screen.queryByText(/RPE/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Сложность: Нормально, подход 1' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Сложность: Тяжело, подход 1' }))
-    expect(screen.getByRole('button', { name: 'Сложность: Тяжело, подход 1' })).toHaveClass('active')
+    expect(screen.getByRole('button', { name: 'Норм — 3 в запасе' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Тяж — 1–2 в запасе' }))
+    expect(screen.getByRole('button', { name: 'Тяж — 1–2 в запасе' })).toHaveClass('rir-dot--active')
 
-    const firstSetReps = screen.getByLabelText('Повторы, подход 1')
+    const firstSetReps = screen.getByLabelText('Повторы')
     await user.clear(firstSetReps)
     await user.type(firstSetReps, '10')
-    await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
+    await user.click(screen.getByRole('button', { name: 'Подход 1 выполнен' }))
     expect(screen.getByText('Подход записан')).toBeInTheDocument()
-    expect(screen.getByText(/Подход 1 · 60×10 · тяжело/i)).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 2')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Вес, подход 3')).not.toBeInTheDocument()
+    // Recorded set appears as a done chip "60×10" (weight×reps) above the logger
+    expect(screen.getByText('60×10')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /пропустить упражнение/i }))
     expect(screen.getByText('Сейчас · 2 из 5')).toBeInTheDocument()
@@ -158,7 +170,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.queryByRole('dialog', { name: /описание упражнения жим лёжа/i })).not.toBeInTheDocument()
   })
 
-  it.skip('shows previous workout sets in the gym but repeats the set just completed in the current workout', async () => {
+  it('shows previous workout sets in the gym and pre-fills weight from the plan', async () => {
     const user = userEvent.setup()
     window.localStorage.setItem('ai-gym-trainer:v0.1:history', JSON.stringify([
       {
@@ -194,34 +206,33 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText('Прошлый раз: 50×9 / 50×9 / 50×9')).toBeInTheDocument()
     // Issue #33: weight is now pre-filled from plan (targetWeight=60), not
     // from history (nextRecommendedWeight=52.5).
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
+    expect(screen.getByLabelText('Вес')).toHaveValue('60')
 
-    const firstWeight = screen.getByLabelText('Вес, подход 1')
+    const firstWeight = screen.getByLabelText('Вес')
     await user.clear(firstWeight)
     await user.type(firstWeight, '52.5')
-    const firstReps = screen.getByLabelText('Повторы, подход 1')
+    const firstReps = screen.getByLabelText('Повторы')
     await user.clear(firstReps)
     await user.type(firstReps, '8')
-    await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
+    await recordCurrentSet(user, 1)
 
-    await user.click(screen.getByRole('button', { name: /повторить предыдущий подход/i }))
-    expect(screen.getByLabelText('Вес, подход 2')).toHaveValue('52,5')
-    expect(screen.getByLabelText('Повторы, подход 2')).toHaveValue('8')
+    // Recorded set 1 appears as a done chip "52,5×8" above the logger
+    expect(screen.getByText('52,5×8')).toBeInTheDocument()
   })
 
-  it.skip('autosaves the active workout draft after each recorded set and restores it after reload', async () => {
+  it('autosaves the active workout draft after each recorded set and restores it after reload', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    const weight = screen.getByLabelText('Вес, подход 1')
+    const weight = screen.getByLabelText('Вес')
     await user.clear(weight)
     await user.type(weight, '52.5')
-    const reps = screen.getByLabelText('Повторы, подход 1')
+    const reps = screen.getByLabelText('Повторы')
     await user.clear(reps)
     await user.type(reps, '8')
-    await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
+    await recordCurrentSet(user, 1)
 
     expect(screen.getByText(/Черновик сохранён · \d{2}\.\d{2}, \d{2}:\d{2}/i)).toBeInTheDocument()
     const rawDraft = window.localStorage.getItem('ai-gym-trainer:v0.1:active-draft')
@@ -233,20 +244,21 @@ describe('Coach Timeline workout flow', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
-    expect(screen.getByText(/Подход 1 · 52,5×8/i)).toBeInTheDocument()
-    expect(screen.getByLabelText('Вес, подход 2')).toBeInTheDocument()
+    // Recorded set 1 appears as a done chip "52,5×8" above the logger
+    expect(screen.getByText('52,5×8')).toBeInTheDocument()
+    expect(screen.getByLabelText('Вес')).toBeInTheDocument()
   })
 
-  it.skip('autosaves typed set values before the set is recorded', async () => {
+  it('autosaves typed set values before the set is recorded', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    const weight = screen.getByLabelText('Вес, подход 1')
+    const weight = screen.getByLabelText('Вес')
     await user.clear(weight)
     await user.type(weight, '47.5')
-    const reps = screen.getByLabelText('Повторы, подход 1')
+    const reps = screen.getByLabelText('Повторы')
     await user.clear(reps)
     await user.type(reps, '7')
 
@@ -258,41 +270,46 @@ describe('Coach Timeline workout flow', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('47.5')
-    expect(screen.getByLabelText('Повторы, подход 1')).toHaveValue('7')
+    expect(screen.getByLabelText('Вес')).toHaveValue('47.5')
+    expect(screen.getByLabelText('Повторы')).toHaveValue('7')
   })
 
-  it.skip('supports decimal weights, editing completed sets, and adding/removing sets in the gym', async () => {
+  it('supports decimal weights, editing a completed set via chip, and adding a set in the gym', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByRole('button', { name: '+5 кг' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '-5 кг' })).toBeInTheDocument()
 
-    const weight = screen.getByLabelText('Вес, подход 1')
+    const weight = screen.getByLabelText('Вес')
     await user.clear(weight)
     await user.type(weight, '52,5')
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('52.5')
+    expect(screen.getByLabelText('Вес')).toHaveValue('52.5')
 
-    const reps = screen.getByLabelText('Повторы, подход 1')
+    const reps = screen.getByLabelText('Повторы')
     await user.clear(reps)
     await user.type(reps, '8')
-    await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
+    // Record the set manually (not via recordCurrentSet) so we can assert the
+    // rest-mode UI that appears between sets.
+    await user.click(screen.getByRole('button', { name: 'Норм — 3 в запасе' }))
+    await user.click(screen.getByRole('button', { name: 'Подход 1 выполнен' }))
 
     // Фаза 3: отдых показывает фокусная карточка текущего шага
     expect(screen.getByText('Отдых')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Пропустить' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '+30 с' })).toBeInTheDocument()
-    expect(screen.getByText(/Подход 1 · 52,5×8/i)).toBeInTheDocument()
+    // Recorded set 1 appears as a done chip "52,5×8" above the logger
+    expect(screen.getByText('52,5×8')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /редактировать подход 1/i }))
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('52.5')
-    await user.click(screen.getByRole('button', { name: /удалить подход 3/i }))
-    expect(screen.queryByText('Подход 3')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /добавить подход/i }))
-    expect(screen.getByText('Подход 3')).toBeInTheDocument()
+    // End the rest so the logger shows set 2
+    await user.click(screen.getByRole('button', { name: 'Пропустить' }))
+
+    // Reopen set 1 for editing by tapping its done chip
+    await user.click(screen.getByRole('button', { name: /подход 1: выполнен/i }))
+    expect(screen.getByLabelText('Вес')).toHaveValue('52.5')
+
+    // Add a 3rd set via the in-card "Добавить подход" button
+    await user.click(screen.getByRole('button', { name: 'Добавить подход' }))
   })
 
   it('lets the user add an extra exercise to the current workout and choose an extra day today', async () => {
@@ -332,7 +349,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText('Сейчас · 1 из 6')).toBeInTheDocument()
   })
 
-  it.skip('saves a finished workout locally, shows history, and applies next recommended weight after reload', async () => {
+  it('saves a finished workout locally, shows history, and applies next recommended weight after reload', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
@@ -340,14 +357,10 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     for (const index of [1, 2, 3]) {
-      const reps = screen.getByLabelText(`Повторы, подход ${index}`)
+      const reps = screen.getByLabelText('Повторы')
       await user.clear(reps)
       await user.type(reps, '10')
-      await user.click(screen.getByRole('button', { name: `Записать подход ${index}` }))
-      if (index < 3) {
-        expect(screen.getByLabelText(`Вес, подход ${index + 1}`)).toBeInTheDocument()
-        expect(screen.queryByLabelText(`Вес, подход ${index}`)).not.toBeInTheDocument()
-      }
+      await recordCurrentSet(user, index)
     }
 
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
@@ -367,7 +380,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     // Issue #33: weight pre-filled from plan (targetWeight=60), not from
     // history (nextRecommendedWeight=62.5).
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
+    expect(screen.getByLabelText('Вес')).toHaveValue('60')
   })
 
   it('shows the progress tab as a trainer dashboard instead of a mock bench-only chart', async () => {
@@ -434,7 +447,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.queryByText('История жима')).not.toBeInTheDocument()
   })
 
-  it.skip('has Vyacheslav and Oleg profiles with separate local progress', async () => {
+  it('has Vyacheslav and Oleg profiles with separate local progress', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -446,10 +459,10 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     for (const index of [1, 2, 3]) {
-      const reps = screen.getByLabelText(`Повторы, подход ${index}`)
+      const reps = screen.getByLabelText('Повторы')
       await user.clear(reps)
       await user.type(reps, '10')
-      await user.click(screen.getByRole('button', { name: `Записать подход ${index}` }))
+      await recordCurrentSet(user, index)
     }
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
     await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
@@ -463,7 +476,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('60')
+    expect(screen.getByLabelText('Вес')).toHaveValue('60')
   })
 
   it('lets the user edit and save the questionnaire including workouts per week', async () => {
@@ -524,7 +537,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
   })
 
-  it.skip('shows the plan as a coach calendar and recommends the next set during the workout', async () => {
+  it('shows the plan as a coach calendar and recommends the next set during the workout', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -552,17 +565,17 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Зал' }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    const reps = screen.getByLabelText('Повторы, подход 1')
+    const reps = screen.getByLabelText('Повторы')
     await user.clear(reps)
     await user.type(reps, '6')
-    await user.click(screen.getByRole('button', { name: 'Сложность: На пределе, подход 1' }))
-    await user.click(screen.getByRole('button', { name: 'Записать подход 1' }))
+    await user.click(screen.getByRole('button', { name: 'Макс — 0 в запасе' }))
+    await user.click(screen.getByRole('button', { name: 'Подход 1 выполнен' }))
 
     expect(screen.getByText(/Следующий подход: 57,5 кг × 8/i)).toBeInTheDocument()
     expect(screen.getByText(/прошлый подход был на пределе/i)).toBeInTheDocument()
   })
 
-  it.skip('lets the user edit an exercise in the plan and saves the changes through the program API', async () => {
+  it('lets the user edit an exercise in the plan and saves the changes through the program API', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -589,7 +602,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Зал' }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByLabelText('Вес, подход 1')).toHaveValue('62,5')
+    expect(screen.getByLabelText('Вес')).toHaveValue('62,5')
     expect(screen.getByText(/4×6–8 · рекомендовано 62,5 кг/i)).toBeInTheDocument()
   })
 })
