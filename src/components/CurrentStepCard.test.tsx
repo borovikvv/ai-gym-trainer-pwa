@@ -42,7 +42,9 @@ function baseProps(overrides = {}) {
     restRemainingSeconds: 0,
     timedExercise: false,
     formatWeight: String,
-    updateSet: vi.fn(),
+    updateSetWeight: vi.fn(),
+    updateSetReps: vi.fn(),
+    addSet: vi.fn(),
     markSetDone: vi.fn(),
     extendRest: vi.fn(),
     skipRest: vi.fn(),
@@ -54,8 +56,8 @@ describe('CurrentStepCard', () => {
   it('показывает счётчик подхода, steppers и кнопку Готово (disabled)', () => {
     render(<CurrentStepCard {...baseProps()} />)
     expect(screen.getByText(/подход 2 из 3/i)).toBeInTheDocument()
-    // Stepper for weight — value 60 is shown
-    expect(screen.getByText('60')).toBeInTheDocument()
+    // Stepper for weight — editable input shows value 60
+    expect((screen.getByLabelText('Вес') as HTMLInputElement).value).toBe('60')
     // Готово is disabled (no RIR selected yet)
     const doneBtn = screen.getByRole('button', { name: /подход 2 выполнен/i })
     expect(doneBtn).toBeDisabled()
@@ -63,9 +65,8 @@ describe('CurrentStepCard', () => {
 
   it('выбор RIR активирует Готово; тап пишет rpe и завершает подход', async () => {
     const user = userEvent.setup()
-    const updateSet = vi.fn()
     const markSetDone = vi.fn()
-    render(<CurrentStepCard {...baseProps({ updateSet, markSetDone })} />)
+    render(<CurrentStepCard {...baseProps({ markSetDone })} />)
 
     // Готово disabled until RIR chosen
     const doneBtn = screen.getByRole('button', { name: /подход 2 выполнен/i })
@@ -81,7 +82,6 @@ describe('CurrentStepCard', () => {
     // setLogs с completed), отдельного updateSet больше нет.
     await user.click(doneBtn)
     expect(markSetDone).toHaveBeenCalledWith(1, { rpe: 8 })
-    expect(updateSet).not.toHaveBeenCalled()
   })
 
   it('режим отдыха: таймер, цель следующего подхода, +30 с и пропуск', async () => {
@@ -127,8 +127,8 @@ describe('CurrentStepCard', () => {
         })}
       />,
     )
-    // Stepper shows 45 (seconds), no weight stepper
-    expect(screen.getByText('45')).toBeInTheDocument()
+    // Stepper shows 45 (seconds) in the editable input, no weight stepper
+    expect((screen.getByLabelText('Повторы') as HTMLInputElement).value).toBe('45')
     // No "Вес (кг)" label for timed exercises
     expect(screen.queryByText('Вес (кг)')).not.toBeInTheDocument()
     // "Секунды" label is present
@@ -155,5 +155,24 @@ describe('CurrentStepCard', () => {
     )
     expect(screen.getByText('ИИ')).toBeInTheDocument()
     expect(screen.getByText(/LLM советует/)).toBeInTheDocument()
+  })
+
+  it('ручной ввод веса: печать в input веса вызывает updateSetWeight с raw строкой и индексом подхода', async () => {
+    const user = userEvent.setup()
+    const updateSetWeight = vi.fn()
+    render(<CurrentStepCard {...baseProps({ updateSetWeight })} />)
+    const weightInput = screen.getByLabelText('Вес')
+    // userEvent.type appends to the existing "60" → "602"
+    await user.type(weightInput, '2')
+    expect(updateSetWeight).toHaveBeenCalledWith(1, '602')
+  })
+
+  it('кнопка «Добавить подход» вызывает addSet', async () => {
+    const user = userEvent.setup()
+    const addSet = vi.fn()
+    render(<CurrentStepCard {...baseProps({ addSet })} />)
+    const addButton = screen.getByRole('button', { name: 'Добавить подход' })
+    await user.click(addButton)
+    expect(addSet).toHaveBeenCalledTimes(1)
   })
 })

@@ -6,9 +6,8 @@ import type { NextSetHint } from './gymTypes'
 import { useEffect, useRef } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { NextSetCoachCard } from './NextSetCoachCard'
+import { InfoHint } from './ui'
 import { CurrentStepCard } from './CurrentStepCard'
-import { WorkoutSetList } from './WorkoutSetList'
-import { QuickActions } from './GymActions'
 import { Plus, Trash2 } from 'lucide-react'
 
 type GymScreenProps = {
@@ -29,16 +28,11 @@ type GymScreenProps = {
   openExerciseGuide: () => void
   openReplacementSheet: () => void
   openExercisePicker: () => void
-  copyPrevious: () => void
-  adjustWeight: (delta: number) => void
-  markPain: () => void
   clearRestTimer: () => void
   extendRest: (seconds: number) => void
   editCompletedSet: (setIndex: number) => void
-  removeSet: (setIndex: number) => void
   updateSetWeight: (setIndex: number, value: string) => void
   updateSetReps: (setIndex: number, value: string) => void
-  updateSet: (setIndex: number, patch: Partial<WorkoutSetInput>) => void
         markSetDone: (setIndex: number, patch?: Partial<WorkoutSetInput>) => void
         addSet: () => void
         removeCurrentExercise: () => void
@@ -66,16 +60,11 @@ export function GymScreen({
   openExerciseGuide,
   openReplacementSheet,
   openExercisePicker,
-  copyPrevious,
-  adjustWeight,
-  markPain,
   clearRestTimer,
   extendRest,
   editCompletedSet,
-  removeSet,
   updateSetWeight,
   updateSetReps,
-        updateSet,
         markSetDone,
         addSet,
         removeCurrentExercise,
@@ -151,7 +140,10 @@ export function GymScreen({
           if (window.confirm('Выйти из тренировки? Несохранённый прогресс будет потерян.')) {
             navigate('home')
           }
-        }}>← Выйти</button>
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+          Выйти
+        </button>
         <div className="session-top-bar__progress" aria-hidden="true">
           <div className="session-top-bar__progress-fill" style={{ width: `${progressFraction * 100}%` }} />
         </div>
@@ -183,7 +175,9 @@ export function GymScreen({
         restRemainingSeconds={restRemainingSeconds}
         timedExercise={timedExercise}
         formatWeight={formatWeight}
-        updateSet={updateSet}
+        updateSetWeight={updateSetWeight}
+        updateSetReps={updateSetReps}
+        addSet={addSet}
         markSetDone={markSetDone}
         extendRest={extendRest}
         skipRest={clearRestTimer}
@@ -258,13 +252,13 @@ export function GymScreen({
 
       {exerciseAddSuggestion && (
         <div className="card coach-add-exercise">
-          <div>
+          <div className="coach-add-exercise__head">
             <div className="label">Тренер предлагает добавить</div>
-            <b>{exerciseAddSuggestion.exercise.name}</b>
-            <div className="muted">{exerciseAddSuggestion.reason}</div>
+            <InfoHint hint={exerciseAddSuggestion.reason} />
           </div>
+          <b className="coach-add-exercise__name">{exerciseAddSuggestion.exercise.name}</b>
           <button
-            className="secondary compact"
+            className="secondary compact coach-add-exercise__action"
             onClick={addSuggestedExercise}
             aria-label={`Добавить предложенное упражнение: ${exerciseAddSuggestion.exercise.name}`}
           >
@@ -272,44 +266,6 @@ export function GymScreen({
           </button>
         </div>
       )}
-
-      {/* Мощные функции (ручная правка/боль/добавить подход) — свёрнуты, ниже
-          основного потока. Правка выполненного подхода доступна и по тапу на
-          чип, поэтому это резервный путь. */}
-      <details className="all-sets-details">
-        <summary>Все подходы и правки</summary>
-        {!timedExercise && (
-          <QuickActions
-            weightStep={activeExercise.weightStep}
-            hasPain={activeLog.pain}
-            copyPrevious={copyPrevious}
-            adjustWeight={adjustWeight}
-            markPain={markPain}
-          />
-        )}
-        {timedExercise && (
-          <div className="quick-actions compact-readiness-actions">
-            <button className="secondary compact" type="button" onClick={copyPrevious}>Повторить</button>
-            <button className={activeLog.pain ? 'secondary compact danger active' : 'secondary compact danger'} type="button" onClick={markPain}>Боль</button>
-          </div>
-        )}
-
-        <WorkoutSetList
-          activeExercise={activeExercise}
-          activeLog={activeLog}
-          activeSetIndex={activeSetIndex}
-          allSetsCompleted={allSetsCompleted}
-          formatWeight={formatWeight}
-          editCompletedSet={editCompletedSet}
-          removeSet={removeSet}
-          updateSetWeight={updateSetWeight}
-          updateSetReps={updateSetReps}
-          updateSet={updateSet}
-          markSetDone={markSetDone}
-        />
-
-        <button className="secondary wide" type="button" onClick={addSet}>Добавить подход</button>
-      </details>
 
       {draftStatus && (
         <p className="autosave-line" role="status">{draftStatus}</p>

@@ -20,7 +20,7 @@
      Значения сведены к прототипу (README «Prototype LIGHT values»). */
   --app-bg: #E4DCCB;
   --bg: #F1E9DB;
-  --surface: #FFFDF9;
+  --surface: #FBF5EA;
   --surface-solid: #FFFDF9;
   --surface-muted: #EAE0CF;
   --border: rgba(34, 32, 27, 0.12);
@@ -882,6 +882,27 @@
   font-size: 38px; font-weight: 500; line-height: 1;
   color: var(--text-primary);
 }
+/* Editable input variant of the value — looks identical to <output>, but typed. */
+.stepper__value--input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  margin: 0;
+  appearance: none;
+  -moz-appearance: textfield;
+}
+.stepper__value--input::-webkit-outer-spin-button,
+.stepper__value--input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.stepper__value--input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
 
 /* big — повторяет прототип зального логгера (56px кнопки, 60px сериф). */
 .stepper--big .stepper__row {
@@ -1393,16 +1414,13 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  margin-bottom: 16px;
 }
 .session-top-bar__back {
   background: none; border: none;
-  font-size: 15px; color: var(--text-secondary);
+  font: 600 13px var(--font-ui);
+  color: var(--text-secondary);
+  display: flex; align-items: center; gap: 4px;
   cursor: pointer; white-space: nowrap;
   padding: 4px 0;
 }
@@ -1417,12 +1435,11 @@
   height: 100%;
   background: var(--accent);
   border-radius: 999px;
-  transition: width 0.3s ease;
+  transition: width 0.35s ease;
 }
 .session-top-bar__counter {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-tertiary);
+  font: 600 13px var(--font-ui);
+  color: var(--text-primary);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -1482,27 +1499,40 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* --- Sticky action bar (redesigned) --- */
+/* --- Action bar: две отдельные кнопки, как в прототипе --- */
 .gym-action-bar {
-  position: sticky;
-  bottom: 0;
   display: flex;
+  align-items: stretch;
   gap: 8px;
-  padding: 12px 16px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  z-index: 10;
+  margin-top: 14px;
 }
-.gym-action-bar .primary { flex: 1; }
+.gym-action-bar .primary,
 .gym-action-bar__finish {
-  flex: 0 0 auto;
-  padding: 12px 20px;
-  border: none;
-  border-radius: var(--radius-md, 12px);
+  min-height: 52px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.gym-action-bar .primary {
+  flex: 1;
+  margin-top: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 16px;
   background: var(--hero-bg);
   color: var(--hero-text);
-  font-size: 15px;
-  font-weight: 600;
+  font: 600 15px var(--font-ui);
+}
+.gym-action-bar__finish {
+  flex: 0 0 auto;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 600 14px var(--font-ui);
   cursor: pointer;
 }
 /* --- Dashed "Добавить упражнение" + danger "Удалить" --- */
@@ -2290,10 +2320,40 @@
 /* --- General: ensure .card on all screens uses warm surface --- */
 .preview-screen .card,
 .plan-screen .card,
-.progress-screen .card {
+.progress-screen .card,
+.session-screen .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 18px;
+}
+
+/* --- Coach add-exercise suggestion (session screen) --- */
+.coach-add-exercise {
+  padding: 14px 16px;
+  font-family: var(--font-ui);
+}
+.coach-add-exercise__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.coach-add-exercise__head .label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.coach-add-exercise__name {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.coach-add-exercise__action {
+  margin-top: 12px;
 }
 
 /* --- All-sets details: warm styling --- */
