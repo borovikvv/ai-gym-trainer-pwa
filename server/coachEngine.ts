@@ -6,8 +6,8 @@ import type {
   ReadinessCheckIn,
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
-import { roundWeight } from './lib/format.js'
+import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { roundWeight } from '../shared/format.js'
 import { findComplementaryExercises } from './exerciseMatcher.js'
 
 // ---------------------------------------------------------------------------

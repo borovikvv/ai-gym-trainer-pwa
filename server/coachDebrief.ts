@@ -1,6 +1,6 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 import type { CompletedExerciseHistory, ReadinessCheckIn } from '../shared/types.js'
-import { formatWeight, pluralRu } from './lib/format.js'
+import { formatWeight, pluralRu } from '../shared/format.js'
 
 interface ExerciseEntry extends CompletedExerciseHistory {
   exerciseName: string

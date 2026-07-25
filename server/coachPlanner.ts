@@ -1,9 +1,9 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 // Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
 import type { CoachState, MesocycleState, VolumeLandmark, WorkoutHistoryEntry } from '../shared/types.js'
-import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup, labelForLower } from './lib/muscleGroups.js'
-import { formatWeight, roundWeight } from './lib/format.js'
+import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
+import { normalizeMuscleGroup, labelForLower } from '../shared/muscleGroups.js'
+import { formatWeight, roundWeight } from '../shared/format.js'
 import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'

@@ -30,7 +30,7 @@ import type {
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
-import { CANONICAL_MUSCLE_KEYS, labelFor, isAssistedExerciseName } from './lib/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, labelFor, isAssistedExerciseName } from '../shared/muscleGroups.js'
 import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@
 // (graceful degradation). Применение свапа (пере-предписание нового
 // упражнения) делает генератор — он владеет applyPrescription/периодизацией.
 import { isLlmConfigured, requestLlmJson } from '../lib/llmClient.js'
-import { roundWeight } from '../lib/format.js'
+import { roundWeight } from '../../shared/format.js'
 
 /** Предписание одного упражнения — вход и выход советника. */
 export interface PlannedExercisePrescription {

@@ -1,3 +1,12 @@
+/**
+ * Unified exercise-identity normalization — single source of truth shared
+ * by the server (server/) and the client (src/). Previously duplicated in
+ * server/exerciseIdentity.ts and src/domain/exerciseIdentity.ts (issue #147).
+ *
+ * The input accepts BOTH camelCase (client objects) and snake_case (DB
+ * rows on the server) keys so a single helper covers both sides.
+ */
+
 interface ExerciseLike {
   id?: string
   exerciseId?: string
@@ -9,6 +18,11 @@ interface ExerciseLike {
   canonical_exercise_id?: string
 }
 
+/**
+ * Resolve an exercise to its canonical id: explicit canonical id wins,
+ * then the generated id is cleaned of extra/replacement/light/heavy
+ * suffixes, then the name is slugified (with plank/dead-bug special cases).
+ */
 export function canonicalExerciseId(exerciseOrId: string | ExerciseLike | null | undefined): string {
   if (typeof exerciseOrId === 'string') return normalizeGeneratedExerciseId(exerciseOrId)
   const exercise: ExerciseLike = exerciseOrId ?? {}
@@ -20,6 +34,12 @@ export function canonicalExerciseId(exerciseOrId: string | ExerciseLike | null |
   if (normalizedId) return normalizedId
   return canonicalIdFromName(exercise.name ?? exercise.exerciseName ?? exercise.exercise_name ?? '')
 }
+
+/**
+ * Alias kept for client-side callers (src/) that historically used the
+ * `getCanonicalExerciseId` name. Same implementation as canonicalExerciseId.
+ */
+export const getCanonicalExerciseId = canonicalExerciseId
 
 function normalizeGeneratedExerciseId(id: string): string {
   return String(id ?? '')

@@ -1,7 +1,7 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 import type { CoachState } from '../shared/types.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
-import { formatWeight, roundWeight } from './lib/format.js'
+import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { formatWeight, roundWeight } from '../shared/format.js'
 
 interface ExerciseInput {
   id?: string

@@ -33,7 +33,7 @@ import type {
   VolumeAdjustmentDecision,
   VolumeLandmark,
 } from '../shared/types.js'
-import { CANONICAL_MUSCLE_KEYS } from './lib/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS } from '../shared/muscleGroups.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 
 const TWO_WEEKS_MS = 14 * 86_400_000

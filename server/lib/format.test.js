@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatWeight, roundWeight, pluralRu } from './format.js'
+import { formatWeight, roundWeight, pluralRu } from '../../shared/format.js'
 
 // ---------------------------------------------------------------------------
 // formatWeight

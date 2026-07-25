@@ -12,7 +12,7 @@
  */
 
 import type { AgeRecoveryPhase, MuscleKey, VolumeLandmark, VolumeRecommendation, VolumeStatus } from '../shared/types.js'
-import { labelFor } from './lib/muscleGroups.js'
+import { labelFor } from '../shared/muscleGroups.js'
 
 // Base landmarks (adult) — working sets per 7-day rolling window
 const BASE_LANDMARKS: Record<Exclude<MuscleKey, 'other'>, VolumeLandmark> = {

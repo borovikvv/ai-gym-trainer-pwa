@@ -7,8 +7,8 @@ import type {
   MuscleGroupStatus,
   WorkoutHistoryEntry,
 } from '../shared/types.js'
-import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from './lib/muscleGroups.js'
+import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
+import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from '../shared/muscleGroups.js'
 
 const TRAINER_PROFILE = 'Профиль тренера: персональный силовой тренер: безопасность, техника, постепенная прогрессия, восстановление и недельный баланс важнее случайного набора упражнений.'
 

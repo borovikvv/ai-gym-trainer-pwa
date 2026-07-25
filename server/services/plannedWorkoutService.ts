@@ -6,7 +6,7 @@ import { computeCoachMemory } from '../coachMemory.js'
 import { buildGeneratedPlannedWorkout } from '../plannedWorkoutGenerator.js'
 import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramExercise, type NormalizedProgramExercise } from '../utils.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
-import { formatWeight } from '../lib/format.js'
+import { formatWeight } from '../../shared/format.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 
 interface PlannedExerciseRow {
