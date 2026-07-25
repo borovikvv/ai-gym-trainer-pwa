@@ -1,25 +1,12 @@
-import { useNavigation, type Screen } from '../contexts'
+import type { Screen } from '../../shared/types'
 
 type BottomNavProps = {
-  screen?: Screen
-  onNavigate?: (screen: Screen) => void
+  screen: Screen
+  onNavigate: (screen: Screen) => void
   onStartWorkout: () => void
 }
 
-export function BottomNav({ screen: screenProp, onNavigate, onStartWorkout }: BottomNavProps) {
-  // Phase 3 issue #5: prefer context, fall back to props for backward compat
-  // (tests that render <BottomNav> directly without a provider still work).
-  let screen: Screen
-  let navigate: (s: Screen) => void
-  try {
-    const nav = useNavigation()
-    screen = screenProp ?? nav.screen
-    navigate = onNavigate ?? ((s: Screen) => nav.navigate(s))
-  } catch {
-    screen = screenProp ?? 'home'
-    navigate = onNavigate ?? (() => {})
-  }
-
+export function BottomNav({ screen, onNavigate: navigate, onStartWorkout }: BottomNavProps) {
   if (screen === 'session') return null
 
   return (

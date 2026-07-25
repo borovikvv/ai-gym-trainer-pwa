@@ -368,3 +368,10 @@ export type WorkoutDay = {
   description: string
   exercises: ExercisePlan[]
 }
+
+// ---------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------
+
+/** Top-level app screens (used by App, BottomNav, GymPage, CoachHomePage). */
+export type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library' | 'onboarding'

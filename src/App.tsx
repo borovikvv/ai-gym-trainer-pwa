@@ -5,11 +5,11 @@ import { CoachHomePage } from './pages/CoachHomePage'
 import { GymPage } from './pages/GymPage'
 import { PlanPage } from './pages/PlanPage'
 import { ProgressPage, ProfilePage, LibraryPage, OnboardingPage } from './pages/SimplePages'
-import { NavigationProvider, CoachProvider, ProgramProvider } from './contexts'
+import { ProgramProvider } from './contexts'
 import { AppShell } from './components/ui'
 import './App.css'
 import './warm-editorial-theme.css'
-import type { ExercisePlan, WorkoutDay } from '../shared/types'
+import type { ExercisePlan, WorkoutDay, Screen } from '../shared/types'
 import { fallbackProgramData, loadCoachMemoryAndState, type CoachMemory, type CoachState } from './data/programApi'
 import { loadHistory, useProgramData } from './hooks/useProgramData'
 import { loadActiveWorkoutDraft, useDraftAutosave } from './hooks/useDraftAutosave'
@@ -37,8 +37,6 @@ import {
   resolveReadinessMode,
   type ReadinessCheckIn,
 } from './domain/readinessCheckIn'
-
-type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library' | 'onboarding'
 
 const ONBOARDING_STORAGE_KEY = 'ai-gym-trainer:v0.1:onboarding-completed'
 
@@ -458,51 +456,46 @@ function App() {
 
 
   return (
-    <NavigationProvider screen={screen} navigate={navigate}>
-      <CoachProvider
-        coachMemory={coachMemory}
-        coachState={coachState}
-        setCoachMemory={setCoachMemory}
-        setCoachState={setCoachState}
-      >
-        <ProgramProvider value={{
-          users,
-          activeUser,
-          activeUserId,
-          workoutDays,
-          exerciseLibrary: programData.exerciseLibrary,
-          plannedWorkouts,
-          userHistory,
-          nextTargets,
-          coachTodaySummary,
-        }}>
-          <>
-            <AppShell mode={screen === 'session' ? 'gym' : 'default'}>
-              {toast && <div className="toast show">{toast}</div>}
+    <ProgramProvider value={{
+      users,
+      activeUser,
+      activeUserId,
+      workoutDays,
+      exerciseLibrary: programData.exerciseLibrary,
+      plannedWorkouts,
+      userHistory,
+      nextTargets,
+      coachTodaySummary,
+    }}>
+      <>
+        <AppShell mode={screen === 'session' ? 'gym' : 'default'}>
+          {toast && <div className="toast show">{toast}</div>}
 
-              {screen === 'home' && (
-                <CoachHomePage
-                  activeWorkoutDay={activeWorkoutDay}
-                  manualWorkoutDaySelected={manualWorkoutDaySelected}
-                  scheduledWorkoutDays={scheduledWorkoutDays}
-                  allUserWorkoutDays={allUserWorkoutDays}
-                  extraExercisesByDay={extraExercisesByDay}
-                  coachTodayWorkoutDay={coachTodayWorkoutDay}
-                  setCoachTodayWorkoutDay={setCoachTodayWorkoutDay}
-                  coachTodaySummary={coachTodaySummary}
-                  setCoachTodaySummary={setCoachTodaySummary}
-                  extraWorkoutDayIds={extraWorkoutDayIds}
-                  setExtraWorkoutDayIds={setExtraWorkoutDayIds}
-                  setActiveWorkoutDayId={setActiveWorkoutDayId}
-                  setActiveExerciseIndex={setActiveExerciseIndex}
-                  setLogs={setLogs}
-                  onSelectUser={selectUser}
-                  onNavigate={navigate}
-                  onStartWorkout={startWorkout}
-                  onSelectWorkoutDay={selectWorkoutDay}
-                  notify={notify}
-                />
-              )}
+          {screen === 'home' && (
+            <CoachHomePage
+              activeWorkoutDay={activeWorkoutDay}
+              manualWorkoutDaySelected={manualWorkoutDaySelected}
+              scheduledWorkoutDays={scheduledWorkoutDays}
+              allUserWorkoutDays={allUserWorkoutDays}
+              extraExercisesByDay={extraExercisesByDay}
+              coachMemory={coachMemory}
+              coachState={coachState}
+              coachTodayWorkoutDay={coachTodayWorkoutDay}
+              setCoachTodayWorkoutDay={setCoachTodayWorkoutDay}
+              coachTodaySummary={coachTodaySummary}
+              setCoachTodaySummary={setCoachTodaySummary}
+              extraWorkoutDayIds={extraWorkoutDayIds}
+              setExtraWorkoutDayIds={setExtraWorkoutDayIds}
+              setActiveWorkoutDayId={setActiveWorkoutDayId}
+              setActiveExerciseIndex={setActiveExerciseIndex}
+              setLogs={setLogs}
+              onSelectUser={selectUser}
+              onNavigate={navigate}
+              onStartWorkout={startWorkout}
+              onSelectWorkoutDay={selectWorkoutDay}
+              notify={notify}
+            />
+          )}
 
         {(screen === 'preview' || screen === 'session' || screen === 'review') && (
           <GymPage
@@ -622,10 +615,8 @@ function App() {
 
       {/* Issue #70: exercisePickerOpen, exerciseGuideOpen, sheetOpen modals
           moved to GymPage — they only appear during session/preview/review */}
-          </>
-        </ProgramProvider>
-      </CoachProvider>
-    </NavigationProvider>
+      </>
+    </ProgramProvider>
   )
 }
 
