@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 
 HERMES_ROOT = Path(os.environ.get("HERMES_AGENT_ROOT", "/usr/local/lib/hermes-agent"))
-OUT_DIR = Path("/root/ai-gym-trainer-pwa/public/exercise-guides")
+# Default to this repo's public/exercise-guides (two levels up from scripts/).
+# Override with EXERCISE_GUIDE_DIR for server runs.
+OUT_DIR = Path(os.environ.get("EXERCISE_GUIDE_DIR", Path(__file__).resolve().parent.parent / "public" / "exercise-guides"))
 MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2-medium")
 
 EXERCISES = [
