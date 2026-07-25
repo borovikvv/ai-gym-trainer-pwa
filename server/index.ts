@@ -29,13 +29,9 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '1mb' }))
 
-app.get('/health', async (_req, res, next) => {
-  try {
-    const result = await pool.query('select now() as now')
-    res.json({ ok: true, dbTime: result.rows[0].now })
-  } catch (error) {
-    next(error)
-  }
+app.get('/health', async (_req, res) => {
+  const result = await pool.query('select now() as now')
+  res.json({ ok: true, dbTime: result.rows[0].now })
 })
 
 app.use('/api', programRoutes)
