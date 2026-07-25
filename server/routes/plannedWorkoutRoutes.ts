@@ -146,14 +146,10 @@ plannedWorkoutRoutes.post('/planned-workouts/:id/generate', async (req, res, nex
   }
 })
 
-plannedWorkoutRoutes.delete('/planned-workouts/:id', async (req, res, next) => {
-  try {
-    const current = await pool.query('select user_id from public.planned_workouts where id = $1', [req.params.id])
-    if (current.rowCount === 0) return res.status(404).json({ error: 'planned workout not found' })
-    assertAllowedRowOwner(current.rows[0])
-    await pool.query('delete from public.planned_workouts where id = $1', [req.params.id])
-    res.json({ ok: true })
-  } catch (error) {
-    next(error)
-  }
+plannedWorkoutRoutes.delete('/planned-workouts/:id', async (req, res) => {
+  const current = await pool.query('select user_id from public.planned_workouts where id = $1', [req.params.id])
+  if (current.rowCount === 0) return res.status(404).json({ error: 'planned workout not found' })
+  assertAllowedRowOwner(current.rows[0])
+  await pool.query('delete from public.planned_workouts where id = $1', [req.params.id])
+  res.json({ ok: true })
 })

@@ -5,15 +5,11 @@ import { loadProgramData, updateProgramExercise } from '../services/programServi
 
 export const programRoutes = Router()
 
-programRoutes.get('/program-data', async (_req, res, next) => {
-  try {
-    res.json(await loadProgramData(pool))
-  } catch (error) {
-    next(error)
-  }
+programRoutes.get('/program-data', async (_req, res) => {
+  res.json(await loadProgramData(pool))
 })
 
-programRoutes.patch('/program-exercises/:id', async (req, res, next) => {
+programRoutes.patch('/program-exercises/:id', async (req, res) => {
   const { id } = req.params
   const body = req.body ?? {}
   const setsCount = Number(body.setsCount)
@@ -31,11 +27,7 @@ programRoutes.patch('/program-exercises/:id', async (req, res, next) => {
   if (!Number.isFinite(weightStep) || weightStep <= 0) return res.status(400).json({ error: 'weightStep must be > 0' })
   if (!Number.isFinite(restSeconds) || restSeconds < 0) return res.status(400).json({ error: 'restSeconds must be >= 0' })
 
-  try {
-    const updated = await updateProgramExercise(pool, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus })
-    if (!updated) return res.status(404).json({ error: 'program exercise not found' })
-    res.json({ ok: true, id: updated.id })
-  } catch (error) {
-    next(error)
-  }
+  const updated = await updateProgramExercise(pool, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus })
+  if (!updated) return res.status(404).json({ error: 'program exercise not found' })
+  res.json({ ok: true, id: updated.id })
 })
