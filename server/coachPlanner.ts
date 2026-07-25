@@ -159,13 +159,6 @@ interface BuildCoachPromptInput {
   } | null
 }
 
-interface ChooseLibraryReplacementParams {
-  exercise: ExerciseInput
-  library: NormalizedLibraryExercise[]
-  usedExerciseIds: Set<string>
-  coachState: CoachState | Partial<CoachState> | null
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -283,7 +276,12 @@ export function buildSafeCoachPlan({
           : `${qualityNote}${volumeNote}${exercise.name}: ${recoveryNote}.`,
     }
 
-    const replacement = chooseLibraryReplacementForFatigue({ exercise, library, usedExerciseIds, coachState })
+    const replacement = findReplacementForFatigue(
+      exercise as LibraryExercise,
+      library as unknown as LibraryExercise[],
+      usedExerciseIds,
+      coachState as Parameters<typeof findReplacementForFatigue>[3],
+    )
     if (!replacement) return baseChange
 
     usedExerciseIds.add(replacement.id)
@@ -406,22 +404,6 @@ export function buildCoachPrompt({
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-function chooseLibraryReplacementForFatigue({
-  exercise,
-  library,
-  usedExerciseIds,
-  coachState,
-}: ChooseLibraryReplacementParams): LibraryExercise | null {
-  // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
-  // movement_pattern, equipment, and exercise_type for smarter selection.
-  return findReplacementForFatigue(
-    exercise as LibraryExercise,
-    library as unknown as LibraryExercise[],
-    usedExerciseIds,
-    coachState as Parameters<typeof findReplacementForFatigue>[3],
-  )
-}
 
 function normalizeExerciseLibrary(exerciseLibrary: ExerciseInput[]): NormalizedLibraryExercise[] {
   return (exerciseLibrary ?? []).map((exercise) => ({

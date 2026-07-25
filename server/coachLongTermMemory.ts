@@ -100,26 +100,22 @@ export function formatLongTermMemoryForPrompt(facts: CoachMemoryFact[], goals: C
     lines.push('ПАМЯТЬ ТРЕНЕРА О ПОЛЬЗОВАТЕЛЕ:')
     for (const fact of activeFacts) {
       const line = `- [${KIND_LABELS[fact.kind]}] ${fact.content}`
-      if (joinedLength(lines) + line.length > PROMPT_BLOCK_CHAR_LIMIT) break
+      if (lines.join('\n').length + 1 + line.length > PROMPT_BLOCK_CHAR_LIMIT) break
       lines.push(line)
     }
   }
   const activeGoals = goals.filter((goal) => goal.status === 'active')
-  if (activeGoals.length && joinedLength(lines) < PROMPT_BLOCK_CHAR_LIMIT) {
+  if (activeGoals.length && lines.join('\n').length + 1 < PROMPT_BLOCK_CHAR_LIMIT) {
     lines.push('ЦЕЛИ ПОЛЬЗОВАТЕЛЯ:')
     for (const goal of activeGoals) {
       const deadline = goal.targetDate ? ` к ${goal.targetDate}` : ''
       const progress = goal.progressNote ? ` — ${goal.progressNote}` : ''
       const line = `- ${goal.title}${deadline}${progress}`
-      if (joinedLength(lines) + line.length > PROMPT_BLOCK_CHAR_LIMIT) break
+      if (lines.join('\n').length + 1 + line.length > PROMPT_BLOCK_CHAR_LIMIT) break
       lines.push(line)
     }
   }
   return lines.join('\n')
-}
-
-function joinedLength(lines: string[]): number {
-  return lines.reduce((sum, line) => sum + line.length + 1, 0)
 }
 
 /**
@@ -257,7 +253,7 @@ interface E1rmHistoryLike {
   trend: { direction: string; slopePerWeek: number; dataPointCount: number }
 }
 
-export interface GoalProgressEvaluation {
+interface GoalProgressEvaluation {
   progressNote: string
   achieved: boolean
 }
@@ -268,7 +264,7 @@ export interface GoalProgressEvaluation {
  * говорит, идём ли по графику. Считается правилами — надёжная арифметика,
  * LLM поверх этого только рассказывает.
  */
-export function evaluateGoalProgress(goal: CoachGoal, e1rmHistories: E1rmHistoryLike[], now: Date = new Date()): GoalProgressEvaluation | null {
+function evaluateGoalProgress(goal: CoachGoal, e1rmHistories: E1rmHistoryLike[], now: Date = new Date()): GoalProgressEvaluation | null {
   if (goal.status !== 'active') return null
   if (goal.metric !== 'e1rm' && goal.metric !== 'working_weight') return null
   if (!goal.exerciseId || !Number.isFinite(Number(goal.targetValue))) return null

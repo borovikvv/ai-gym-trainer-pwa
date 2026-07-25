@@ -108,7 +108,7 @@ export function buildWorkoutDebrief(entry: WorkoutEntry = {}): WorkoutDebrief {
 export async function saveWorkoutDebriefRecommendation(
   client: DbClient,
   entry: WorkoutEntry,
-  debrief: WorkoutDebrief = buildWorkoutDebrief(entry),
+  debrief: WorkoutDebrief,
 ): Promise<void> {
   await client.query(
     `insert into public.recommendations (user_id, session_id, recommendation_type, title, body, source)
@@ -117,7 +117,7 @@ export async function saveWorkoutDebriefRecommendation(
   )
 }
 
-export function formatDebrief(debrief: WorkoutDebrief): string {
+function formatDebrief(debrief: WorkoutDebrief): string {
   return [
     debrief.summary,
     '',
