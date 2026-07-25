@@ -102,9 +102,9 @@ export function summarizeExerciseHistory(history: WorkoutHistoryEntry[], exercis
       const isTimed = isTimedExercise({ id: exercise.exerciseId, name: exercise.exerciseName, muscleGroup: exercise.muscleGroup ?? '' })
       if (isTimed) return `${formatDate(workout.completedAt)} · ${bestSet.reps} сек · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
       if (bestSet.weight === 0) return `${formatDate(workout.completedAt)} · ${bestSet.reps} повт. · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
-      return `${formatDate(workout.completedAt)} · ${formatNumber(bestSet.weight)} кг · ${bestSet.reps} повт. · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
+      return `${formatDate(workout.completedAt)} · ${String(bestSet.weight)} кг · ${bestSet.reps} повт. · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
     })
-}
+  }
 
 function firstCompletedWeight(sets: WorkoutSetInput[]): number | undefined {
   return sets.find((set) => set.completed)?.weight
@@ -118,8 +118,4 @@ function bestSetByWeightThenReps(sets: WorkoutSetInput[]): WorkoutSetInput | und
 
 function formatDate(isoDate: string): string {
   return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(new Date(isoDate))
-}
-
-function formatNumber(value: number): string {
-  return String(value)
 }

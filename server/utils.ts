@@ -276,7 +276,7 @@ export function splitLines(value: string | null | undefined): string[] {
   return String(value ?? '').split('\n').map((line) => line.trim()).filter(Boolean)
 }
 
-export function toDateOnly(date: Date): string {
+function toDateOnly(date: Date): string {
   return [
     date.getFullYear(),
     String(date.getMonth() + 1).padStart(2, '0'),
