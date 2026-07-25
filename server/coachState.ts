@@ -8,8 +8,8 @@ import type {
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
-import { canonicalExerciseId } from './exerciseIdentity.js'
-import { normalizeMuscleGroup, isAssistedExerciseName } from './lib/muscleGroups.js'
+import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
+import { normalizeMuscleGroup, isAssistedExerciseName } from '../shared/muscleGroups.js'
 import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { computeAllAdjustments } from './adaptiveVolumeLandmarks.js'

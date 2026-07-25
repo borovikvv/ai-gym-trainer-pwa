@@ -1,86 +1,18 @@
 /**
  * Client-side muscle group helpers.
  *
- * Mirrors server/lib/muscleGroups.js patterns and API so that muscle-group
- * classification is identical on both sides. Order matters: more specific
- * groups must be checked before broader ones (see comments in MUSCLE_ALIASES).
+ * Issue #147: the implementation lives in shared/muscleGroups.ts so
+ * server and client share one source of truth. This module re-exports it
+ * for the existing `../lib/muscleGroups` import sites in src/.
  */
 
-const MUSCLE_ALIASES = [
-  {
-    key: 'shoulders',
-    match: ['плеч', 'дельт', 'shoulder', 'арнольд', 'lateral', 'overhead'],
-  },
-  {
-    key: 'legs',
-    match: ['ног', 'квадриц', 'бедр', 'ягод', 'икр', 'присед', 'выпад', 'leg', 'squat', 'lunge'],
-  },
-  {
-    key: 'chest',
-    match: ['груд', 'жим', 'bench', 'chest', 'fly', 'разведения'],
-  },
-  {
-    key: 'back',
-    match: ['спин', 'тяга', 'row', 'back', 'deadlift', 'становая'],
-  },
-  {
-    key: 'arms',
-    match: ['бицеп', 'трицеп', 'рук', 'curl', 'arm', 'bicep', 'tricep'],
-  },
-  {
-    key: 'core',
-    match: ['кор', 'пресс', 'планк', 'plank', 'core'],
-  },
-] as const
-
-export type MuscleKey = 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'other'
-
-/**
- * Detect "assisted" exercises where the weight counter-intuitively
- * DECREASES as the user gets stronger.
- *
- * Examples: Gravitron pull-ups (counterweight), assisted dips.
- * On these machines the "weight" is the assistance — less assistance =
- * more body weight lifted = harder. So progression means subtracting
- * weightStep, not adding it.
- *
- * Used by progression logic (src/domain/progression.ts) and by UI text
- * generators to avoid saying "повышать вес" for assisted exercises.
- */
-export function isAssistedExercise(name: string | null | undefined): boolean {
-  const normalized = String(name ?? '').toLowerCase()
-  return normalized.includes('гравитрон') || normalized.includes('assisted')
-}
-
-export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey {
-  const normalized = String(text ?? '').toLowerCase()
-  for (const alias of MUSCLE_ALIASES) {
-    if (alias.match.some((part) => normalized.includes(part))) {
-      return alias.key
-    }
-  }
-  return 'other'
-}
-
-export const MUSCLE_LABELS: Record<Exclude<MuscleKey, 'other'>, string> = {
-  chest: 'Грудь',
-  back: 'Спина',
-  legs: 'Ноги',
-  shoulders: 'Плечи',
-  arms: 'Руки',
-  core: 'Кор',
-}
-
-export function labelFor(muscleKey: string): string {
-  return (MUSCLE_LABELS as Record<string, string>)[muscleKey] ?? muscleKey
-}
-
-/**
- * Lowercase Russian label for use mid-sentence
- * (e.g. 'грудь ещё не восстановилась').
- */
-export function labelForLower(muscleKey: string): string {
-  return labelFor(muscleKey).toLowerCase()
-}
-
-export const CANONICAL_MUSCLE_KEYS = ['back', 'chest', 'legs', 'shoulders', 'arms', 'core'] as const
+export {
+  normalizeMuscleGroup,
+  isAssistedExercise,
+  isAssistedExerciseName,
+  MUSCLE_LABELS,
+  labelFor,
+  labelForLower,
+  CANONICAL_MUSCLE_KEYS,
+  type MuscleKey,
+} from '../../shared/muscleGroups'

@@ -1,22 +1,24 @@
 /**
- * Unified formatting utilities.
+ * Unified formatting utilities — single source of truth shared by the
+ * server (server/) and the client (src/). Previously duplicated in
+ * server/lib/format.js and src/lib/format.ts (issue #147).
  *
- * Previously duplicated in coachPlanner, coachToday, coachDebrief,
- * and client-side workoutDebrief.ts.
+ * Client-only helpers that touch the DOM locale (formatDateTime,
+ * formatDayMonth) stay in src/lib/format.ts.
  */
 
 /**
  * Format a weight number for Russian locale display.
- * Server-side version uses toLocaleString('ru-RU').
+ * Uses Russian decimal comma: 40.5 → '40,5'.
  */
-export function formatWeight(value) {
+export function formatWeight(value: number): string {
   return Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 1 })
 }
 
 /**
  * Round a weight value to one decimal place (no trailing zeros in display).
  */
-export function roundWeight(value) {
+export function roundWeight(value: number): number {
   return Number(Number(value).toFixed(1))
 }
 
@@ -26,7 +28,7 @@ export function roundWeight(value) {
  * pluralRu(3, 'упражнение', 'упражнения', 'упражнений') → 'упражнения'
  * pluralRu(10, 'упражнение', 'упражнения', 'упражнений') → 'упражнений'
  */
-export function pluralRu(count, one, few, many) {
+export function pluralRu(count: number, one: string, few: string, many: string): string {
   const mod10 = count % 10
   const mod100 = count % 100
   if (mod10 === 1 && mod100 !== 11) return one

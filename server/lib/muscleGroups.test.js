@@ -6,7 +6,7 @@ import {
   MUSCLE_LABELS,
   CANONICAL_MUSCLE_KEYS,
   isAssistedExerciseName,
-} from './muscleGroups.js'
+} from '../../shared/muscleGroups.js'
 
 // ---------------------------------------------------------------------------
 // normalizeMuscleGroup

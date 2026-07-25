@@ -17,9 +17,9 @@ import type {
 } from '../shared/types.js'
 import { buildCoachDecision } from './coachDecision.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
-import { canonicalExerciseId } from './exerciseIdentity.js'
-import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from './lib/muscleGroups.js'
-import { roundWeight } from './lib/format.js'
+import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
+import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { roundWeight } from '../shared/format.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
 import { russianWeekdayName } from './utils.js'
@@ -681,7 +681,7 @@ function chooseTargetPattern(
   scheduledDate = '',
   previousGeneratedWorkouts: PreviousGeneratedWorkout[] = [],
 ): string[] {
-  const all = CANONICAL_MUSCLE_KEYS
+  const all: readonly string[] = CANONICAL_MUSCLE_KEYS
   const avoid = new Set(coachDecision?.avoidMuscleGroups ?? [])
 
   // Issue #78: light day — if scheduledDate falls on a light day, avoid

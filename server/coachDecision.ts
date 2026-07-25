@@ -1,7 +1,7 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 // Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
 import type { CoachState, MesocycleState, MuscleGroupProfileExtended, ExerciseProfile } from '../shared/types.js'
-import { normalizeMuscleGroup, labelFor } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, labelFor } from '../shared/muscleGroups.js'
 import { isDeloadWeek } from './mesocycle.js'
 
 const DEFAULT_PRIORITY = ['back', 'chest', 'arms', 'shoulders', 'core', 'legs']

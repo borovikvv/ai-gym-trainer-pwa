@@ -15,7 +15,7 @@ import type { DbClient } from '../dbClient.js'
 import { loadCoachMemoryForUser } from './programService.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from '../userTrainingPolicies.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
-import { normalizeMuscleGroup } from '../lib/muscleGroups.js'
+import { normalizeMuscleGroup } from '../../shared/muscleGroups.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 import { isTimedExercise } from '../../src/domain/exerciseMetrics.js'
 

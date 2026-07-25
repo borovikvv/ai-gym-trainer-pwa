@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findReplacementForFatigue, findComplementaryExercises } from './exerciseMatcher.js'
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
 
 // ---------------------------------------------------------------------------
 // Test helpers

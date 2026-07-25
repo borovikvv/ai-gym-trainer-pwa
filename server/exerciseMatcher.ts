@@ -21,7 +21,7 @@
  *   - Not already used in this workout (+50, hard filter)
  */
 
-import { normalizeMuscleGroup } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
 
 /** Library exercise with normalized metadata fields used by the matcher. */
 interface LibraryExercise {

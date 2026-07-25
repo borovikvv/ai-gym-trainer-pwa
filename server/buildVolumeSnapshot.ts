@@ -23,7 +23,7 @@ import type {
   MuscleVolumeSnapshot,
   WorkoutHistoryEntry,
 } from '../shared/types.js'
-import { normalizeMuscleGroup, CANONICAL_MUSCLE_KEYS } from './lib/muscleGroups.js'
+import { normalizeMuscleGroup, CANONICAL_MUSCLE_KEYS } from '../shared/muscleGroups.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 
 const MS_PER_DAY = 86_400_000

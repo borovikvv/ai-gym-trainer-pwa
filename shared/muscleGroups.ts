@@ -1,9 +1,7 @@
 /**
- * Unified muscle-group normalizer.
- *
- * Superset of all patterns previously scattered across
- * coachDecision, coachPlanner, coachEngine, coachMemory,
- * coachState, coachToday, and plannedWorkoutGenerator.
+ * Unified muscle-group normalizer — single source of truth shared by the
+ * server (server/) and the client (src/). Previously duplicated in
+ * server/lib/muscleGroups.js and src/lib/muscleGroups.ts (issue #147).
  *
  * Returns a canonical key: shoulders | chest | back | legs | arms | core | other
  *
@@ -12,6 +10,10 @@
  * 'арнольд' (shoulders alias). We want it to land in 'shoulders', so
  * the shoulders group is checked first.
  */
+
+import type { MuscleKey } from './types.js'
+
+export type { MuscleKey }
 
 const MUSCLE_ALIASES = [
   {
@@ -51,29 +53,44 @@ const MUSCLE_ALIASES = [
     key: 'core',
     match: ['кор', 'пресс', 'планк', 'plank', 'core'],
   },
-]
-
-export function normalizeMuscleGroup(text) {
-  const normalized = String(text ?? '').toLowerCase()
-  for (const alias of MUSCLE_ALIASES) {
-    if (alias.match.some((part) => normalized.includes(part))) return alias.key
-  }
-  return 'other'
-}
+] as const
 
 /**
  * Detect "assisted" exercises where the weight counter-intuitively
- * DECREASES as the user gets stronger (gravitron, assisted dips, etc.).
+ * DECREASES as the user gets stronger.
+ *
+ * Examples: Gravitron pull-ups (counterweight), assisted dips.
  * On these machines the "weight" is the assistance — less assistance =
  * more body weight lifted = harder. So progression means subtracting
  * weightStep, not adding it.
+ *
+ * Used by progression logic and UI text generators to avoid saying
+ * "повышать вес" for assisted exercises.
  */
-export function isAssistedExerciseName(name) {
+export function isAssistedExercise(name: string | null | undefined): boolean {
   const normalized = String(name ?? '').toLowerCase()
   return normalized.includes('гравитрон') || normalized.includes('assisted')
 }
 
-export const MUSCLE_LABELS = {
+/**
+ * Alias for isAssistedExercise, kept for server-side callers that
+ * historically used the `...Name` suffix.
+ */
+export const isAssistedExerciseName = isAssistedExercise
+
+export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey {
+  const normalized = String(text ?? '').toLowerCase()
+  for (const alias of MUSCLE_ALIASES) {
+    if (alias.match.some((part) => normalized.includes(part))) {
+      return alias.key
+    }
+  }
+  return 'other'
+}
+
+// `other` is included so labelFor('other') resolves server-side (the client
+// relies on the Record<string,string> fallback in labelFor instead).
+export const MUSCLE_LABELS: Record<MuscleKey, string> = {
   chest: 'Грудь',
   back: 'Спина',
   legs: 'Ноги',
@@ -83,16 +100,16 @@ export const MUSCLE_LABELS = {
   other: 'Другое',
 }
 
-export function labelFor(muscleKey) {
-  return MUSCLE_LABELS[muscleKey] ?? muscleKey
+export function labelFor(muscleKey: string): string {
+  return (MUSCLE_LABELS as Record<string, string>)[muscleKey] ?? muscleKey
 }
 
 /**
- * Lowercase Russian label for use mid-sentence (e.g. 'грудь ещё не восстановилась').
- * Replaces the previously duplicated local 'muscleLabel' helper in coachPlanner.
+ * Lowercase Russian label for use mid-sentence
+ * (e.g. 'грудь ещё не восстановилась').
  */
-export function labelForLower(muscleKey) {
+export function labelForLower(muscleKey: string): string {
   return labelFor(muscleKey).toLowerCase()
 }
 
-export const CANONICAL_MUSCLE_KEYS = ['back', 'chest', 'legs', 'shoulders', 'arms', 'core']
+export const CANONICAL_MUSCLE_KEYS = ['back', 'chest', 'legs', 'shoulders', 'arms', 'core'] as const

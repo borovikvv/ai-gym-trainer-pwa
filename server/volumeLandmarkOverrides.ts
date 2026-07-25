@@ -16,7 +16,7 @@
  * any non-hold decisions.
  */
 
-import { CANONICAL_MUSCLE_KEYS } from './lib/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS } from '../shared/muscleGroups.js'
 
 /**
  * Load all volume landmark overrides for a user.
