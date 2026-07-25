@@ -84,14 +84,14 @@ export function adaptWorkoutDayForReadiness(day: WorkoutDay, mode: ReadinessMode
 
 function targetedReadinessState(exercise: ExercisePlan, checkIn?: ReadinessCheckIn) {
   if (!checkIn) return 'none'
-  const exerciseText = normalizeText(`${exercise.name} ${exercise.muscleGroup}`)
+  const exerciseText = `${exercise.name} ${exercise.muscleGroup}`.toLowerCase()
   if ((checkIn.painAreas ?? []).some((area) => matchesArea(exerciseText, area))) return 'pain'
   if ((checkIn.soreMuscleGroups ?? []).some((group) => matchesArea(exerciseText, group))) return 'sore'
   return 'none'
 }
 
 function matchesArea(exerciseText: string, area: string) {
-  const normalizedArea = normalizeText(area)
+  const normalizedArea = area.toLowerCase()
   if (normalizedArea.includes('груд')) return exerciseText.includes('груд') || exerciseText.includes('bench') || exerciseText.includes('жим')
   if (normalizedArea.includes('спин')) return exerciseText.includes('спин') || exerciseText.includes('тяга') || exerciseText.includes('row') || exerciseText.includes('pulldown')
   if (normalizedArea.includes('ног') || normalizedArea.includes('колен')) return exerciseText.includes('ног') || exerciseText.includes('бедр') || exerciseText.includes('ягод') || exerciseText.includes('присед') || exerciseText.includes('leg')
@@ -99,10 +99,6 @@ function matchesArea(exerciseText: string, area: string) {
   if (normalizedArea.includes('рук') || normalizedArea.includes('локт')) return exerciseText.includes('рук') || exerciseText.includes('бицеп') || exerciseText.includes('трицеп') || exerciseText.includes('curl')
   if (normalizedArea.includes('кор')) return exerciseText.includes('кор') || exerciseText.includes('пресс') || exerciseText.includes('планк') || exerciseText.includes('core')
   return false
-}
-
-function normalizeText(value: string) {
-  return value.toLowerCase()
 }
 
 export function estimateWorkoutMinutes(day: WorkoutDay) {

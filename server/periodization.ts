@@ -31,8 +31,6 @@
  * readiness, fatigue, and pain checks.
  */
 
-import type { MesocyclePhase } from '../shared/types.js'
-
 export interface PeriodizationAdjustment {
   weightDelta: number        // signed change to targetWeight (in kg)
   repMinDelta: number        // signed change to repMin
@@ -41,9 +39,6 @@ export interface PeriodizationAdjustment {
   intensityShift: 'none' | 'easier' | 'harder'
   focusNote: string          // Russian description of the phase focus
 }
-
-// Re-export for convenience (not used internally, but available to consumers)
-export type { MesocyclePhase }
 
 /**
  * Compute the periodization adjustment for the current mesocycle phase.

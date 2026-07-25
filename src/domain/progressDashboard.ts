@@ -184,17 +184,13 @@ function completedSetsSummary(exercise: CompletedExerciseHistory) {
   const isTimed = isTimedExercise({ id: exercise.exerciseId, name: exercise.exerciseName, muscleGroup: exercise.muscleGroup ?? '' })
   return completedSets.map((set) => {
     if (isTimed) return `${set.reps} сек`
-    if (set.weight > 0) return `${formatNumber(set.weight)}×${set.reps}`
+    if (set.weight > 0) return `${String(set.weight)}×${set.reps}`
     return `${set.reps}` // bodyweight rep-based (push-ups, etc.)
   }).join(' / ')
 }
 
 function weightLabel(weight: number) {
-  return weight > 0 ? `${formatNumber(weight)} кг` : 'вес тела'
-}
-
-function formatNumber(value: number) {
-  return Number.isInteger(value) ? String(value) : String(value)
+  return weight > 0 ? `${String(weight)} кг` : 'вес тела'
 }
 
 function formatShortDate(isoDate: string) {
