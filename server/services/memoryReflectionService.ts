@@ -24,7 +24,7 @@ interface DebriefLike {
   qualityScore?: number
 }
 
-export interface RunMemoryReflectionInput {
+interface RunMemoryReflectionInput {
   client: DbClient
   entry: Pick<WorkoutHistoryEntry, 'userId' | 'exercises' | 'totalVolume'> & {
     completedAt?: string

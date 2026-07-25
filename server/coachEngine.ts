@@ -65,15 +65,6 @@ interface SetRecommendation {
   }>
 }
 
-interface ChooseSuggestedExercisesParams {
-  currentExercise?: ExerciseInput
-  nextExercise?: ExerciseInput | null
-  workoutExercises?: ExerciseInput[]
-  exerciseLibrary?: unknown[]
-  preferDifferentMuscle?: boolean
-  limit?: number
-}
-
 interface LiveReadinessConstraintInput {
   exercise: ExerciseInput
   readinessCheckIn?: ReadinessCheckIn | null
@@ -162,13 +153,12 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
 
     const nextExerciseSameMuscle = nextExercise && normalizeMuscleGroup(`${nextExercise.muscleGroup ?? ''} ${nextExercise.name ?? ''}`) === normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`)
     if ((lastRpe >= 10 || maxEffortSets > 0) && nextExerciseSameMuscle) {
-      const suggestedExercises = chooseSuggestedExercises({
+      const suggestedExercises = findComplementaryExercises({
         currentExercise: exercise,
         nextExercise,
         workoutExercises: session.workoutExercises as ExerciseInput[] | undefined,
-        exerciseLibrary: session.exerciseLibrary,
-        preferDifferentMuscle: true,
-      })
+        library: session.exerciseLibrary as unknown as Parameters<typeof findComplementaryExercises>[0]['library'],
+      }) as unknown as ExerciseRef[]
       const suggestedExercise = suggestedExercises[0]
       if (suggestedExercise) {
         return {
@@ -184,12 +174,11 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
     }
 
     if (!nextExercise && lastRpe <= 6 && lastReps >= repMax && (session.workoutExercises?.length ?? 0) < 6) {
-      const suggestedExercises = chooseSuggestedExercises({
+      const suggestedExercises = findComplementaryExercises({
         currentExercise: exercise,
         workoutExercises: session.workoutExercises as ExerciseInput[] | undefined,
-        exerciseLibrary: session.exerciseLibrary,
-        preferDifferentMuscle: true,
-      })
+        library: session.exerciseLibrary as unknown as Parameters<typeof findComplementaryExercises>[0]['library'],
+      }) as unknown as ExerciseRef[]
       const suggestedExercise = suggestedExercises[0]
       if (suggestedExercise) {
         return {
@@ -302,27 +291,6 @@ function resolveStartingWeight(exercise: ExerciseInput): number {
   const lastKnown = safeNumber(exercise.lastKnownWeight, 0)
   if (lastKnown > 0) return lastKnown
   return 0
-}
-
-function chooseSuggestedExercises({
-  currentExercise = {},
-  nextExercise = null,
-  workoutExercises = [],
-  exerciseLibrary = [],
-  preferDifferentMuscle: _preferDifferentMuscle = false,
-  limit = 3,
-}: ChooseSuggestedExercisesParams): ExerciseRef[] {
-  // Phase 3 issue #13: delegate to exerciseMatcher which uses target_muscles,
-  // movement_pattern, equipment, and exercise_type for smarter suggestions.
-  // The preferDifferentMuscle flag is handled inside the matcher (different
-  // muscle group gets +30 score).
-  return findComplementaryExercises({
-    currentExercise,
-    nextExercise,
-    workoutExercises,
-    library: exerciseLibrary as unknown as Parameters<typeof findComplementaryExercises>[0]['library'],
-    limit,
-  }) as unknown as ExerciseRef[]
 }
 
 function isAccessoryExercise(exercise: ExerciseInput): boolean {

@@ -28,7 +28,7 @@ interface SessionContext {
   workoutExercises?: ExerciseRef[]
 }
 
-export interface RequestLlmLiveStrategyArgs {
+interface RequestLlmLiveStrategyArgs {
   userId: string
   exercise: ExerciseRef
   completedSets: SetInput[]

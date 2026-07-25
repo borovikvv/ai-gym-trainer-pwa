@@ -139,9 +139,7 @@ export function buildCoachDecision({
     ? 'upper_body_accessory'
     : lowReadiness
       ? 'recovery_accessory'
-      : mesocycleIsDeload
-        ? 'balanced_strength_hypertrophy'
-        : 'balanced_strength_hypertrophy'
+      : 'balanced_strength_hypertrophy'
 
   if (priorityMuscleGroups.length > 0) {
     const labels = priorityMuscleGroups.slice(0, 3).map(labelFor).join(', ')

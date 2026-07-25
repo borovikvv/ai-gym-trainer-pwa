@@ -266,12 +266,3 @@ export async function exportTrainingRecords(client: DbClient, userId: string): P
 
   return lines.join('\n')
 }
-
-/**
- * Check if a user has enough training records for fine-tuning.
- * OpenAI recommends at least 50 examples.
- */
-export async function isReadyForFineTuning(client: DbClient, userId: string, minRecords = 50): Promise<boolean> {
-  const count = await countTrainingRecords(client, userId)
-  return count >= minRecords
-}
