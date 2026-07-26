@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
-import { dropUnfinishedSets } from '../domain/liveCoachDecisionActions'
 import { applyLiveCoachSetUpdates } from '../domain/liveCoachSetUpdates'
 import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '../domain/workoutHistory'
 import type { PlannedWorkout } from '../data/programApi'
@@ -536,7 +535,7 @@ export function useWorkoutNavigation({
       ...logs,
       [currentExercise.id]: {
         ...(logs[currentExercise.id] ?? createExerciseLog(currentExercise)),
-        sets: dropUnfinishedSets((logs[currentExercise.id] ?? createExerciseLog(currentExercise)).sets),
+        sets: (logs[currentExercise.id] ?? createExerciseLog(currentExercise)).sets.filter((set) => set.completed),
       },
     }
     setLogs(nextLogs)
