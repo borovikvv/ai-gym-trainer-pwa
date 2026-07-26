@@ -3,9 +3,9 @@
 // Пользователь — хозяин памяти: может добавить факт («правое колено после
 // травмы 2020»), поправить формулировку LLM, заархивировать неактуальное
 // (в том числе травмы — их LLM архивировать не может), завести и вести цели.
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { pool } from '../db.js'
-import { assertAllowedUserId } from '../privateUsers.js'
+import { requireAllowedUserId } from '../privateUsers.js'
 import {
   applyMemoryUpdates,
   loadGoals,
@@ -17,18 +17,6 @@ import {
 import { invalidateLiveCoachCache } from '../services/liveCoachContext.js'
 
 export const memoryRoutes = Router()
-
-// try/catch kept: unit tests invoke this middleware directly (invokeMiddleware)
-// in bypass of the Express Layer, which is where Express 5 auto-catches sync
-// throws. See coachRoutes.test.js for the contract.
-function requireAllowedUserId(req: Request, _res: Response, next: NextFunction) {
-  try {
-    assertAllowedUserId(req.params?.userId ?? req.body?.userId)
-    next()
-  } catch (error) {
-    next(error)
-  }
-}
 
 const FACT_KINDS: MemoryFactKind[] = ['injury', 'load_response', 'preference', 'constraint', 'milestone']
 const GOAL_METRICS: GoalMetric[] = ['e1rm', 'working_weight', 'reps_at_weight', 'bodyweight', 'habit']
