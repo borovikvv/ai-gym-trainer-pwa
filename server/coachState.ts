@@ -13,6 +13,7 @@ import { normalizeMuscleGroup, isAssistedExerciseName } from '../shared/muscleGr
 import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { computeAllAdjustments } from './adaptiveVolumeLandmarks.js'
+import { completedSetsOf, daysBetween, clampNumber, roundNumber } from './lib/numeric.js'
 import { buildAllMuscleVolumeSnapshots } from './buildVolumeSnapshot.js'
 import { extractLastAdjustments, mergeLandmarkOverrides } from './volumeLandmarkOverrides.js'
 
@@ -405,10 +406,6 @@ function buildWarnings({ recoveryStatus, weeklyLoadStatus, painFlagsLast14Days, 
   return warnings
 }
 
-function completedSetsOf(exercise: WorkoutHistoryEntryInput['exercises'][number]): Array<{ weight?: number; reps?: number; rpe?: number; completed?: boolean }> {
-  return (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
-}
-
 function targetTextForStatus(status: string, exerciseName = ''): string {
   if (status === 'progress_possible') {
     // For assisted exercises (gravitron, assisted dips) progression means
@@ -422,20 +419,6 @@ function targetTextForStatus(status: string, exerciseName = ''): string {
   return 'держать качество и добрать план'
 }
 
-function daysBetween(from: Date, to: Date): number {
-  return Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
-}
-
 function wholeDaysBetween(from: Date, to: Date): number {
   return Math.floor(daysBetween(from, to))
-}
-
-function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const number = Number(value)
-  if (!Number.isFinite(number)) return fallback
-  return Math.max(min, Math.min(max, number))
-}
-
-function roundNumber(value: unknown): number {
-  return Number(Number(value).toFixed(1))
 }

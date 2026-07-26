@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router } from 'express'
 import { pool } from '../db.js'
 import { buildLiveStrategyDecision, requestLlmLiveStrategy } from '../coachBrain.js'
 import { buildNextSetDecision } from '../coachSetAdvisor.js'
@@ -11,27 +11,14 @@ import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
-import { assertAllowedUserId } from '../privateUsers.js'
+import { requireAllowedUserId } from '../privateUsers.js'
 import { loadGoals, loadLongTermMemoryBlock, loadMemoryFacts, refreshGoalProgress } from '../coachLongTermMemory.js'
 
 export const coachRoutes = Router()
 
-// Issue #97: middleware that checks userId against the private allowlist.
-// For GET endpoints with :userId param, checks req.params.userId.
-// For POST endpoints, checks req.body.userId.
-// Throws 400 if userId is missing, 403 if not in allowlist.
-// try/catch kept: unit tests invoke this middleware directly (invokeMiddleware)
-// in bypass of the Express Layer, which is where Express 5 auto-catches sync
-// throws. Removing it breaks coachRoutes.test.js error-path coverage.
-function requireAllowedUserId(req: Request, _res: Response, next: NextFunction) {
-  try {
-    const userId = req.params?.userId ?? req.body?.userId
-    assertAllowedUserId(userId)
-    next()
-  } catch (error) {
-    next(error)
-  }
-}
+// Issue #97: middleware requireAllowedUserId imported from privateUsers.js
+// (issue #150 — deduplicated). For GET :userId checks req.params.userId,
+// for POST checks req.body.userId.
 
 coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res) => {
   const body = req.body ?? {}

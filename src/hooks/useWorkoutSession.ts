@@ -3,15 +3,12 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { dropUnfinishedSets } from '../domain/liveCoachDecisionActions'
 import { applyLiveCoachSetUpdates } from '../domain/liveCoachSetUpdates'
-import type { WorkoutSetInput } from '../domain/progression'
 import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '../domain/workoutHistory'
 import type { PlannedWorkout } from '../data/programApi'
 import type { ActiveWorkoutDraft } from './useProgramData'
-import type { NextSetHint } from '../components/gymTypes'
+import type { NextSetHint, SetDraft } from '../components/gymTypes'
 import { formatWeight } from '../lib/format'
 import { requestNotificationPermissionOnce } from './useRestTimer'
-
-export type SetDraft = WorkoutSetInput & { weightInput?: string; repsInput?: string }
 
 export const createSets = (exercise: ExercisePlan, targetWeight = exercise.targetWeight): SetDraft[] =>
   Array.from({ length: exercise.setsCount }, (_, index) => ({

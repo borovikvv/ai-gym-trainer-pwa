@@ -9,6 +9,7 @@ import type {
 } from '../shared/types.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from '../shared/muscleGroups.js'
+import { completedSetsOf, daysBetween, clampNumber, roundNumber } from './lib/numeric.js'
 
 const TRAINER_PROFILE = 'Профиль тренера: персональный силовой тренер: безопасность, техника, постепенная прогрессия, восстановление и недельный баланс важнее случайного набора упражнений.'
 
@@ -363,10 +364,6 @@ function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): Norm
   })).filter((exercise) => exercise.id && exercise.name)
 }
 
-function completedSetsOf(exercise: WorkoutHistoryEntry['exercises'][number]): Array<{ weight?: number; reps?: number; rpe?: number; completed?: boolean }> {
-  return (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
-}
-
 function profileIsReturningAfterBreak(profile: ProfileForCoachMemory = {}): boolean {
   const level = String(profile.level ?? '').toLowerCase()
   return level.includes('перерыв') || level.includes('возвращ') || level.includes('return') || level.includes('beginner') || level.includes('нович')
@@ -379,22 +376,8 @@ function statusText(status: string): string {
   return 'готова'
 }
 
-function daysBetween(from: Date, to: Date): number {
-  return Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000)
-}
-
 function wholeDaysBetween(from: Date, to: Date): number {
   const fromDay = new Date(`${new Date(from).toISOString().slice(0, 10)}T00:00:00.000Z`)
   const toDay = new Date(`${new Date(to).toISOString().slice(0, 10)}T00:00:00.000Z`)
   return Math.floor(daysBetween(fromDay, toDay))
-}
-
-function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const number = Number(value)
-  if (!Number.isFinite(number)) return fallback
-  return Math.max(min, Math.min(max, number))
-}
-
-function roundNumber(value: unknown): number {
-  return Number(Number(value).toFixed(1))
 }

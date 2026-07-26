@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { WorkoutDay  } from '../../shared/types'
+import type { WorkoutDay, Screen } from '../../shared/types'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import {
   createWorkoutHistoryEntry,
@@ -15,8 +15,6 @@ import { saveWorkoutEntryToSupabase } from '../data/workoutRepository'
 import { createInitialLogs } from './useWorkoutSession'
 import { loadPlannedWorkoutsFromApi, type PlannedWorkout } from '../data/programApi'
 import { enqueueRequest } from '../lib/offlineQueue'
-
-type Screen = 'home' | 'preview' | 'session' | 'review' | 'progress' | 'plan' | 'profile' | 'library'
 
 type UseWorkoutSaveOptions = {
   activeUserId: string

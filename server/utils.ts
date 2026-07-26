@@ -12,7 +12,7 @@
 // The `DbRow` type alias documents the intent. Once the DB layer is typed
 // (issue #67), these can be tightened to specific row interfaces.
 
-type DbRow = Record<string, unknown>
+import type { DbRow } from './dbClient.js'
 
 // ---------------------------------------------------------------------------
 // Normalized output shapes (camelCase — frontend-facing)
