@@ -3,8 +3,6 @@ import type { ReadinessCheckIn } from './readinessCheckIn'
 import { calculateProgression, type WorkoutSetInput } from './progression'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildWorkoutDebrief } from './workoutDebrief'
-// Issue #109: use isTimedExercise to distinguish timed (plank) from bodyweight (push-up)
-import { isTimedExercise } from './exerciseMetrics'
 
 // Issue #98 PR3: CompletedExerciseHistory and WorkoutHistoryEntry unified
 // in shared/types.ts. Re-export for backward compatibility.
@@ -88,34 +86,6 @@ export function buildNextTargets(history: WorkoutHistoryEntry[]): Record<string,
     }, {})
 }
 
-export function summarizeExerciseHistory(history: WorkoutHistoryEntry[], exerciseId: string): string[] {
-  const canonicalExerciseId = getCanonicalExerciseId(exerciseId)
-  return [...history]
-    .sort((a, b) => b.completedAt.localeCompare(a.completedAt))
-    .flatMap((workout) => {
-      const exercise = workout.exercises.find((item) => getCanonicalExerciseId(item) === canonicalExerciseId)
-      if (!exercise) return []
-      const bestSet = bestSetByWeightThenReps(exercise.sets)
-      if (!bestSet) return []
-      // Issue #109: check isTimedExercise instead of weight === 0.
-      // Bodyweight exercises (push-ups) have weight=0 but are rep-based.
-      const isTimed = isTimedExercise({ id: exercise.exerciseId, name: exercise.exerciseName, muscleGroup: exercise.muscleGroup ?? '' })
-      if (isTimed) return `${formatDate(workout.completedAt)} · ${bestSet.reps} сек · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
-      if (bestSet.weight === 0) return `${formatDate(workout.completedAt)} · ${bestSet.reps} повт. · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
-      return `${formatDate(workout.completedAt)} · ${String(bestSet.weight)} кг · ${bestSet.reps} повт. · объём ${Math.round(exercise.volume).toLocaleString('ru-RU')} кг`
-    })
-  }
-
 function firstCompletedWeight(sets: WorkoutSetInput[]): number | undefined {
   return sets.find((set) => set.completed)?.weight
-}
-
-function bestSetByWeightThenReps(sets: WorkoutSetInput[]): WorkoutSetInput | undefined {
-  return sets
-    .filter((set) => set.completed)
-    .sort((a, b) => (b.weight === a.weight ? b.reps - a.reps : b.weight - a.weight))[0]
-}
-
-function formatDate(isoDate: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(new Date(isoDate))
 }

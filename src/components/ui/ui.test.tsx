@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { ActionMenu, HeroStatus, InfoHint, MetricPair, Pill, SegmentedControl, Stepper, WorkoutRow } from './index'
+import { ActionMenu, HeroStatus, InfoHint, MetricPair, SegmentedControl, Stepper, WorkoutRow } from './index'
 
 describe('ui primitives', () => {
   it('renders hero status with one primary action', () => {
@@ -178,28 +178,6 @@ describe('ui primitives', () => {
       )
       await user.click(screen.getByRole('radio', { name: 'A' }))
       expect(onChange).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('Pill', () => {
-    it('renders a neutral span by default', () => {
-      render(<Pill>5 упр · ~52 мин</Pill>)
-      const pill = screen.getByText('5 упр · ~52 мин')
-      expect(pill.className).toContain('pill--neutral')
-    })
-
-    it('renders tone variants', () => {
-      const { rerender } = render(<Pill tone="accent">запас</Pill>)
-      expect(screen.getByText('запас').className).toContain('pill--accent')
-      rerender(<Pill tone="on-hero">5 упр · ~52 мин</Pill>)
-      expect(screen.getByText('5 упр · ~52 мин').className).toContain('pill--on-hero')
-    })
-
-    it('renders as a button when as="button"', () => {
-      const onClick = vi.fn()
-      render(<Pill as="button" onClick={onClick}>+ Поставить</Pill>)
-      const button = screen.getByRole('button', { name: '+ Поставить' })
-      expect(button.className).toContain('pill--button')
     })
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNextTargets, createWorkoutHistoryEntry, summarizeExerciseHistory } from './workoutHistory'
+import { buildNextTargets, createWorkoutHistoryEntry } from './workoutHistory'
 import type { ExercisePlan  } from '../../shared/types'
 
 const bench: ExercisePlan = {
@@ -78,44 +78,6 @@ describe('workout history', () => {
     expect(entry.totalVolume).toBe(1800)
   })
 
-  it('summarizes exercise history from newest to oldest', () => {
-    const history = [
-      createWorkoutHistoryEntry({
-        userId: 'vyacheslav',
-        workoutDayId: 'day-a',
-        workoutDayName: 'День A',
-        exercises: [bench],
-        logs: {
-          'bench-press': {
-            exerciseId: 'bench-press',
-            pain: false,
-            sets: [{ weight: 60, reps: 9, rpe: 8, completed: true }],
-          },
-        },
-        completedAt: '2026-06-01T15:00:00.000Z',
-      }),
-      createWorkoutHistoryEntry({
-        userId: 'vyacheslav',
-        workoutDayId: 'day-a',
-        workoutDayName: 'День A',
-        exercises: [bench],
-        logs: {
-          'bench-press': {
-            exerciseId: 'bench-press',
-            pain: false,
-            sets: [{ weight: 62.5, reps: 8, rpe: 8, completed: true }],
-          },
-        },
-        completedAt: '2026-06-03T15:00:00.000Z',
-      }),
-    ]
-
-    expect(summarizeExerciseHistory(history, 'bench-press')).toEqual([
-      '03.06 · 62.5 кг · 8 повт. · объём 500 кг',
-      '01.06 · 60 кг · 9 повт. · объём 540 кг',
-    ])
-  })
-
   it('builds next target weights from the most recent completed workout', () => {
     const history = [
       createWorkoutHistoryEntry({
@@ -160,8 +122,5 @@ describe('workout history', () => {
     ]
 
     expect(buildNextTargets(history).plank).toBe(0)
-    expect(summarizeExerciseHistory(history, 'plank')).toEqual([
-      '03.06 · 60 сек · объём 0 кг',
-    ])
   })
 })
