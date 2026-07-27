@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Добавить кнопку «Удалить подход» в карточку `CurrentStepCard` (рядом с «Добавить подход») и пробросить пропсы через `GymScreen` и `GymPage`.
+**Goal:** Добавить кнопку «Удалить подход N» в карточку `CurrentStepCard` (под «Добавить подход») и пробросить пропсы через `GymScreen` и `GymPage`.
 
-**Architecture:** Только UI-wiring — бэкенд-логика `removeSet` уже реализована в `useWorkoutSetActions`. Меняются 4 файла: `CurrentStepCard.tsx` (кнопка), `GymScreen.tsx` (пропс), `GymPage.tsx` (проброс), `warm-editorial-theme.css` (стиль).
+**Architecture:** UI-wiring + маленький фикс гарда в хуке. Меняются 4 файла: `useWorkoutSession.ts` (гард), `CurrentStepCard.tsx` (кнопка), `GymScreen.tsx` + `GymPage.tsx` (проброс), `warm-editorial-theme.css` (селектор к существующему классу).
 
 **Tech Stack:** React + TypeScript, Vitest + Testing Library, CSS
 
@@ -13,43 +13,102 @@
 - Тесты НЕ зависят от текста UI (использовать `data-testid`, `aria-label`, роль элемента)
 - Компоненты: функциональные, типизированные
 - Стили: CSS-классы, без CSS-in-JS
-- Кнопка: `color: var(--danger)`, opacity 0.7, без фона, без бордера
 - Кнопка видна только когда подходов > 1
 - Иконка: `Trash2` из `lucide-react`
+- **Один коммит на всю фичу** — `GymScreen` без `GymPage` не проходит `tsc`, а кнопка без CSS выглядит сломанной
+
+## Решения по итогам ревью (2026-07-27)
+
+| Что | Почему |
+|---|---|
+| Подпись `Удалить подход {setNumber}`, а не «Удалить подход» | `activeSetIndex = findIndex(!completed)` (`useActiveWorkoutContext.ts:109`) — это **первый невыполненный**, а не последний добавленный. Кнопка под «Добавить подход» без номера читается как undo добавления и молча снесёт подход с уже введённым весом. Номер совпадает с eyebrow «Подход N из M» — двусмысленности нет, кода столько же. |
+| Индекс остаётся `activeSetIndex` (не последний подход) | Удаление последнего было бы честным undo, но при `editCompletedSet` последний подход может быть выполненным — снесёт данные. Текущий подход всегда невыполненный. |
+| Гард `sets.length <= 1` выносится из updater'а | Сейчас гард внутри `setLogs`, а `notify('Подход удалён')` снаружи → тост врёт при заблокированном удалении. Скрытие кнопки лечит симптом в UI; чинить надо в хуке, там же где все вызовы. |
+| Отдельного `.gym-remove-set-btn` блока нет | `.gym-remove-exercise-btn` (`warm-editorial-theme.css:1555`) — байт в байт то же самое. `flex`/`gap` не нужны: соседняя кнопка (`GymScreen.tsx:238`) рендерит `<Trash2/> текст` без них. |
+| Без `aria-label` | Дублировал бы видимый текст. У соседней кнопки его нет, и тест (`GymScreen.test.tsx:224`) находит её по имени из текста. |
+| Теста проброса в `GymScreen` нет | Это ловит `tsc` (Task 3, Step 1). 50 строк пропсов ради проверки типа — не окупается. |
+| Теста на гард в хуке нет | Для `useWorkoutSession` нет тестового харнесса; поднимать `renderHook` ради двух строк дороже фикса. Поведение косвенно закрыто тестом «кнопка не показывается при ≤ 1». |
 
 ---
+
+### Task 1: `useWorkoutSession` — вынести гард из updater'а
+
+**Files:**
+- Modify: `src/hooks/useWorkoutSession.ts:170-180`
+
+**Interfaces:**
+- Consumes: `logs`, `activeExercise`, `createExerciseLog` (уже в скоупе хука)
+- Produces: `removeSet` больше не показывает тост при заблокированном удалении
+
+- [ ] **Step 1: Переписать `removeSet`**
+
+Было:
+```ts
+function removeSet(setIndex: number) {
+  setLogs((current) => {
+    const existing = current[activeExercise.id] ?? createExerciseLog(activeExercise)
+    if (existing.sets.length <= 1) return current
+    const sets = existing.sets.filter((_, index) => index !== setIndex)
+    const nextLogs = { ...current, [activeExercise.id]: { ...existing, sets } }
+    persistWorkoutDraft(nextLogs)
+    return nextLogs
+  })
+  notify('Подход удалён')
+}
 ```
 
-### Task 1: CurrentStepCard — добавить проп `removeSet` и кнопку
+Стало (паттерн как в `markSetDone`, строка 184 — читает `logs` до `setLogs`):
+```ts
+function removeSet(setIndex: number) {
+  const existing = logs[activeExercise.id] ?? createExerciseLog(activeExercise)
+  if (existing.sets.length <= 1) return
+  setLogs((current) => {
+    const nextLogs = {
+      ...current,
+      [activeExercise.id]: { ...existing, sets: existing.sets.filter((_, index) => index !== setIndex) },
+    }
+    persistWorkoutDraft(nextLogs)
+    return nextLogs
+  })
+  notify('Подход удалён')
+}
+```
+
+- [ ] **Step 2: Типы зелёные**
+
+```bash
+npx tsc -b --noEmit
+```
+
+### Task 2: `CurrentStepCard` — проп `removeSet`, кнопка и стиль
 
 **Files:**
 - Modify: `src/components/CurrentStepCard.tsx:1-226`
 - Modify: `src/components/CurrentStepCard.test.tsx:1-178`
+- Modify: `src/warm-editorial-theme.css:1555-1565`
 
 **Interfaces:**
 - Consumes: nothing new
 - Produces: `removeSet: (setIndex: number) => void` prop on CurrentStepCard
 
-- [ ] **Step 1: Добавить тест на кнопку «Удалить подход»**
+- [ ] **Step 1: Добавить тесты**
 
-В конец `describe('CurrentStepCard', () => {` перед закрывающей `});` добавить:
+В конец `describe('CurrentStepCard', ...)` (`baseProps` даёт 3 подхода и `activeSetIndex: 1`):
 
 ```typescript
-  it('кнопка «Удалить подход» вызывает removeSet с индексом текущего подхода', async () => {
+  it('кнопка удаления подхода вызывает removeSet с индексом текущего подхода', async () => {
     const user = userEvent.setup()
     const removeSet = vi.fn()
     render(<CurrentStepCard {...baseProps({ removeSet })} />)
-    const removeBtn = screen.getByRole('button', { name: 'Удалить подход' })
-    await user.click(removeBtn)
+    await user.click(screen.getByRole('button', { name: /удалить подход/i }))
     expect(removeSet).toHaveBeenCalledWith(1) // activeSetIndex = 1
   })
 
-  it('кнопка «Удалить подход» не показывается, когда подходов ≤ 1', () => {
-    const removeSet = vi.fn()
+  it('кнопка удаления подхода не показывается, когда подход один', () => {
     render(
       <CurrentStepCard
         {...baseProps({
-          removeSet,
+          removeSet: vi.fn(),
           activeLog: {
             exerciseId: 'bench-press',
             pain: false,
@@ -59,240 +118,55 @@
         })}
       />,
     )
-    expect(screen.queryByRole('button', { name: 'Удалить подход' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /удалить подход/i })).not.toBeInTheDocument()
   })
 ```
+
+Также добавить `removeSet: vi.fn(),` в `baseProps` (строка 35-53), чтобы остальные тесты не падали на отсутствующем пропе.
 
 - [ ] **Step 2: Запустить тесты — должны упасть**
 
 ```bash
 npx vitest run src/components/CurrentStepCard.test.tsx
 ```
-Ожидаемый результат: 2 новых теста FAIL — prop `removeSet` ещё не передан, кнопка не рендерится.
+Ожидаемый результат: 2 новых теста FAIL — кнопка не рендерится.
 
-- [ ] **Step 3: Добавить `removeSet` в пропсы CurrentStepCard и импортировать Trash2**
+- [ ] **Step 3: Кнопка в `CurrentStepCard.tsx`**
 
-В `src/components/CurrentStepCard.tsx`:
-
-1. Добавить в импорт `Trash2` (строка 9):
+1. Импорт после строки 10 (`import { useEffect, useState } from 'react'`):
 ```typescript
-import { useEffect, useState } from 'react'
-// добавить после 9 строки:
 import { Trash2 } from 'lucide-react'
 ```
 
-2. В `type CurrentStepCardProps` добавить после строки 31 (`skipRest: () => void`):
+2. В `type CurrentStepCardProps` после `skipRest: () => void` (строка 31):
 ```typescript
   removeSet: (setIndex: number) => void
 ```
 
-3. В деструктуризацию пропсов `CurrentStepCard` (строка 34-48) добавить после `skipRest,`:
+3. В деструктуризацию пропсов после `skipRest,` (строка 48):
 ```typescript
   removeSet,
 ```
 
-4. После кнопки «Добавить подход» (строки 215-221) добавить кнопку «Удалить подход»:
+4. После кнопки «Добавить подход» (строки 215-221), перед закрывающим `</div>`:
 ```tsx
       {activeLog.sets.length > 1 && (
         <button
           className="gym-remove-set-btn"
           type="button"
           onClick={() => removeSet(activeSetIndex)}
-          aria-label="Удалить подход"
         >
-          <Trash2 size={14} aria-hidden="true" /> Удалить подход
+          <Trash2 size={14} aria-hidden="true" /> Удалить подход {setNumber}
         </button>
       )}
 ```
 
-- [ ] **Step 4: Запустить тесты — должны пройти**
+- [ ] **Step 4: CSS — добавить селектор к существующему классу**
 
-```bash
-npx vitest run src/components/CurrentStepCard.test.tsx
-```
-Ожидаемый результат: все тесты PASS.
-
-- [ ] **Step 5: Коммит**
-
-```bash
-git add src/components/CurrentStepCard.tsx src/components/CurrentStepCard.test.tsx
-git commit -m "feat(CurrentStepCard): добавить кнопку удаления подхода"
-```
-
-### Task 2: GymScreen — добавить проп `removeSet` и пробросить в CurrentStepCard
-
-**Files:**
-- Modify: `src/components/GymScreen.tsx:1-297`
-- Modify: `src/components/GymScreen.test.tsx:1-229`
-
-**Interfaces:**
-- Consumes: nothing new
-- Produces: `removeSet: (setIndex: number) => void` prop on GymScreen, passed to CurrentStepCard
-
-- [ ] **Step 1: Добавить тест проброса в GymScreen**
-
-В конец `describe('GymScreen', () => {` перед закрывающей `});` добавить:
-
-```typescript
-  it('пробрасывает removeSet в CurrentStepCard', async () => {
-    const user = userEvent.setup()
-    const removeSet = vi.fn()
-    const bench = makeExercise({ id: 'bench-press', name: 'Жим лёжа' })
-    const workoutDay: WorkoutDay = {
-      id: 'day-a',
-      name: 'День A',
-      label: 'A',
-      description: '',
-      exercises: [bench],
-    }
-
-    render(
-      <GymScreen
-        activeWorkoutDay={workoutDay}
-        activeExercise={bench}
-        activeExerciseIndex={0}
-        activeLog={{ exerciseId: bench.id, pain: false, sets: [
-          { weight: 54.5, reps: 8, rpe: 7, completed: true },
-          { weight: 54.5, reps: 0, rpe: 7, completed: false },
-        ]}}
-        activeSetIndex={1}
-        previousSetsSummary="49.5×12"
-        visibleNextSetRecommendation={null}
-        allSetsCompleted={false}
-        restRemainingSeconds={0}
-        draftStatus=""
-        exerciseAddSuggestion={null}
-        formatWeight={String}
-        navigate={vi.fn()}
-        openExerciseGuide={vi.fn()}
-        openReplacementSheet={vi.fn()}
-        openExercisePicker={vi.fn()}
-        clearRestTimer={vi.fn()}
-        extendRest={vi.fn()}
-        editCompletedSet={vi.fn()}
-        updateSetWeight={vi.fn()}
-        updateSetReps={vi.fn()}
-        markSetDone={vi.fn()}
-        addSet={vi.fn()}
-        removeSet={removeSet}
-        removeCurrentExercise={vi.fn()}
-        addSuggestedExercise={vi.fn()}
-        applyCoachExerciseSuggestion={vi.fn()}
-        acceptCoachDecision={vi.fn()}
-        goToNextExercise={vi.fn()}
-      />,
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Удалить подход' }))
-    expect(removeSet).toHaveBeenCalledWith(1)
-  })
-```
-
-- [ ] **Step 2: Запустить тест — должен упасть**
-
-```bash
-npx vitest run src/components/GymScreen.test.tsx
-```
-Ожидаемый результат: новый тест FAIL — prop `removeSet` не объявлен.
-
-- [ ] **Step 3: Добавить `removeSet` в GymScreen**
-
-В `src/components/GymScreen.tsx`:
-
-1. В `type GymScreenProps` после строки 39 (`removeCurrentExercise: () => void`):
-```typescript
-  removeSet: (setIndex: number) => void
-```
-
-2. В деструктуризацию пропсов компонента (строка 47-75) добавить после `removeCurrentExercise,`:
-```typescript
-  removeSet,
-```
-
-3. В `<CurrentStepCard ...` (строка 169-184) добавить проп:
-```tsx
-        removeSet={removeSet}
-```
-
-После строки 183 (`skipRest={clearRestTimer}`) перед `/>` закрытием тега:
-```tsx
-        removeSet={removeSet}
-```
-
-- [ ] **Step 4: Запустить тесты — должны пройти**
-
-```bash
-npx vitest run src/components/GymScreen.test.tsx
-```
-Ожидаемый результат: все тесты PASS.
-
-- [ ] **Step 5: Коммит**
-
-```bash
-git add src/components/GymScreen.tsx src/components/GymScreen.test.tsx
-git commit -m "feat(GymScreen): пробросить removeSet в CurrentStepCard"
-```
-
-### Task 3: GymPage — пробросить `onRemoveSet` в GymScreen
-
-**Files:**
-- Modify: `src/pages/GymPage.tsx:130-171`
-
-**Interfaces:**
-- Consumes: `onRemoveSet: (setIndex: number) => void` (уже есть в GymPageProps, строка 61)
-- Produces: passed as `removeSet` prop to GymScreen
-
-- [ ] **Step 1: Проверить типы — должен быть type-error**
-
-```bash
-npx tsc -b --noEmit 2>&1 | head -20
-```
-Ожидаемый результат: type error в GymPage.tsx — GymScreen ожидает `removeSet`, но он не передан.
-
-- [ ] **Step 2: Пробросить проп**
-
-В `src/pages/GymPage.tsx`, в JSX `<GymScreen ...>` (строки 131-170), после строки 156 (`removeCurrentExercise={props.onRemoveCurrentExercise}`) добавить:
-
-```tsx
-          removeSet={props.onRemoveSet}
-```
-
-- [ ] **Step 3: Проверить типы — ошибок нет**
-
-```bash
-npx tsc -b --noEmit
-```
-Ожидаемый результат: exit 0, no errors.
-
-- [ ] **Step 4: Запустить все тесты**
-
-```bash
-npm test
-```
-Ожидаемый результат: все тесты PASS (658/658 или около того, +2 новых теста).
-
-- [ ] **Step 5: Коммит**
-
-```bash
-git add src/pages/GymPage.tsx
-git commit -m "feat(GymPage): пробросить onRemoveSet в GymScreen"
-```
-
-### Task 4: CSS — стиль кнопки `.gym-remove-set-btn`
-
-**Files:**
-- Modify: `src/warm-editorial-theme.css` (добавить после `.gym-remove-exercise-btn:hover`)
-
-**Interfaces:**
-- Consumes: nothing
-- Produces: `.gym-remove-set-btn` CSS class
-
-- [ ] **Step 1: Добавить CSS-класс**
-
-В `src/warm-editorial-theme.css` после строки с `.gym-remove-exercise-btn:hover { opacity: 1; }` добавить:
+В `src/warm-editorial-theme.css` (строки 1555 и 1565) — **не** заводить новый блок, а расширить существующий:
 
 ```css
-/* --- Кнопка удаления подхода (в CurrentStepCard) --- */
+.gym-remove-exercise-btn,
 .gym-remove-set-btn {
   width: 100%;
   padding: 10px;
@@ -302,24 +176,106 @@ git commit -m "feat(GymPage): пробросить onRemoveSet в GymScreen"
   font-size: 13px;
   cursor: pointer;
   opacity: 0.7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
 }
+.gym-remove-exercise-btn:hover,
 .gym-remove-set-btn:hover { opacity: 1; }
 ```
 
-- [ ] **Step 2: Визуальная проверка (ручная)**
+- [ ] **Step 5: Запустить тесты — должны пройти**
+
+```bash
+npx vitest run src/components/CurrentStepCard.test.tsx
+```
+
+### Task 3: Проброс `GymScreen` → `GymPage`
+
+**Files:**
+- Modify: `src/components/GymScreen.tsx:1-297`
+- Modify: `src/pages/GymPage.tsx:130-171`
+
+**Interfaces:**
+- Consumes: `onRemoveSet: (setIndex: number) => void` — уже есть в `GymPageProps` (строка 61), уже прокинут из `App.tsx:533`
+- Produces: `removeSet` prop on GymScreen → CurrentStepCard
+
+Оба файла в одном шаге: `GymScreen` с новым обязательным пропом ломает `tsc`, пока `GymPage` его не передаёт.
+
+- [ ] **Step 1: Проверить типы — должен быть type-error**
+
+```bash
+npx tsc -b --noEmit 2>&1 | head -20
+```
+Ожидаемый результат: error в `GymScreen.tsx` — `CurrentStepCard` требует `removeSet`.
+
+- [ ] **Step 2: `GymScreen.tsx`**
+
+1. В `type GymScreenProps` после `removeCurrentExercise: () => void` (строка 39):
+```typescript
+  removeSet: (setIndex: number) => void
+```
+
+2. В деструктуризацию пропсов после `removeCurrentExercise,`:
+```typescript
+  removeSet,
+```
+
+3. В `<CurrentStepCard ...>` (строки 169-184), после `skipRest={clearRestTimer}`:
+```tsx
+        removeSet={removeSet}
+```
+
+- [ ] **Step 3: `GymPage.tsx`**
+
+В JSX `<GymScreen ...>` после `removeCurrentExercise={props.onRemoveCurrentExercise}` (строка 156):
+```tsx
+          removeSet={props.onRemoveSet}
+```
+
+- [ ] **Step 4: Обновить тесты GymScreen — добавить `removeSet={vi.fn()}`**
+
+В `src/components/GymScreen.test.tsx` три места:
+
+1. `renderGym` — после `removeCurrentExercise={vi.fn()}` (строка ~80):
+```typescript
+        removeSet={vi.fn()}
+```
+
+2. Первый полный список пропсов (строка ~165):
+```typescript
+        removeSet={vi.fn()}
+```
+
+3. Второй полный список пропсов (строка ~217):
+```typescript
+        removeSet={vi.fn()}
+```
+
+- [ ] **Step 5: Проверить типы**
+
+```bash
+npx tsc -b --noEmit
+```
+Ожидаемый результат: exit 0.
+
+- [ ] **Step 6: Все тесты**
+
+```bash
+npm test
+```
+Ожидаемый результат: все тесты PASS (+2 новых).
+
+- [ ] **Step 7: Визуальная проверка (ручная)**
 
 ```bash
 npm run dev
 ```
-Открыть приложение, начать тренировку — кнопка «Удалить подход» должна быть видна под «Добавить подход», красного цвета (danger), иконка корзины слева. При наведении — opacity становится 1.
+Начать тренировку → под «Добавить подход» видна красная кнопка с корзиной «Удалить подход N», где N — номер текущего подхода. При наведении opacity → 1. Удаление уменьшает число чипсов в ряду «Подходы».
 
-- [ ] **Step 3: Коммит**
+- [ ] **Step 8: Коммит**
 
 ```bash
-git add src/warm-editorial-theme.css
-git commit -m "style: кнопка удаления подхода (danger, transparent)"
+git add src/hooks/useWorkoutSession.ts src/components/CurrentStepCard.tsx src/components/CurrentStepCard.test.tsx src/components/GymScreen.tsx src/components/GymScreen.test.tsx src/pages/GymPage.tsx src/warm-editorial-theme.css
+```
+
+```bash
+git commit -m "feat(gym): кнопка удаления подхода во время тренировки"
 ```
