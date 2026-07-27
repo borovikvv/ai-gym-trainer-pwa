@@ -8,6 +8,7 @@
 //
 // Rest mode is unchanged (hero-bg timer card from #122).
 import { useEffect, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import type { ExercisePlan } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
 import type { WorkoutSetInput } from '../domain/progression'
@@ -29,6 +30,7 @@ type CurrentStepCardProps = {
   markSetDone: (setIndex: number, patch?: Partial<WorkoutSetInput>) => void
   extendRest: (seconds: number) => void
   skipRest: () => void
+  removeSet: (setIndex: number) => void
 }
 
 export function CurrentStepCard({
@@ -46,6 +48,7 @@ export function CurrentStepCard({
   markSetDone,
   extendRest,
   skipRest,
+  removeSet,
 }: CurrentStepCardProps) {
   const [selectedRir, setSelectedRir] = useState<number | null>(null)
   const resting = restRemainingSeconds > 0
@@ -219,6 +222,16 @@ export function CurrentStepCard({
       >
         Добавить подход
       </button>
+
+      {activeLog.sets.length > 1 && (
+        <button
+          className="gym-remove-set-btn"
+          type="button"
+          onClick={() => removeSet(activeSetIndex)}
+        >
+          <Trash2 size={14} aria-hidden="true" /> Удалить подход {setNumber}
+        </button>
+      )}
     </div>
   )
 }

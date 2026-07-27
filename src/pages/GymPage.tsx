@@ -154,6 +154,7 @@ export function GymPage(props: GymPageProps) {
           markSetDone={props.onMarkSetDone}
           addSet={props.onAddSet}
           removeCurrentExercise={props.onRemoveCurrentExercise}
+          removeSet={props.onRemoveSet}
           addSuggestedExercise={() => {
             if (props.exerciseAddSuggestion) props.onAddExerciseToCurrentWorkout(props.exerciseAddSuggestion.exercise)
           }}

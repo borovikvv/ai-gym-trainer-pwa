@@ -168,11 +168,13 @@ export function useWorkoutSetActions({
   }
 
   function removeSet(setIndex: number) {
+    const existing = logs[activeExercise.id] ?? createExerciseLog(activeExercise)
+    if (existing.sets.length <= 1) return
     setLogs((current) => {
-      const existing = current[activeExercise.id] ?? createExerciseLog(activeExercise)
-      if (existing.sets.length <= 1) return current
-      const sets = existing.sets.filter((_, index) => index !== setIndex)
-      const nextLogs = { ...current, [activeExercise.id]: { ...existing, sets } }
+      const nextLogs = {
+        ...current,
+        [activeExercise.id]: { ...existing, sets: existing.sets.filter((_, index) => index !== setIndex) },
+      }
       persistWorkoutDraft(nextLogs)
       return nextLogs
     })

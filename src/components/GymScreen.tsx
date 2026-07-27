@@ -36,6 +36,7 @@ type GymScreenProps = {
         markSetDone: (setIndex: number, patch?: Partial<WorkoutSetInput>) => void
         addSet: () => void
         removeCurrentExercise: () => void
+        removeSet: (setIndex: number) => void
         addSuggestedExercise: () => void
         applyCoachExerciseSuggestion: (recommendation: NextSetHint) => void
         acceptCoachDecision: (recommendation: NextSetHint) => void
@@ -68,6 +69,7 @@ export function GymScreen({
         markSetDone,
         addSet,
         removeCurrentExercise,
+        removeSet,
         addSuggestedExercise,
         applyCoachExerciseSuggestion,
         acceptCoachDecision,
@@ -181,6 +183,7 @@ export function GymScreen({
         markSetDone={markSetDone}
         extendRest={extendRest}
         skipRest={clearRestTimer}
+        removeSet={removeSet}
       />
 
       {/* Compact "Прошлый раз / Цель" — инлайн, как в прототипе (не большие карточки).

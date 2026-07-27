@@ -1552,7 +1552,8 @@
   border-color: var(--accent);
   color: var(--accent);
 }
-.gym-remove-exercise-btn {
+.gym-remove-exercise-btn,
+.gym-remove-set-btn {
   width: 100%;
   padding: 10px;
   border: none;
@@ -1562,7 +1563,8 @@
   cursor: pointer;
   opacity: 0.7;
 }
-.gym-remove-exercise-btn:hover { opacity: 1; }
+.gym-remove-exercise-btn:hover,
+.gym-remove-set-btn:hover { opacity: 1; }
 
 /* --- Rest timer card (hero-bg, large timer) --- */
 .current-step--rest {

@@ -48,6 +48,7 @@ function baseProps(overrides = {}) {
     markSetDone: vi.fn(),
     extendRest: vi.fn(),
     skipRest: vi.fn(),
+    removeSet: vi.fn(),
     ...overrides,
   }
 }
@@ -174,5 +175,29 @@ describe('CurrentStepCard', () => {
     const addButton = screen.getByRole('button', { name: 'Добавить подход' })
     await user.click(addButton)
     expect(addSet).toHaveBeenCalledTimes(1)
+  })
+
+  it('кнопка удаления подхода вызывает removeSet с индексом текущего подхода', async () => {
+    const user = userEvent.setup()
+    const removeSet = vi.fn()
+    render(<CurrentStepCard {...baseProps({ removeSet })} />)
+    await user.click(screen.getByRole('button', { name: /удалить подход/i }))
+    expect(removeSet).toHaveBeenCalledWith(1) // activeSetIndex = 1
+  })
+
+  it('кнопка удаления подхода не показывается, когда подход один', () => {
+    render(
+      <CurrentStepCard
+        {...baseProps({
+          activeLog: {
+            exerciseId: 'bench-press',
+            pain: false,
+            sets: [{ weight: 60, reps: 8, rpe: 7, completed: false }],
+          },
+          activeSetIndex: 0,
+        })}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: /удалить подход/i })).not.toBeInTheDocument()
   })
 })
