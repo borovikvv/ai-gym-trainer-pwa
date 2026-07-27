@@ -248,16 +248,12 @@ function App() {
     logs,
   })
   const {
-    updateSet,
     updateSetWeight,
     updateSetReps,
     editCompletedSet,
     addSet,
     removeSet,
     markSetDone,
-    adjustWeight,
-    copyPrevious,
-    markPain,
   } = useWorkoutSetActions({
     activeExercise,
     activeLog,
@@ -524,16 +520,12 @@ function App() {
             onReadinessModeChange={setWorkoutReadinessMode}
             onReadinessCheckInChange={updateReadinessCheckIn}
             onBeginPreparedWorkout={beginPreparedWorkout}
-            onCopyPrevious={copyPrevious}
-            onAdjustWeight={adjustWeight}
-            onMarkPain={markPain}
             onClearRestTimer={clearRestTimer}
             onExtendRest={(seconds) => setRestRemainingSeconds((current) => current + seconds)}
             onEditCompletedSet={editCompletedSet}
             onRemoveSet={removeSet}
             onUpdateSetWeight={updateSetWeight}
             onUpdateSetReps={updateSetReps}
-            onUpdateSet={updateSet}
             onMarkSetDone={markSetDone}
             onAddSet={addSet}
             onRemoveCurrentExercise={removeCurrentExerciseFromWorkout}

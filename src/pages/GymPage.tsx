@@ -52,16 +52,12 @@ interface GymPageProps {
   onReadinessModeChange: (mode: ReadinessMode) => void
   onReadinessCheckInChange: (patch: Partial<ReadinessCheckIn>) => void
   onBeginPreparedWorkout: () => void
-  onCopyPrevious: () => void
-  onAdjustWeight: (delta: number) => void
-  onMarkPain: () => void
   onClearRestTimer: () => void
   onExtendRest: (seconds: number) => void
   onEditCompletedSet: (setIndex: number) => void
   onRemoveSet: (setIndex: number) => void
   onUpdateSetWeight: (setIndex: number, weight: string) => void
   onUpdateSetReps: (setIndex: number, reps: string) => void
-  onUpdateSet: (setIndex: number, patch: Partial<{ weight: number; reps: number; rpe: number; completed: boolean }>) => void
   onMarkSetDone: (setIndex: number) => void
   onAddSet: () => void
   onRemoveCurrentExercise: () => void
