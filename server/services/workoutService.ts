@@ -4,6 +4,8 @@ import type { DbClient } from '../dbClient.js'
 import { groupBy, normalizeProgression, normalizeSet } from '../utils.js'
 import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
+import type { QualityPrescription } from '../../shared/workoutQuality.js'
+import { canonicalExerciseId } from '../../shared/exerciseIdentity.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { cascadeRegenerateFutureWorkouts } from './plannedWorkoutService.js'
 import { saveTrainingRecord } from '../coachTrainingRecord.js'
@@ -31,6 +33,9 @@ interface ExerciseEntryInput {
   nextRecommendedWeight?: number
   progressionType?: string
   progressionReason?: string
+  // Issue #162: предписание из плана — опора оценки качества (выполнение
+  // плана, а не только RPE). Заполняется best-effort перед расчётом дебрифа.
+  planned?: QualityPrescription | null
 }
 
 interface WorkoutHistoryEntryInput {
@@ -175,6 +180,12 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
       ],
     )
   }
+
+  // Issue #162: подмешиваем предписания плана до расчёта дебрифа — оценка
+  // качества опирается на выполнение плана (подходы и повторы против
+  // предписанных), а не только на самоотчёт RPE. Не нашли план — счёт
+  // считается по усилию, как и раньше.
+  await attachPlannedPrescriptions(client, sanitizedEntry)
 
   const debrief = (sanitizedEntry.debrief ?? buildWorkoutDebrief(sanitizedEntry as unknown as Parameters<typeof buildWorkoutDebrief>[0])) as ReturnType<typeof buildWorkoutDebrief>
   sanitizedEntry.qualityScore = debrief.qualityScore
@@ -452,6 +463,49 @@ function roundGuardrailNumber(value: unknown): number {
 // id не совпадает — тогда фолбэк: закрываем запланированную тренировку на
 // дату фактической (пользователь потренировался — план на этот день выполнен,
 // даже если содержимое отличалось).
+// Issue #162: предписания запланированной тренировки (подходы и диапазон
+// повторов) для оценки качества. Тренировка ищется тем же способом, что и в
+// markPlannedWorkoutCompleted: сначала прямой матч по id планируемой
+// тренировки, иначе — план на дату фактической. Ошибка или отсутствие плана
+// не фатальны: тогда качество считается по усилию, без вклада выполнения.
+async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntry): Promise<void> {
+  const exercises = entry.exercises ?? []
+  if (!entry.userId || exercises.length === 0) return
+  const completedDate = String(entry.completedAt ?? '').slice(0, 10)
+  const hasDate = /^\d{4}-\d{2}-\d{2}$/.test(completedDate)
+  if (!entry.workoutDayId && !hasDate) return
+
+  try {
+    const result = await client.query(
+      `select pwe.exercise_id, pwe.sets_count, pwe.rep_min, pwe.rep_max
+       from public.planned_workout_exercises pwe
+       join public.planned_workouts pw on pw.id = pwe.planned_workout_id
+       where pw.user_id = $1
+         and ($2::text is not null and pw.id = $2 or $3::boolean and pw.scheduled_date = $4::date)`,
+      [entry.userId, entry.workoutDayId ?? null, hasDate, hasDate ? completedDate : null],
+    )
+    const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? []
+    if (rows.length === 0) return
+    const byCanonicalId = new Map<string, QualityPrescription>()
+    for (const row of rows) {
+      const key = canonicalExerciseId(String(row.exercise_id ?? ''))
+      if (!key || byCanonicalId.has(key)) continue
+      byCanonicalId.set(key, {
+        setsCount: Number(row.sets_count),
+        repMin: Number(row.rep_min),
+        repMax: Number(row.rep_max),
+      })
+    }
+    for (const exercise of exercises) {
+      const planned = byCanonicalId.get(canonicalExerciseId(String(exercise.exerciseId ?? '')))
+      if (planned) exercise.planned = planned
+    }
+  } catch (err) {
+    // Не фатально — счёт качества деградирует до оценки по усилию.
+    console.warn('attachPlannedPrescriptions (non-fatal):', err instanceof Error ? err.message : err)
+  }
+}
+
 export async function markPlannedWorkoutCompleted(client: DbClient, entry: Pick<SanitizedEntry, 'userId' | 'workoutDayId' | 'completedAt'>): Promise<void> {
   if (!entry?.userId) return
   if (entry.workoutDayId) {
