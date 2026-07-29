@@ -66,17 +66,19 @@ export function WorkoutReviewScreen({
               className={`review-star${star <= userRating ? ' review-star--filled' : ''}`}
               disabled={isSaving}
               onClick={() => onUserRatingChange(star)}
-              aria-label={`${star} ${star === 1 ? 'звезда' : 'звезды'}`}
+              aria-label={`${star} ${star === 1 ? 'звезда' : star < 5 ? 'звезды' : 'звёзд'}`}
               data-testid={`star-${star}`}
               role="radio"
-              aria-checked={star <= userRating}
+              // Only one radio in a radiogroup may be checked — the fill below
+              // is cumulative, the selection is not.
+              aria-checked={star === userRating}
             >
               {star <= userRating ? '★' : '☆'}
             </button>
           ))}
         </div>
-        <p className="muted review-rating__hint">
-          {userRating > 0 ? 'Спасибо, оценка сохранена' : 'Насколько тренировка была полезной?'}
+        <p className="muted review-rating__hint" data-testid="rating-hint" data-rated={userRating > 0}>
+          {userRating > 0 ? 'Оценка сохранится вместе с тренировкой' : 'Насколько тренировка была полезной?'}
         </p>
       </div>
 

@@ -155,12 +155,12 @@ describe('WorkoutReviewScreen', () => {
     }
   })
 
-  it('shows hint text when not rated and thanks when rated', () => {
+  it('switches the hint between rated and not-rated states', () => {
     const { rerender } = render(<WorkoutReviewScreen {...defaultProps} userRating={0} />)
-    expect(screen.getByText(/Насколько тренировка была полезной/i)).toBeInTheDocument()
+    expect(screen.getByTestId('rating-hint')).toHaveAttribute('data-rated', 'false')
 
     rerender(<WorkoutReviewScreen {...defaultProps} userRating={4} />)
-    expect(screen.getByText(/Спасибо, оценка сохранена/i)).toBeInTheDocument()
+    expect(screen.getByTestId('rating-hint')).toHaveAttribute('data-rated', 'true')
   })
 
   it('has radiogroup role with accessible label', () => {
@@ -170,13 +170,14 @@ describe('WorkoutReviewScreen', () => {
     expect(group).toHaveAttribute('aria-label', 'Оценка тренировки')
   })
 
-  it('marks stars as aria-checked based on userRating', () => {
+  // A radiogroup may have exactly one checked radio — the visual fill is
+  // cumulative (stars 1..N), but only star N is the selected value.
+  it('marks exactly the selected star as aria-checked', () => {
     render(<WorkoutReviewScreen {...defaultProps} userRating={3} />)
 
-    expect(screen.getByTestId('star-1')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByTestId('star-2')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByTestId('star-3')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByTestId('star-4')).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByTestId('star-5')).toHaveAttribute('aria-checked', 'false')
+    const checked = [1, 2, 3, 4, 5].filter(
+      (i) => screen.getByTestId(`star-${i}`).getAttribute('aria-checked') === 'true',
+    )
+    expect(checked).toEqual([3])
   })
 })
