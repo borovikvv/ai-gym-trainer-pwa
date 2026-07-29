@@ -441,7 +441,7 @@ function latestExerciseHistory(history: WorkoutHistoryEntry[], exerciseId: strin
     .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId)) ?? null
 }
 
-function daysUntilNextTrainingDay(
+export function daysUntilNextTrainingDay(
   trainingDays: string[],
   nextWorkoutDay: WorkoutDayInput,
   workoutDays: WorkoutDayInput[],

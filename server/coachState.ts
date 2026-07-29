@@ -18,6 +18,12 @@ import { completedSetsOf, daysBetween, clampNumber, roundNumber } from './lib/nu
 import { buildAllMuscleVolumeSnapshots } from './buildVolumeSnapshot.js'
 import { extractLastAdjustments, mergeLandmarkOverrides } from './volumeLandmarkOverrides.js'
 
+// Issue #137: окно «группу тренировали недавно». Для PPL/upper-lower сплитов та
+// же группа возвращается через 48-72ч, поэтому занятие позавчера должно давать
+// 'medium', а не 'low' — иначе планировщик считает группу свежей (+30 к скору).
+// Общая константа для coachState и coachMemory, чтобы окно не разъезжалось.
+export const RECENTLY_TRAINED_DAYS = 2
+
 // ---------------------------------------------------------------------------
 // Input / output interfaces
 // ---------------------------------------------------------------------------
@@ -394,8 +400,13 @@ function computeTrainingDataConfidence(history: WorkoutHistoryEntryInput[]): num
 }
 
 function classifyMuscleFatigue(group: MuscleGroupInfo): 'low' | 'medium' | 'high' | 'unknown' {
-  const recentlyTrained = group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1
-  if (group.recentMaxEffortSets > 0 || (recentlyTrained && group.recentHardSets >= 2)) return 'high'
+  const recentlyTrained = group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= RECENTLY_TRAINED_DAYS
+  // Окно 'high' намеренно уже (1 день). 'high' — не мягкий штраф, а хард-фильтр:
+  // planner исключает упражнение (isHighFatigue) и снимает -100, exerciseMatcher
+  // даёт score 0, плюс -8 к readiness за каждую группу. С окном в 2 дня обычная
+  // сессия на RPE 9 уводила readiness под порог lowReadiness (<55).
+  const trainedYesterday = group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1
+  if (group.recentMaxEffortSets > 0 || (trainedYesterday && group.recentHardSets >= 2)) return 'high'
   if (recentlyTrained || group.recentHardSets > 0) return 'medium'
   return 'low'
 }

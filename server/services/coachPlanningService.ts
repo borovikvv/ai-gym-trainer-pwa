@@ -2,7 +2,7 @@
 import type { CoachState, WorkoutHistoryEntry } from '../../shared/types.js'
 import type { DbClient } from '../dbClient.js'
 import type { SafeCoachPlan, CoachPlanChange } from '../coachPlanner.js'
-import { COACH_PERSONA, buildCoachPrompt, buildSafeCoachPlan, clampCoachPlanToNextWorkout, chooseNextWorkoutDay } from '../coachPlanner.js'
+import { COACH_PERSONA, buildCoachPrompt, buildSafeCoachPlan, clampCoachPlanToNextWorkout, chooseNextWorkoutDay, daysUntilNextTrainingDay } from '../coachPlanner.js'
 import { computeCoachState } from '../coachState.js'
 import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecisionLog.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
@@ -74,11 +74,24 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
   const nextWorkoutDay = chooseNextWorkoutDay({ workoutDays, completedWorkout: completedEntry })
   if (!nextWorkoutDay) return null
   const debriefQualityScore = completedEntry.debrief?.qualityScore ?? null
+  // Issue #137: coachState для правки СЛЕДУЮЩЕЙ тренировки считаем на её дату,
+  // а не на момент завершения текущей. Иначе только что отработанная группа
+  // всегда выглядит как «тренирована 0 дней назад», и планировщик занижает
+  // нагрузку на сессию, до которой ещё 2-3 дня восстановления.
+  // buildSafeCoachPlan ниже остаётся на completedAt — ему now нужен как точка
+  // отсчёта, чтобы посчитать те же daysUntilNext.
+  const completedAt = new Date(completedEntry.completedAt ?? Date.now())
+  const daysUntilNext = daysUntilNextTrainingDay(
+    profile?.trainingDays ?? [],
+    nextWorkoutDay as unknown as Parameters<typeof daysUntilNextTrainingDay>[1],
+    workoutDays as unknown as Parameters<typeof daysUntilNextTrainingDay>[2],
+    completedAt,
+  ) ?? 0
   const coachState = computeCoachState({
     profile,
     workoutDays: workoutDays as unknown as Parameters<typeof computeCoachState>[0]['workoutDays'],
     history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],
-    now: new Date(completedEntry.completedAt ?? Date.now()),
+    now: new Date(completedAt.getTime() + daysUntilNext * 86_400_000),
     lastWorkoutQualityScore: debriefQualityScore,
   })
 
