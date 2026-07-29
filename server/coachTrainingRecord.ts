@@ -73,6 +73,8 @@ export interface TrainingRecord {
     // Issue #161: user rating 1–5 after workout, collected on review screen.
     // Used by #88 (extractTrainingRecords) to filter records with feedback ≥ 3.
     userRating?: number | null
+    // Issue #163: pain log per exercise for fine-tuning data
+    painDetails?: Array<{ exerciseId: string; painLocation?: string; painIntensity?: number; redFlags?: string[] }>
   } | null
 }
 
@@ -89,6 +91,7 @@ export async function saveTrainingRecord(
     totalVolume: number
     qualityScore?: number | null
     userRating?: number | null
+    painLog?: Record<string, { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] }> | null
     readinessCheckIn?: ReadinessCheckIn | null
     exercises: WorkoutHistoryEntry['exercises']
   },
@@ -179,6 +182,17 @@ export async function saveTrainingRecord(
       totalVolume: entry.totalVolume,
       qualityScore: entry.qualityScore ?? null,
       userRating: entry.userRating ?? null,
+      // Issue #163: build pain details array from painLog map
+      painDetails: (entry.painLog
+        ? Object.entries(entry.painLog)
+            .filter(([, v]) => v.pain || v.painLocation || v.painIntensity !== undefined || v.redFlags?.length)
+            .map(([exerciseId, v]) => ({
+              exerciseId,
+              painLocation: v.painLocation,
+              painIntensity: v.painIntensity,
+              redFlags: v.redFlags,
+            }) as { exerciseId: string; painLocation?: string; painIntensity?: number; redFlags?: string[] })
+        : undefined) as Array<{ exerciseId: string; painLocation?: string; painIntensity?: number; redFlags?: string[] }> | undefined,
     },
   }
 

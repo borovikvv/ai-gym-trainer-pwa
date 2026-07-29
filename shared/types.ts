@@ -88,6 +88,10 @@ export interface CompletedExerciseHistory {
   // because backend doesn't compute it.
   canonicalExerciseId?: string
   pain: boolean
+  // Issue #163: pain location, intensity 0-10, and red flags
+  painLocation?: string
+  painIntensity?: number
+  redFlags?: string[]
   sets: WorkoutSet[]
   volume: number
   nextRecommendedWeight: number

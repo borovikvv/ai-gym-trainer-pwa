@@ -1,6 +1,7 @@
 import type { WorkoutDay, ExercisePlan, Screen } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
 import type { NextSetHint } from '../components/gymTypes'
+
 import type { ExerciseAddSuggestion } from '../domain/exerciseSuggestion'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import { useProgram } from '../contexts/ProgramContext'
@@ -68,6 +69,7 @@ interface GymPageProps {
   onReplaceNextExercise: (exercise: ExercisePlan) => void
   onAcceptCoachDecision: (recommendation: NextSetHint) => void
   onGoToNextExercise: () => void
+  onUpdateExercisePain: (painData: Partial<Pick<ExerciseLog, 'pain' | 'painLocation' | 'painIntensity' | 'redFlags'>>) => void
   onSaveAndExit: () => void
   // Utils
   estimateWorkoutMinutes: (day: WorkoutDay) => number
@@ -166,6 +168,7 @@ export function GymPage(props: GymPageProps) {
           }}
           acceptCoachDecision={props.onAcceptCoachDecision}
           goToNextExercise={props.onGoToNextExercise}
+          onUpdateExercisePain={props.onUpdateExercisePain}
         />
       )}
 

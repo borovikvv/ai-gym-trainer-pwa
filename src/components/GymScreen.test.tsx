@@ -83,6 +83,7 @@ describe('GymScreen', () => {
         applyCoachExerciseSuggestion={vi.fn()}
         acceptCoachDecision={vi.fn()}
         goToNextExercise={vi.fn()}
+        onUpdateExercisePain={vi.fn()}
       />,
     )
     return { bench }
@@ -170,6 +171,7 @@ describe('GymScreen', () => {
         applyCoachExerciseSuggestion={vi.fn()}
         acceptCoachDecision={vi.fn()}
         goToNextExercise={vi.fn()}
+        onUpdateExercisePain={vi.fn()}
       />,
     )
 
@@ -222,6 +224,7 @@ describe('GymScreen', () => {
         applyCoachExerciseSuggestion={vi.fn()}
         acceptCoachDecision={vi.fn()}
         goToNextExercise={vi.fn()}
+        onUpdateExercisePain={vi.fn()}
       />,
     )
 

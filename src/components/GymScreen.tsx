@@ -8,6 +8,7 @@ import { isTimedExercise } from '../domain/exerciseMetrics'
 import { NextSetCoachCard } from './NextSetCoachCard'
 import { InfoHint } from './ui'
 import { CurrentStepCard } from './CurrentStepCard'
+import { PainQuestionnaire } from './PainQuestionnaire'
 import { Plus, Trash2 } from 'lucide-react'
 
 type GymScreenProps = {
@@ -41,6 +42,8 @@ type GymScreenProps = {
         applyCoachExerciseSuggestion: (recommendation: NextSetHint) => void
         acceptCoachDecision: (recommendation: NextSetHint) => void
         goToNextExercise: () => void
+        // Issue #163: post-exercise pain questionnaire
+        onUpdateExercisePain: (painData: Partial<Pick<ExerciseLog, 'pain' | 'painLocation' | 'painIntensity' | 'redFlags'>>) => void
 }
 
 export function GymScreen({
@@ -74,6 +77,7 @@ export function GymScreen({
         applyCoachExerciseSuggestion,
         acceptCoachDecision,
         goToNextExercise,
+        onUpdateExercisePain,
 }: GymScreenProps) {
   const timedExercise = isTimedExercise(activeExercise)
 
@@ -232,6 +236,17 @@ export function GymScreen({
             {nextExercise && <div className="muted">{nextExercise.prescription}</div>}
           </div>
         </div>
+      )}
+
+      {/* Issue #163: post-exercise pain questionnaire — after all sets done */}
+      {allSetsCompleted && (
+        <PainQuestionnaire
+          pain={activeLog.pain}
+          painLocation={activeLog.painLocation}
+          painIntensity={activeLog.painIntensity}
+          redFlags={activeLog.redFlags}
+          onPainChange={onUpdateExercisePain}
+        />
       )}
 
       {/* Issue #122: dashed "Добавить упражнение" + danger "Удалить" */}

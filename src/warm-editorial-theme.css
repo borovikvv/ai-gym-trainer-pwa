@@ -2112,6 +2112,127 @@
   padding: 22px;
 }
 
+/* --- Issue #163: Pain Questionnaire --- */
+.pain-questionnaire {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.pain-questionnaire__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+.pain-questionnaire__toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.pain-questionnaire__btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pain-questionnaire__btn--active {
+  background: var(--warning);
+  color: #fff;
+  border-color: var(--warning);
+}
+.pain-questionnaire__details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pain-questionnaire__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pain-questionnaire__label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+.pain-questionnaire__zones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pain-questionnaire__chip {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pain-questionnaire__chip--active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.pain-questionnaire__intensity {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.pain-questionnaire__num {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pain-questionnaire__num--active {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.pain-questionnaire__flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pain-questionnaire__flag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.pain-questionnaire__flag input[type="checkbox"] {
+  margin: 0;
+}
+.pain-questionnaire__warning {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--danger-bg, #fef2f2);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* --- 6. Button font-weights --- */
 .primary {
   font-weight: 600;

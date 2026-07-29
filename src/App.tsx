@@ -256,6 +256,7 @@ function App() {
     addSet,
     removeSet,
     markSetDone,
+    updateExercisePain,
   } = useWorkoutSetActions({
     activeExercise,
     activeLog,
@@ -540,6 +541,7 @@ function App() {
             onReplaceNextExercise={replaceNextExerciseInCurrentWorkout}
             onAcceptCoachDecision={acceptCoachDecision}
             onGoToNextExercise={goToNextExercise}
+            onUpdateExercisePain={updateExercisePain}
             onSaveAndExit={saveWorkoutAndExit}
             estimateWorkoutMinutes={estimateWorkoutMinutes}
             logs={logs}

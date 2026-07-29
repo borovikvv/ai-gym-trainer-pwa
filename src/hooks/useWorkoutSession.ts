@@ -296,6 +296,18 @@ export function useWorkoutSetActions({
     notify('Боль отмечена. Автопрогрессия остановлена')
   }
 
+  // Issue #163: update exercise pain with location, intensity, red flags
+  function updateExercisePain(
+    painData: Partial<Pick<ExerciseLog, 'pain' | 'painLocation' | 'painIntensity' | 'redFlags'>>,
+  ) {
+    setLogs((current) => {
+      const existing = current[activeExercise.id] ?? createExerciseLog(activeExercise)
+      const nextLogs = { ...current, [activeExercise.id]: { ...existing, ...painData } }
+      persistWorkoutDraft(nextLogs)
+      return nextLogs
+    })
+  }
+
   return {
     updateSet,
     updateSetWeight,
@@ -307,6 +319,7 @@ export function useWorkoutSetActions({
     adjustWeight,
     copyPrevious,
     markPain,
+    updateExercisePain,
   }
 }
 

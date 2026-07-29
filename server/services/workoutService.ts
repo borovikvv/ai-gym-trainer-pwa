@@ -29,6 +29,10 @@ interface ExerciseEntryInput {
   exerciseId?: string
   exerciseName?: string
   pain?: boolean
+  // Issue #163: pain details from post-exercise questionnaire
+  painLocation?: string
+  painIntensity?: number
+  redFlags?: string[]
   sets?: WorkoutSetInput[]
   nextRecommendedWeight?: number
   progressionType?: string
@@ -130,9 +134,11 @@ export async function loadWorkoutHistory(client: DbClient): Promise<WorkoutHisto
 
 export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHistoryEntryInput): Promise<{ coachPlan: SafeCoachPlan | null; debrief: ReturnType<typeof buildWorkoutDebrief> }> {
   const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry) as SanitizedEntry
+  // Issue #163: build pain_log from exercises with pain details
+  const painLog = buildPainLog(entry.exercises ?? [])
   await client.query(
-    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, user_rating, source)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pwa-api')
+    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, user_rating, pain_log, source)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pwa-api')
      on conflict (id) do update set
        user_id = excluded.user_id,
        workout_day_id = excluded.workout_day_id,
@@ -141,8 +147,9 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
        total_volume = excluded.total_volume,
        readiness_check_in = excluded.readiness_check_in,
        quality_score = excluded.quality_score,
-       user_rating = excluded.user_rating`,
-    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null, sanitizedEntry.userRating ?? null],
+       user_rating = excluded.user_rating,
+       pain_log = excluded.pain_log`,
+    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null, sanitizedEntry.userRating ?? null, painLog],
   )
 
   await client.query('delete from public.workout_sets where session_id = $1', [sanitizedEntry.id])
@@ -319,16 +326,17 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
       }
     }
 
-    await saveTrainingRecord(
-      client,
-      {
-        userId: sanitizedEntry.userId!,
-        id: sanitizedEntry.id!,
-        completedAt: sanitizedEntry.completedAt!,
-        totalVolume: sanitizedEntry.totalVolume,
-        qualityScore: sanitizedEntry.qualityScore ?? null,
-        userRating: sanitizedEntry.userRating ?? null,
-        readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
+	    await saveTrainingRecord(
+	      client,
+	      {
+	        userId: sanitizedEntry.userId!,
+	        id: sanitizedEntry.id!,
+	        completedAt: sanitizedEntry.completedAt!,
+	        totalVolume: sanitizedEntry.totalVolume,
+	        qualityScore: sanitizedEntry.qualityScore ?? null,
+	        userRating: sanitizedEntry.userRating ?? null,
+	        painLog: painLog as Record<string, { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] }> | null | undefined,
+	        readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
         exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
           exerciseId: e.exerciseId ?? '',
           exerciseName: e.exerciseName ?? '',
@@ -467,6 +475,23 @@ function isValidCompletedSet(set: WorkoutSetInput): boolean {
 
 function roundGuardrailNumber(value: unknown): number {
   return Number(Number(value).toFixed(1))
+}
+
+// Issue #163: build pain_log object from exercise entries with pain details.
+// Returns a record keyed by exerciseId, or null if no exercise has pain data.
+function buildPainLog(exercises: ExerciseEntryInput[]): Record<string, { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] }> | null {
+  const log: Record<string, { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] }> = {}
+  for (const exercise of exercises) {
+    if (!exercise.pain && !exercise.painLocation && exercise.painIntensity === undefined && !exercise.redFlags?.length) continue
+    const entry: { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] } = { pain: Boolean(exercise.pain) }
+    if (exercise.painLocation) entry.painLocation = exercise.painLocation
+    if (exercise.painIntensity !== undefined && exercise.painIntensity >= 0 && exercise.painIntensity <= 10) {
+      entry.painIntensity = Math.round(exercise.painIntensity)
+    }
+    if (exercise.redFlags?.length) entry.redFlags = exercise.redFlags
+    log[exercise.exerciseId ?? exercise.exerciseName ?? 'unknown'] = entry
+  }
+  return Object.keys(log).length > 0 ? log : null
 }
 
 // Фаза 2Б.1 (план развития): отметка «выполнено» — фундамент детекции
