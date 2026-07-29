@@ -2,6 +2,19 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { WorkoutReviewScreen } from './WorkoutReviewScreen'
+import type { ProgressionResult } from '../domain/progression'
+import type { ProgressionType } from '../../shared/types'
+
+const defaultProps = {
+  progressionSummary: [] as ProgressionResult[],
+  totalVolume: 0,
+  userRating: 0,
+  onUserRatingChange: vi.fn(),
+  onBackToWorkout: vi.fn(),
+  onSaveAndExit: vi.fn(),
+}
+
+const makeProgressionResult = (type: ProgressionType, reason: string, recommendedWeight = 0): ProgressionResult => ({ type, reason, recommendedWeight })
 
 describe('WorkoutReviewScreen', () => {
   it('disables saving and shows a clear pending state while the workout is being saved', async () => {
@@ -10,10 +23,9 @@ describe('WorkoutReviewScreen', () => {
 
     render(
       <WorkoutReviewScreen
-        progressionSummary={[]}
+        {...defaultProps}
         totalVolume={1200}
         isSaving={true}
-        onBackToWorkout={vi.fn()}
         onSaveAndExit={onSaveAndExit}
       />,
     )
@@ -29,7 +41,7 @@ describe('WorkoutReviewScreen', () => {
   it('shows the trainer debrief with grouped sections', () => {
     render(
       <WorkoutReviewScreen
-        progressionSummary={[]}
+        {...defaultProps}
         totalVolume={1200}
         debrief={{
           summary: 'Тренировка сохранит 2 упражнения.',
@@ -40,8 +52,6 @@ describe('WorkoutReviewScreen', () => {
           why: 'Мало восстановления, поэтому следующую тренировку делаем спокойнее.',
           qualityScore: 62,
         }}
-        onBackToWorkout={vi.fn()}
-        onSaveAndExit={vi.fn()}
       />,
     )
 
@@ -64,14 +74,13 @@ describe('WorkoutReviewScreen', () => {
   it('Issue #125: shows exercise list with progression tags', () => {
     render(
       <WorkoutReviewScreen
+        {...defaultProps}
         progressionSummary={[
-          { recommendedWeight: 55, type: 'increase', reason: 'Жим лёжа: +2.5 кг' },
-          { recommendedWeight: 40, type: 'hold', reason: 'Тяга: держим вес' },
-          { recommendedWeight: 35, type: 'deload', reason: 'Присед: -2.5 кг после перегруза' },
+          makeProgressionResult('increase', 'Жим лёжа: +2.5 кг', 55),
+          makeProgressionResult('hold', 'Тяга: держим вес', 40),
+          makeProgressionResult('deload', 'Присед: -2.5 кг после перегруза', 35),
         ]}
         totalVolume={3000}
-        onBackToWorkout={vi.fn()}
-        onSaveAndExit={vi.fn()}
       />,
     )
 
@@ -86,16 +95,88 @@ describe('WorkoutReviewScreen', () => {
   })
 
   it('Issue #125: save button says «Сохранить и на главную»', () => {
-    render(
-      <WorkoutReviewScreen
-        progressionSummary={[]}
-        totalVolume={500}
-        onBackToWorkout={vi.fn()}
-        onSaveAndExit={vi.fn()}
-      />,
-    )
+    render(<WorkoutReviewScreen {...defaultProps} totalVolume={500} />)
 
     expect(screen.getByRole('button', { name: /сохранить и на главную/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /вернуться к тренировке/i })).toBeInTheDocument()
+  })
+
+  // Issue #161: user rating 1–5 stars
+  it('renders 5 star buttons', () => {
+    render(<WorkoutReviewScreen {...defaultProps} userRating={0} />)
+
+    for (let i = 1; i <= 5; i++) {
+      expect(screen.getByTestId(`star-${i}`)).toBeInTheDocument()
+    }
+  })
+
+  it('shows all stars empty when userRating is 0', () => {
+    render(<WorkoutReviewScreen {...defaultProps} userRating={0} />)
+
+    for (let i = 1; i <= 5; i++) {
+      const star = screen.getByTestId(`star-${i}`)
+      expect(star).toHaveTextContent('☆')
+      expect(star).not.toHaveClass('review-star--filled')
+    }
+  })
+
+  it('fills first 4 stars when userRating is 4', () => {
+    render(<WorkoutReviewScreen {...defaultProps} userRating={4} />)
+
+    for (let i = 1; i <= 4; i++) {
+      expect(screen.getByTestId(`star-${i}`)).toHaveClass('review-star--filled')
+      expect(screen.getByTestId(`star-${i}`)).toHaveTextContent('★')
+    }
+    expect(screen.getByTestId('star-5')).not.toHaveClass('review-star--filled')
+    expect(screen.getByTestId('star-5')).toHaveTextContent('☆')
+  })
+
+  it('calls onUserRatingChange when a star is clicked', async () => {
+    const onUserRatingChange = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <WorkoutReviewScreen
+        {...defaultProps}
+        userRating={0}
+        onUserRatingChange={onUserRatingChange}
+      />,
+    )
+
+    await user.click(screen.getByTestId('star-3'))
+    expect(onUserRatingChange).toHaveBeenCalledWith(3)
+  })
+
+  it('disables star buttons while saving', () => {
+    render(<WorkoutReviewScreen {...defaultProps} userRating={3} isSaving={true} />)
+
+    for (let i = 1; i <= 5; i++) {
+      expect(screen.getByTestId(`star-${i}`)).toBeDisabled()
+    }
+  })
+
+  it('shows hint text when not rated and thanks when rated', () => {
+    const { rerender } = render(<WorkoutReviewScreen {...defaultProps} userRating={0} />)
+    expect(screen.getByText(/Насколько тренировка была полезной/i)).toBeInTheDocument()
+
+    rerender(<WorkoutReviewScreen {...defaultProps} userRating={4} />)
+    expect(screen.getByText(/Спасибо, оценка сохранена/i)).toBeInTheDocument()
+  })
+
+  it('has radiogroup role with accessible label', () => {
+    render(<WorkoutReviewScreen {...defaultProps} userRating={2} />)
+
+    const group = screen.getByRole('radiogroup')
+    expect(group).toHaveAttribute('aria-label', 'Оценка тренировки')
+  })
+
+  it('marks stars as aria-checked based on userRating', () => {
+    render(<WorkoutReviewScreen {...defaultProps} userRating={3} />)
+
+    expect(screen.getByTestId('star-1')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('star-2')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('star-3')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('star-4')).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByTestId('star-5')).toHaveAttribute('aria-checked', 'false')
   })
 })

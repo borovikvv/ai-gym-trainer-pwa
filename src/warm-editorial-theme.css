@@ -1930,6 +1930,40 @@
   border-top: 1px solid var(--border);
 }
 
+/* --- Issue #161: user rating 1–5 stars --- */
+.review-rating {
+  text-align: center;
+}
+.review-stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.review-star {
+  all: unset;
+  cursor: pointer;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--border);
+  transition: color 0.15s, transform 0.1s;
+  user-select: none;
+}
+.review-star:hover:not(:disabled) {
+  transform: scale(1.2);
+}
+.review-star--filled {
+  color: var(--warning);
+}
+.review-star:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.review-rating__hint {
+  font-size: 12px;
+  margin: 0;
+}
+
 /* --- Action buttons --- */
 .review-actions {
   display: flex;

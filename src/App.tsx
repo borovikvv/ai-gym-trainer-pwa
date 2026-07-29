@@ -153,6 +153,8 @@ function App() {
 
   const [sheetOpen, setSheetOpen] = useState(false)
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false)
+  // Issue #161: user rating 1–5 after workout, 0 = not yet rated
+  const [userRating, setUserRating] = useState<number>(0)
   // Фаза 3.2: уведомление «отдых окончен» показывает цель следующего подхода.
   // Замыкание вызывается только по окончании таймера — visibleNextSetRecommendation
   // к этому моменту инициализировано (объявлено ниже в этом же компоненте).
@@ -424,7 +426,7 @@ function App() {
     }
   }, [])
 
-          const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
+	          const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
     activeUserId,
     activeWorkoutDay,
     activeExerciseIndex,
@@ -439,6 +441,7 @@ function App() {
     setLogs,
     navigate,
     notify,
+    userRating,
   })
   const reviewDebrief = useMemo(() => createWorkoutHistoryEntry({
     userId: activeUserId,
@@ -512,6 +515,8 @@ function App() {
             progressionSummary={progressionSummary}
             totalVolume={totalVolume}
             reviewDebrief={reviewDebrief}
+            userRating={userRating}
+            onUserRatingChange={setUserRating}
             isSavingWorkout={isSavingWorkout}
             workoutReadinessMode={workoutReadinessMode}
             readinessOptions={readinessOptions}

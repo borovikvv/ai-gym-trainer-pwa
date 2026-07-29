@@ -41,6 +41,8 @@ interface GymPageProps {
   progressionSummary: import("../domain/progression").ProgressionResult[]
   totalVolume: number
   reviewDebrief: import("../domain/workoutDebrief").WorkoutDebrief | null | undefined
+  userRating: number
+  onUserRatingChange: (rating: number) => void
   isSavingWorkout: boolean
   // Readiness
   workoutReadinessMode: ReadinessMode
@@ -173,6 +175,8 @@ export function GymPage(props: GymPageProps) {
           totalVolume={props.totalVolume}
           debrief={props.reviewDebrief}
           isSaving={props.isSavingWorkout}
+          userRating={props.userRating}
+          onUserRatingChange={props.onUserRatingChange}
           onBackToWorkout={() => onNavigate('session')}
           onSaveAndExit={props.onSaveAndExit}
         />

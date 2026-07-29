@@ -31,6 +31,8 @@ type UseWorkoutSaveOptions = {
   setLogs: Dispatch<SetStateAction<Record<string, ExerciseLog>>>
   navigate: (screen: Screen, options?: { allowReviewExit?: boolean }) => void
   notify: (message: string) => void
+  // Issue #161: user rating 1–5 after workout, 0 = not yet rated
+  userRating?: number
 }
 
 export function useWorkoutSave({
@@ -47,23 +49,28 @@ export function useWorkoutSave({
   setActiveExerciseIndex,
   setLogs,
   navigate,
-        notify,
+	        notify,
+  userRating = 0,
 }: UseWorkoutSaveOptions) {
         const [isSavingWorkout, setIsSavingWorkout] = useState(false)
         const savingRef = useRef(false)
 
-        async function saveWorkoutAndExit() {
-                if (savingRef.current) return
-                savingRef.current = true
-                setIsSavingWorkout(true)
-            const entry = createWorkoutHistoryEntry({
-      userId: activeUserId,
-      workoutDayId: activeWorkoutDay.id,
-      workoutDayName: activeWorkoutDay.name,
-      exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
-      logs,
-      readinessCheckIn,
-    })
+	  async function saveWorkoutAndExit() {
+	          if (savingRef.current) return
+	          savingRef.current = true
+	          setIsSavingWorkout(true)
+	      const baseEntry = createWorkoutHistoryEntry({
+	      userId: activeUserId,
+	      workoutDayId: activeWorkoutDay.id,
+	      workoutDayName: activeWorkoutDay.name,
+	      exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
+	      logs,
+	      readinessCheckIn,
+	    })
+	    // Issue #161: attach user rating if selected (0 = not rated → omit)
+	    const entry: WorkoutHistoryEntry = userRating > 0
+	      ? { ...baseEntry, userRating }
+	      : baseEntry
     const nextHistory = [entry, ...history]
     setHistory(nextHistory)
     saveHistory(nextHistory)
