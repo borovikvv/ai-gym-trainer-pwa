@@ -70,6 +70,8 @@ export async function saveWorkoutEntryToSupabase(client: SupabaseInsertClient, e
       rpe: set.rpe,
       completed: set.completed,
       pain: exercise.pain,
+      // Issue #165: preserve client-side timestamp through Supabase path
+      performed_at: set.performedAt ?? null,
     })),
   )
 
@@ -115,7 +117,7 @@ export function mapSupabaseWorkoutRows(rows: SupabaseWorkoutRow[]): WorkoutHisto
 
     for (const set of [...(row.workout_sets ?? [])].sort((a, b) => a.set_index - b.set_index)) {
       const existing = setsByExercise.get(set.exercise_id) ?? []
-      existing.push({ weight: set.weight, reps: set.reps, rpe: set.rpe, completed: set.completed })
+      existing.push({ weight: set.weight, reps: set.reps, rpe: set.rpe, completed: set.completed, performedAt: (set as Record<string, unknown>).performed_at as string | undefined ?? undefined })
       setsByExercise.set(set.exercise_id, existing)
       namesByExercise.set(set.exercise_id, set.exercise_name ?? set.exercise_id)
       painByExercise.set(set.exercise_id, (painByExercise.get(set.exercise_id) ?? false) || set.pain)

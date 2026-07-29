@@ -8,6 +8,8 @@ export type WorkoutSetInput = {
   reps: number
   rpe: number
   completed: boolean
+  // Issue #165: client-side timestamp when the set was performed
+  performedAt?: string
 }
 
 export type ProgressionInput = {

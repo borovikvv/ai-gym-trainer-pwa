@@ -99,3 +99,18 @@ export function buildNextTargets(history: WorkoutHistoryEntry[]): Record<string,
 function firstCompletedWeight(sets: WorkoutSetInput[]): number | undefined {
   return sets.find((set) => set.completed)?.weight
 }
+
+// Issue #165: compute actual rest between consecutive sets (seconds).
+// Returns one entry per adjacent pair (i.e. n-1 results for n sets).
+// Skips pairs where either set lacks performedAt — old data, mixed history.
+export function computeActualRest(sets: Array<{ performedAt?: string | null }>): number[] {
+  const rest: number[] = []
+  for (let i = 1; i < sets.length; i++) {
+    const prev = sets[i - 1]?.performedAt
+    const curr = sets[i]?.performedAt
+    if (!prev || !curr) continue
+    const ms = new Date(curr).getTime() - new Date(prev).getTime()
+    if (Number.isFinite(ms)) rest.push(Math.round(ms / 1000))
+  }
+  return rest
+}

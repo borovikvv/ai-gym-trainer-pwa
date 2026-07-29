@@ -187,7 +187,9 @@ export function useWorkoutSetActions({
     // Issue #133: применяем patch (например RPE из RIR-кружков) в том же
     // setLogs, что и completed — иначе отдельный updateSet и markSetDone
     // батчатся и последний (со staleSnapshot) затирает выбранное усилие.
-    const completedSets = existing.sets.map((set, index) => (index === setIndex ? { ...set, ...patch, completed: true } : set))
+    // Issue #165: capture client-side timestamp at set completion.
+    // Only sets completed after this change carry performedAt (old data is undefined).
+    const completedSets = existing.sets.map((set, index) => (index === setIndex ? { ...set, ...patch, completed: true, performedAt: new Date().toISOString() } : set))
     const completedOnly = completedSets.filter((set) => set.completed) as SetDraft[]
     const recommendation = getLocalNextSetRecommendation(completedOnly)
     const sets = completedSets.map((set, index) => {

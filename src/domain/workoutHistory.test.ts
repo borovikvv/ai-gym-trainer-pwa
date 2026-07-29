@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNextTargets, createWorkoutHistoryEntry } from './workoutHistory'
+import { buildNextTargets, computeActualRest, createWorkoutHistoryEntry } from './workoutHistory'
 import type { ExercisePlan  } from '../../shared/types'
 
 const bench: ExercisePlan = {
@@ -122,5 +122,36 @@ describe('workout history', () => {
     ]
 
     expect(buildNextTargets(history).plank).toBe(0)
+  })
+
+  // Issue #165: computeActualRest
+  describe('computeActualRest', () => {
+    it('returns empty array for a single set', () => {
+      expect(computeActualRest([{ performedAt: '2026-07-29T12:00:00.000Z' }])).toEqual([])
+    })
+
+    it('returns rest seconds between consecutive sets', () => {
+      const result = computeActualRest([
+        { performedAt: '2026-07-29T12:00:00.000Z' },
+        { performedAt: '2026-07-29T12:02:30.000Z' },
+        { performedAt: '2026-07-29T12:05:00.000Z' },
+      ])
+      expect(result).toEqual([150, 150])
+    })
+
+    it('skips pairs where either set lacks performedAt', () => {
+      const result = computeActualRest([
+        { performedAt: '2026-07-29T12:00:00.000Z' },
+        {},
+        { performedAt: '2026-07-29T12:05:00.000Z' },
+        { performedAt: '2026-07-29T12:07:00.000Z' },
+      ])
+      // pair 0→1 skipped (no performedAt), 1→2 skipped, 2→3 = 120s
+      expect(result).toEqual([120])
+    })
+
+    it('returns empty array for empty input', () => {
+      expect(computeActualRest([])).toEqual([])
+    })
   })
 })

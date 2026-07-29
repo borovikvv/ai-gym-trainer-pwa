@@ -63,6 +63,8 @@ export interface WorkoutSet {
   reps: number
   rpe: number
   completed: boolean
+  // Issue #165: client-side timestamp when the set was performed
+  performedAt?: string
 }
 
 // Issue #98 PR3: WorkoutDebrief moved from src/domain/workoutDebrief.ts
