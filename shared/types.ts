@@ -346,6 +346,10 @@ export type ExercisePlan = {
   programExerciseId?: string
   name: string
   muscleGroup: string
+  /** Issue #173: 'load' | 'assistance' из exercise_library.weight_direction.
+   * Сервер отдаёт его в normalizeProgramExercise; клиент опирается на поле
+   * справочника, а не на разбор названия строкой. */
+  weightDirection?: string | null
   prescription: string
   setsCount: number
   repMin: number

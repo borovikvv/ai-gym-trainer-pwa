@@ -43,6 +43,7 @@ export async function loadProgramData(client: DbClient) {
         el.instruction,
         el.common_mistakes,
         el.alternatives,
+        el.weight_direction,
         pe.sort_order,
         pe.sets_count,
         pe.rep_min,
@@ -240,6 +241,7 @@ export async function loadUserWorkoutDays(client: DbClient, userId: string): Pro
             el.instruction,
             el.common_mistakes,
             el.alternatives,
+            el.weight_direction,
             pe.sort_order,
             pe.sets_count,
             pe.rep_min,
@@ -458,7 +460,8 @@ export function librarySql() {
       movement_pattern,
       equipment,
       exercise_type,
-      difficulty_level
+      difficulty_level,
+      weight_direction
     from public.exercise_library
     order by muscle_group, name
   `
