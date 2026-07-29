@@ -33,6 +33,7 @@ type UseWorkoutSaveOptions = {
   notify: (message: string) => void
   // Issue #161: user rating 1–5 after workout, 0 = not yet rated
   userRating?: number
+  setUserRating?: Dispatch<SetStateAction<number>>
 }
 
 export function useWorkoutSave({
@@ -49,28 +50,29 @@ export function useWorkoutSave({
   setActiveExerciseIndex,
   setLogs,
   navigate,
-	        notify,
+  notify,
   userRating = 0,
+  setUserRating,
 }: UseWorkoutSaveOptions) {
         const [isSavingWorkout, setIsSavingWorkout] = useState(false)
         const savingRef = useRef(false)
 
-	  async function saveWorkoutAndExit() {
-	          if (savingRef.current) return
-	          savingRef.current = true
-	          setIsSavingWorkout(true)
-	      const baseEntry = createWorkoutHistoryEntry({
-	      userId: activeUserId,
-	      workoutDayId: activeWorkoutDay.id,
-	      workoutDayName: activeWorkoutDay.name,
-	      exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
-	      logs,
-	      readinessCheckIn,
-	    })
-	    // Issue #161: attach user rating if selected (0 = not rated → omit)
-	    const entry: WorkoutHistoryEntry = userRating > 0
-	      ? { ...baseEntry, userRating }
-	      : baseEntry
+        async function saveWorkoutAndExit() {
+                if (savingRef.current) return
+                savingRef.current = true
+                setIsSavingWorkout(true)
+            const baseEntry = createWorkoutHistoryEntry({
+      userId: activeUserId,
+      workoutDayId: activeWorkoutDay.id,
+      workoutDayName: activeWorkoutDay.name,
+      exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
+      logs,
+      readinessCheckIn,
+    })
+    // Issue #161: attach user rating if selected (0 = not rated → omit)
+    const entry: WorkoutHistoryEntry = userRating > 0
+      ? { ...baseEntry, userRating }
+      : baseEntry
     const nextHistory = [entry, ...history]
     setHistory(nextHistory)
     saveHistory(nextHistory)
@@ -119,6 +121,10 @@ export function useWorkoutSave({
                 notify('Тренировка сохранена')
               }
               setActiveExerciseIndex(0)
+              // Issue #161: rating lives in App state and survives navigation —
+              // without this reset the next workout inherits the previous
+              // rating and saves it silently, poisoning the #88 dataset.
+              setUserRating?.(0)
               const updatedTargets = buildNextTargets(nextHistory.filter((workout) => workout.userId === activeUserId))
               setLogs(createInitialLogs(activeWorkoutDay, updatedTargets))
               navigate('home', { allowReviewExit: true })

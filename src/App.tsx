@@ -426,7 +426,7 @@ function App() {
     }
   }, [])
 
-	          const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
+          const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
     activeUserId,
     activeWorkoutDay,
     activeExerciseIndex,
@@ -442,6 +442,7 @@ function App() {
     navigate,
     notify,
     userRating,
+    setUserRating,
   })
   const reviewDebrief = useMemo(() => createWorkoutHistoryEntry({
     userId: activeUserId,
