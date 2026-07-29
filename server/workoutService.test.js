@@ -625,3 +625,112 @@ describe('Issue #108: training record captures analysis → decision → outcome
     expect(latChange.type).toBe('swap')
   })
 })
+
+// Issue #163: анкета боли собирается на экране зала в ExerciseLog, уезжает
+// в API через createWorkoutHistoryEntry и должна лечь в workout_sessions.pain_log.
+// Тест идёт по всему этому пути целиком: раньше маппер терял три поля из
+// четырёх, и на сервер приезжал только булев `pain` — при зелёных юнит-тестах
+// компонента.
+describe('Issue #163: детали боли из анкеты доезжают до pain_log', () => {
+  it('переносит локацию, интенсивность и красные флаги из лога упражнения в insert', async () => {
+    const { createWorkoutHistoryEntry } = await import('../src/domain/workoutHistory.js')
+
+    const entry = createWorkoutHistoryEntry({
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-29T10:00:00Z',
+      exercises: [{
+        id: 'bench-press',
+        name: 'Жим лёжа',
+        prescription: '3x8',
+        targetWeight: 50,
+        repMin: 6,
+        repMax: 8,
+        weightStep: 2.5,
+      }],
+      logs: {
+        'bench-press': {
+          exerciseId: 'bench-press',
+          pain: true,
+          painLocation: 'плечо',
+          painIntensity: 7,
+          redFlags: ['онемение'],
+          sets: [{ weight: 50, reps: 8, rpe: 8, completed: true }],
+        },
+      },
+    })
+
+    // Анкета не должна теряться уже на клиенте — иначе серверу нечего писать.
+    expect(entry.exercises[0]).toMatchObject({
+      painLocation: 'плечо',
+      painIntensity: 7,
+      redFlags: ['онемение'],
+    })
+
+    const queries = []
+    const client = {
+      query: vi.fn().mockImplementation(async (text, params) => {
+        queries.push({ text, params })
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await saveWorkoutHistoryEntry(client, entry)
+
+    const insert = queries.find((q) => q.text.includes('insert into public.workout_sessions'))
+    const painLogParamIndex = insert.text
+      .slice(insert.text.indexOf('('), insert.text.indexOf(')'))
+      .split(',')
+      .findIndex((column) => column.trim() === 'pain_log')
+
+    expect(insert.params[painLogParamIndex]).toEqual({
+      'bench-press': { pain: true, painLocation: 'плечо', painIntensity: 7, redFlags: ['онемение'] },
+    })
+  })
+
+  it('оставляет pain_log пустым, когда анкету пропустили', async () => {
+    const { createWorkoutHistoryEntry } = await import('../src/domain/workoutHistory.js')
+
+    const entry = createWorkoutHistoryEntry({
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-29T11:00:00Z',
+      exercises: [{
+        id: 'bench-press',
+        name: 'Жим лёжа',
+        prescription: '3x8',
+        targetWeight: 50,
+        repMin: 6,
+        repMax: 8,
+        weightStep: 2.5,
+      }],
+      logs: {
+        'bench-press': {
+          exerciseId: 'bench-press',
+          pain: false,
+          sets: [{ weight: 50, reps: 8, rpe: 8, completed: true }],
+        },
+      },
+    })
+
+    const queries = []
+    const client = {
+      query: vi.fn().mockImplementation(async (text, params) => {
+        queries.push({ text, params })
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await saveWorkoutHistoryEntry(client, entry)
+
+    const insert = queries.find((q) => q.text.includes('insert into public.workout_sessions'))
+    const painLogParamIndex = insert.text
+      .slice(insert.text.indexOf('('), insert.text.indexOf(')'))
+      .split(',')
+      .findIndex((column) => column.trim() === 'pain_log')
+
+    expect(insert.params[painLogParamIndex]).toBeNull()
+  })
+})

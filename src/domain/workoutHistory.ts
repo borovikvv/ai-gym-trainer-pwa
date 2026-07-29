@@ -49,6 +49,12 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       canonicalExerciseId: getCanonicalExerciseId(exercise),
       exerciseName: exercise.name,
       pain: log.pain,
+      // Issue #163: детали боли идут дальше вместе с булевым признаком —
+      // без них сервер соберёт pain_log из одного `pain`, а анкета
+      // (локация, интенсивность, красные флаги) не доедет до базы.
+      painLocation: log.painLocation,
+      painIntensity: log.painIntensity,
+      redFlags: log.redFlags,
       sets: log.sets,
       volume,
       nextRecommendedWeight: progression.recommendedWeight,
