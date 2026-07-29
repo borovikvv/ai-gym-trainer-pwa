@@ -25,6 +25,7 @@ import { useUserSelection } from './hooks/useUserSelection'
 import { useRestTimer, useWakeLock } from './hooks/useRestTimer'
 import { formatWeight } from './lib/format'
 import { createWorkoutHistoryEntry } from './domain/workoutHistory'
+import { computeSessionRepDeviation } from './domain/repExpectation'
 import { suggestExerciseToAdd } from './domain/exerciseSuggestion'
 import {
   adaptWorkoutDayForReadiness,
@@ -445,14 +446,21 @@ function App() {
     userRating,
     setUserRating,
   })
-  const reviewDebrief = useMemo(() => createWorkoutHistoryEntry({
+  const reviewEntry = useMemo(() => createWorkoutHistoryEntry({
     userId: activeUserId,
     workoutDayId: activeWorkoutDay.id,
     workoutDayName: activeWorkoutDay.name,
     exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
     logs,
     readinessCheckIn,
-  }).debrief, [activeUserId, activeWorkoutDay, activeExerciseIndex, logs, readinessCheckIn])
+  }), [activeUserId, activeWorkoutDay, activeExerciseIndex, logs, readinessCheckIn])
+  const reviewDebrief = reviewEntry.debrief
+  // Issue #167: отклонение фактических повторов от ожидаемых на том же весе.
+  // Считаем и показываем; на решения тренера пока не влияет.
+  const reviewRepDeviation = useMemo(
+    () => computeSessionRepDeviation(reviewEntry, userHistory),
+    [reviewEntry, userHistory],
+  )
 
 
 
@@ -517,6 +525,7 @@ function App() {
             progressionSummary={progressionSummary}
             totalVolume={totalVolume}
             reviewDebrief={reviewDebrief}
+            reviewRepDeviation={reviewRepDeviation}
             userRating={userRating}
             onUserRatingChange={setUserRating}
             isSavingWorkout={isSavingWorkout}

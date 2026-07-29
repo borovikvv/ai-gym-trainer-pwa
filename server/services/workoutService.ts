@@ -18,6 +18,8 @@ import { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary, loadRecent
 // Issue #108: run analysis + compute changes for training records
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+// Issue #167: повторы против ожидания на том же весе — считаем и записываем
+import { computeSessionRepDeviation } from '../../src/domain/repExpectation.js'
 import type { TrainingRecordChange } from '../coachTrainingRecord.js'
 
 interface WorkoutSetInput {
@@ -333,6 +335,13 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
       }
     }
 
+    // Issue #167: ожидание строится по истории ДО этой сессии — сама сессия в
+    // расчёт не входит (computeSessionRepDeviation отсекает её по дате).
+    const repDeviation = computeSessionRepDeviation(
+      sanitizedEntry as unknown as Parameters<typeof computeSessionRepDeviation>[0],
+      recentHistory as unknown as Parameters<typeof computeSessionRepDeviation>[1],
+    )
+
     await saveTrainingRecord(
       client,
       {
@@ -344,6 +353,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
         userRating: sanitizedEntry.userRating ?? null,
         painLog,
         readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
+        repDeviation,
         exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
           exerciseId: e.exerciseId ?? '',
           exerciseName: e.exerciseName ?? '',

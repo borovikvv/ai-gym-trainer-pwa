@@ -19,6 +19,8 @@ import type { WorkoutHistoryEntry, ReadinessCheckIn } from '../shared/types.js'
 import type { PainLog, PainLogEntry } from '../shared/painChannel.js'
 // Issue #108: capture analysis flags and decision source in training records
 import type { ProgressAnalysis } from './coachProgressAnalysis.js'
+// Issue #167: объективная величина исполнения — повторы против ожидания
+import type { SessionRepDeviation } from '../src/domain/repExpectation.js'
 
 export interface TrainingRecordChange {
   exerciseId: string
@@ -76,6 +78,15 @@ export interface TrainingRecord {
     userRating?: number | null
     // Issue #163: pain log per exercise for fine-tuning data
     painDetails?: Array<PainLogEntry & { exerciseId: string }>
+    // Issue #167: отклонение фактических повторов от ожидаемых на том же весе.
+    // Копится, чтобы понять, сколько сессий истории нужно для надёжного
+    // ожидания; на решения тренера пока не влияет.
+    repDeviation?: {
+      avgDeviation: number | null
+      setsWithExpectation: number
+      setsWithoutExpectation: number
+      exercises: Array<{ exerciseId: string; avgDeviation: number | null; setsWithExpectation: number }>
+    } | null
   } | null
 }
 
@@ -95,6 +106,8 @@ export async function saveTrainingRecord(
     painLog?: PainLog | null
     readinessCheckIn?: ReadinessCheckIn | null
     exercises: WorkoutHistoryEntry['exercises']
+    // Issue #167: считается вызывающим (нужна история до этой сессии)
+    repDeviation?: SessionRepDeviation | null
   },
   coachState: {
     readinessScore?: number
@@ -187,6 +200,19 @@ export async function saveTrainingRecord(
       painDetails: entry.painLog
         ? Object.entries(entry.painLog).map(([exerciseId, entryValue]) => ({ exerciseId, ...entryValue }))
         : undefined,
+      // Issue #167: агрегаты, а не все подходы — запись остаётся компактной.
+      repDeviation: entry.repDeviation
+        ? {
+          avgDeviation: entry.repDeviation.avgDeviation,
+          setsWithExpectation: entry.repDeviation.setsWithExpectation,
+          setsWithoutExpectation: entry.repDeviation.setsWithoutExpectation,
+          exercises: entry.repDeviation.exercises.map((exercise) => ({
+            exerciseId: exercise.exerciseId,
+            avgDeviation: exercise.avgDeviation,
+            setsWithExpectation: exercise.setsWithExpectation,
+          })),
+        }
+        : null,
     },
   }
 
