@@ -11,6 +11,7 @@ import { assertAllowedRowOwner } from '../privateUsers.js'
 import { loadVolumeLandmarkOverrides, saveVolumeLandmarkAdjustments } from '../volumeLandmarkOverrides.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
 import { syncBlockGoal } from '../mesocycleBlockGoal.js'
+import { syncWeeklyVolumeTargets, type SyncWeeklyVolumeResult } from '../weeklyVolumeTargets.js'
 import { applyMemoryUpdates, loadGoals } from '../coachLongTermMemory.js'
 
 export async function loadProgramData(client: DbClient) {
@@ -401,9 +402,19 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   } catch (err) {
     console.error('syncBlockGoal failed (non-fatal):', (err as Error).message)
   }
+  // Issue #166: недельные цели по группам — способ достичь цели блока. Ставим
+  // цели текущей неделе и закрываем сверкой прошедшие. Тоже не фатально.
+  let weeklyVolume: SyncWeeklyVolumeResult | null = null
+  try {
+    weeklyVolume = await syncWeeklyVolumeTargets(client, userId, {
+      history, coachState, blockGoalId: blockGoal?.id ?? null, now,
+    })
+  } catch (err) {
+    console.error('syncWeeklyVolumeTargets failed (non-fatal):', (err as Error).message)
+  }
   // profile / history / e1rmHistories are already computed here — expose them
   // so per-set live coach calls (liveCoachContext) don't re-query everything.
-  return { coachMemory, coachState, profile, history, e1rmHistories, blockGoal }
+  return { coachMemory, coachState, profile, history, e1rmHistories, blockGoal, weeklyVolume }
 }
 
 /**

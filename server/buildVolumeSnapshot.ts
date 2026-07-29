@@ -146,7 +146,12 @@ export function buildAllMuscleVolumeSnapshots(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function countCompletedSets(exercise: CompletedExerciseHistory): number {
+/**
+ * Рабочие подходы упражнения. Issue #166: единственное место, где объём
+ * превращается в число — когда тренер начнёт назначать разминку (#172),
+ * разминочные подходы должны отсеиваться именно здесь.
+ */
+export function countCompletedSets(exercise: CompletedExerciseHistory): number {
   return (exercise.sets ?? [])
     .filter((s) => s?.completed !== false && Number(s?.reps) > 0)
     .length

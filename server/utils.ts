@@ -292,6 +292,28 @@ function toDateOnly(date: Date): string {
   ].join('-')
 }
 
+/**
+ * Понедельник календарной недели (локальная полночь). Issue #166: неделя —
+ * единица учёта объёма, поэтому граница недели одна на весь сервер.
+ */
+export function startOfWeek(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1) // Monday
+  const start = new Date(d.setDate(diff))
+  start.setHours(0, 0, 0, 0)
+  return start
+}
+
+/** Воскресенье той же недели, конец суток. */
+export function endOfWeek(date: Date): Date {
+  const start = startOfWeek(date)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return end
+}
+
 export function dateToDateOnly(value: Date | string): string {
   if (value instanceof Date) return toDateOnly(value)
   return String(value).slice(0, 10)

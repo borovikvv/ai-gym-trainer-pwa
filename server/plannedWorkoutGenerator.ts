@@ -16,6 +16,7 @@ import type {
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { buildCoachDecision } from './coachDecision.js'
+import type { WeeklyVolumeStatus } from './weeklyVolumeTargets.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from '../shared/muscleGroups.js'
@@ -177,6 +178,10 @@ interface BuildGeneratedPlannedWorkoutInput {
   // и фолбэком). По умолчанию выключено — вызывающий включает только для
   // ближайшей тренировки, чтобы не делать N LLM-вызовов в каскаде.
   refineWithLlm?: boolean
+  // Issue #166: остаток недельной цели по группам на момент планирования.
+  // Планировщик тратит именно его: группа с недобором получает приоритет и
+  // подходы, группа, выбравшая цель, уступает место.
+  weeklyVolume?: Record<string, WeeklyVolumeStatus> | null
 }
 
 interface GeneratedExercise {
@@ -235,6 +240,8 @@ interface WeeklyContext {
   effectiveWorkoutsPerWeek: number
   daysSincePreviousWorkout: number | null
   calendarLoadStatus: string
+  /** Issue #166: остаток недельной цели по группам (цель минус факт). */
+  weeklyVolume: Record<string, WeeklyVolumeStatus>
 }
 
 interface ChooseBestExerciseParams {
@@ -298,13 +305,14 @@ export async function buildGeneratedPlannedWorkout({
   analysisResult = null,
   longTermMemory = '',
   refineWithLlm = false,
+  weeklyVolume = null,
 }: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
   const userTrainingPolicy = getUserTrainingPolicy(profile?.userId)
   const weeklyContext = buildWeeklyContext(
     [...buildCompletedWorkoutContext(history, scheduledDate), ...previousGeneratedWorkouts],
-    { scheduledDate, profile },
+    { scheduledDate, profile, weeklyVolume },
   )
   const decision = (coachDecision ?? buildCoachDecision({ profile, coachState, coachMemory, scheduledDate, previousGeneratedWorkouts })) as CoachDecisionForGenerator
   const readinessScore = Number(coachState?.readinessScore ?? 70)
@@ -318,7 +326,12 @@ export async function buildGeneratedPlannedWorkout({
   const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited || analysisOvertraining
   const targetMinutes = Number(profile?.targetWorkoutMinutes ?? 60)
   const exerciseTarget = targetExerciseCount({ targetMinutes, preferences })
-  const targetPattern = chooseTargetPattern(coachState, preferences, decision, lowReadiness, scheduledDate, previousGeneratedWorkouts)
+  // Issue #166: недельная цель — рычаг планирования, поэтому порядок групп в
+  // дне определяется остатком цели, а не только ротацией и усталостью.
+  const targetPattern = orderPatternByWeeklyDeficit(
+    chooseTargetPattern(coachState, preferences, decision, lowReadiness, scheduledDate, previousGeneratedWorkouts),
+    weeklyContext.weeklyVolume,
+  )
 
   // Issue #106: lookup map for per-exercise flags
   const exerciseFlags = analysisResult?.exerciseFlags ?? []
@@ -778,6 +791,24 @@ function chooseTargetPattern(
   return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
 }
 
+/**
+ * Issue #166: группы с недобором недельной цели идут первыми, выбравшие свою
+ * цель — последними. Не исключаем их совсем: день не должен остаться без
+ * упражнений, если все цели уже выполнены. Сортировка стабильная, поэтому
+ * ротация и порядок дубликатов внутри одного ранга сохраняются, а кор
+ * остаётся финишером.
+ */
+function orderPatternByWeeklyDeficit(pattern: string[], weeklyVolume: Record<string, WeeklyVolumeStatus>): string[] {
+  if (pattern.length === 0 || Object.keys(weeklyVolume ?? {}).length === 0) return pattern
+  const rank = (muscleKey: string): number => {
+    if (muscleKey === 'core') return 0
+    const remaining = weeklyVolume[muscleKey]?.remainingSets
+    if (!Number.isFinite(remaining)) return 0
+    return remaining > 0 ? -1 : 1
+  }
+  return [...pattern].sort((a, b) => rank(a) - rank(b))
+}
+
 function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext, exerciseFlags = [] }: ChooseBestExerciseParams): NormalizedLibraryExercise | null {
   if (isRecoveryRestricted(muscleKey, weeklyContext) || isCoachMemoryRestricted(muscleKey, coachMemory) || coachDecision?.avoidMuscleGroups?.includes(muscleKey)) return null
   // Issue #106: build a set of plateau exercise ids (recommendation =
@@ -840,7 +871,12 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
     : clamp(exercise.setsCount, 2, preferences.sessionStyle === 'heavy_short' ? 3 : 4)
-  let setsCount = baseSetsCount
+  // Issue #166: не выписываем больше, чем осталось от недельной цели группы
+  // (но не опускаемся ниже минимальных двух рабочих подходов).
+  const remainingWeeklySets = weeklyContext.weeklyVolume?.[exercise.muscleKey]?.remainingSets
+  let setsCount = Number.isFinite(remainingWeeklySets) && remainingWeeklySets > 0
+    ? Math.max(2, Math.min(baseSetsCount, remainingWeeklySets))
+    : baseSetsCount
   let repMin = lowReadiness ? Math.max(exercise.repMin, Math.min(exercise.repMax, 10)) : exercise.repMin
   let repMax = lowReadiness ? Math.max(repMin, exercise.repMax) : exercise.repMax
   const hasRecentWorkingWeight = Boolean(recent) && Number.isFinite(historicWeight)
@@ -972,7 +1008,10 @@ function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyC
     ? 'учтено разнообразие недели'
     : null
   const policyText = policy === 'consolidate' ? 'решение тренера: закрепить текущий вес' : null
-  return `${loadText}; ${exercise.muscleGroup}: усталость ${fatigue}; ${historyText}${diversityText ? `; ${diversityText}` : ''}${policyText ? `; ${policyText}` : ''}.`
+  // Issue #166: расхождение недельной цели и факта видно прямо в плане.
+  const weekly = weeklyContext.weeklyVolume?.[exercise.muscleKey]
+  const volumeText = weekly ? `недельный объём ${weekly.actualSets}/${weekly.targetSets} подходов` : null
+  return `${loadText}; ${exercise.muscleGroup}: усталость ${fatigue}; ${historyText}${diversityText ? `; ${diversityText}` : ''}${volumeText ? `; ${volumeText}` : ''}${policyText ? `; ${policyText}` : ''}.`
 }
 
 
@@ -1015,13 +1054,21 @@ function exerciseScore(
   if (previousMuscleCount > 1 && !preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score -= 6
   const recentMuscleCount = weeklyContext.recentMuscleCounts?.get(exercise.muscleKey) ?? 0
   if (recentMuscleCount > 1 && !preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score -= 18
+  // Issue #166: сессия тратит остаток недельной цели — группа с недобором идёт
+  // вперёд, выбравшая свою цель уступает место.
+  const remainingWeeklySets = weeklyContext.weeklyVolume?.[exercise.muscleKey]?.remainingSets
+  if (Number.isFinite(remainingWeeklySets)) {
+    if (remainingWeeklySets >= 3) score += 18
+    else if (remainingWeeklySets > 0) score += 8
+    else score -= 25
+  }
   if (exercise.targetWeight > 0) score += 1
   return score
 }
 
 function buildWeeklyContext(
   previousGeneratedWorkouts: Array<PreviousGeneratedWorkout | { scheduledDate: string; exercises: PreviousGeneratedWorkout['exercises'] }> = [],
-  { scheduledDate = '', profile }: { scheduledDate?: string; profile?: ProfileForGenerator } = {},
+  { scheduledDate = '', profile, weeklyVolume = null }: { scheduledDate?: string; profile?: ProfileForGenerator; weeklyVolume?: Record<string, WeeklyVolumeStatus> | null } = {},
 ): WeeklyContext {
   const previousExerciseIds = new Set<string>()
   const recentExerciseIds = new Set<string>()
@@ -1078,6 +1125,7 @@ function buildWeeklyContext(
     effectiveWorkoutsPerWeek,
     daysSincePreviousWorkout,
     calendarLoadStatus,
+    weeklyVolume: weeklyVolume ?? {},
   }
 }
 
@@ -1206,6 +1254,7 @@ function emptyWeeklyContext(): WeeklyContext {
     effectiveWorkoutsPerWeek: 3,
     daysSincePreviousWorkout: null,
     calendarLoadStatus: 'below_plan',
+    weeklyVolume: {},
   }
 }
 
