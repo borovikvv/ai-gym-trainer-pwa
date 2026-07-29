@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { GymScreen } from './GymScreen'
 import type { NextSetHint } from './gymTypes'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
+import type { ExerciseLog } from '../domain/workoutHistory'
 
 function makeExercise(partial: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name'>): ExercisePlan {
   return {
@@ -34,7 +35,11 @@ describe('GymScreen', () => {
     allSetsCompleted?: boolean
     activeSet?: { weight: number; reps: number; rpe: number; completed: boolean }
     timedExercise?: boolean
+    // Issue #163: анкета боли читает лог упражнения и уводит с экрана по
+    // красному флагу — обоим тестам нужен доступ к этим двум пропсам.
+    painLog?: Partial<ExerciseLog>
   } = {}) {
+    const navigate = vi.fn()
     const bench = makeExercise({
       id: 'bench-press',
       name: 'Жим лёжа',
@@ -57,7 +62,7 @@ describe('GymScreen', () => {
         activeWorkoutDay={workoutDay}
         activeExercise={bench}
         activeExerciseIndex={0}
-        activeLog={{ exerciseId: bench.id, pain: false, sets: [overrides.activeSet ?? { weight: 54.5, reps: 0, rpe: 7, completed: false }] }}
+        activeLog={{ exerciseId: bench.id, pain: false, sets: [overrides.activeSet ?? { weight: 54.5, reps: 0, rpe: 7, completed: false }], ...overrides.painLog }}
         activeSetIndex={0}
         previousSetsSummary="49.5×12"
         visibleNextSetRecommendation={overrides.recommendation ?? null}
@@ -66,7 +71,7 @@ describe('GymScreen', () => {
         draftStatus=""
         exerciseAddSuggestion={null}
         formatWeight={String}
-        navigate={vi.fn()}
+        navigate={navigate}
         openExerciseGuide={vi.fn()}
         openReplacementSheet={vi.fn()}
         openExercisePicker={vi.fn()}
@@ -83,9 +88,10 @@ describe('GymScreen', () => {
         applyCoachExerciseSuggestion={vi.fn()}
         acceptCoachDecision={vi.fn()}
         goToNextExercise={vi.fn()}
+        onUpdateExercisePain={vi.fn()}
       />,
     )
-    return { bench }
+    return { bench, navigate }
   }
 
   // Issue #114: карточка «Цель» отражает живого тренера, когда рекомендация
@@ -170,6 +176,7 @@ describe('GymScreen', () => {
         applyCoachExerciseSuggestion={vi.fn()}
         acceptCoachDecision={vi.fn()}
         goToNextExercise={vi.fn()}
+        onUpdateExercisePain={vi.fn()}
       />,
     )
 
@@ -222,11 +229,40 @@ describe('GymScreen', () => {
         applyCoachExerciseSuggestion={vi.fn()}
         acceptCoachDecision={vi.fn()}
         goToNextExercise={vi.fn()}
+        onUpdateExercisePain={vi.fn()}
       />,
     )
 
     await user.click(screen.getByRole('button', { name: /удалить текущее упражнение/i }))
 
     expect(removeCurrentExercise).toHaveBeenCalledTimes(1)
+  })
+
+  // Issue #163: анкету боли показываем только когда упражнение закрыто —
+  // раньше в тестах не было ни одного кейса с allSetsCompleted, и вся
+  // интеграция компонента с экраном оставалась непроверенной.
+  it('не показывает анкету боли, пока упражнение не закрыто', () => {
+    renderGym({ allSetsCompleted: false })
+
+    expect(screen.queryByTestId('pain-questionnaire')).not.toBeInTheDocument()
+  })
+
+  it('рендерит анкету боли, когда все подходы сделаны', () => {
+    renderGym({ allSetsCompleted: true })
+
+    expect(screen.getByTestId('pain-questionnaire')).toBeInTheDocument()
+  })
+
+  // Критерий #163: красный флаг обрывает тренировку, а не только показывает текст.
+  it('по красному флагу уводит с экрана зала на разбор', async () => {
+    const user = userEvent.setup()
+    const { navigate } = renderGym({
+      allSetsCompleted: true,
+      painLog: { pain: true, redFlags: ['numbness'] },
+    })
+
+    await user.click(screen.getByTestId('pain-stop-session'))
+
+    expect(navigate).toHaveBeenCalledWith('review')
   })
 })

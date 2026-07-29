@@ -286,14 +286,18 @@ export function useWorkoutSetActions({
     notify('Предыдущий подход подставлен')
   }
 
-  function markPain() {
+  // Issue #163: update exercise pain with location, intensity, red flags.
+  // Заменил markPain: тот ставил только булев признак и висел без вызовов с
+  // тех пор, как кнопку «Боль» убрали с экрана зала (#141, #142).
+  function updateExercisePain(
+    painData: Partial<Pick<ExerciseLog, 'pain' | 'painLocation' | 'painIntensity' | 'redFlags'>>,
+  ) {
     setLogs((current) => {
       const existing = current[activeExercise.id] ?? createExerciseLog(activeExercise)
-      const nextLogs = { ...current, [activeExercise.id]: { ...existing, pain: true } }
+      const nextLogs = { ...current, [activeExercise.id]: { ...existing, ...painData } }
       persistWorkoutDraft(nextLogs)
       return nextLogs
     })
-    notify('Боль отмечена. Автопрогрессия остановлена')
   }
 
   return {
@@ -306,7 +310,7 @@ export function useWorkoutSetActions({
     markSetDone,
     adjustWeight,
     copyPrevious,
-    markPain,
+    updateExercisePain,
   }
 }
 

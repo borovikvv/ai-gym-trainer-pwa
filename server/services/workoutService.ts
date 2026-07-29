@@ -6,6 +6,8 @@ import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
 import type { QualityPrescription } from '../../shared/workoutQuality.js'
 import { canonicalExerciseId } from '../../shared/exerciseIdentity.js'
+// Issue #163: словарь канала боли — им же валидируем то, что прислал браузер
+import { PAIN_ZONE_IDS, RED_FLAG_IDS, type PainLog, type PainLogEntry } from '../../shared/painChannel.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { cascadeRegenerateFutureWorkouts } from './plannedWorkoutService.js'
 import { saveTrainingRecord } from '../coachTrainingRecord.js'
@@ -29,6 +31,10 @@ interface ExerciseEntryInput {
   exerciseId?: string
   exerciseName?: string
   pain?: boolean
+  // Issue #163: pain details from post-exercise questionnaire
+  painLocation?: string
+  painIntensity?: number
+  redFlags?: string[]
   sets?: WorkoutSetInput[]
   nextRecommendedWeight?: number
   progressionType?: string
@@ -130,9 +136,11 @@ export async function loadWorkoutHistory(client: DbClient): Promise<WorkoutHisto
 
 export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHistoryEntryInput): Promise<{ coachPlan: SafeCoachPlan | null; debrief: ReturnType<typeof buildWorkoutDebrief> }> {
   const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry) as SanitizedEntry
+  // Issue #163: build pain_log from exercises with pain details
+  const painLog = buildPainLog(entry.exercises ?? [])
   await client.query(
-    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, user_rating, source)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pwa-api')
+    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, user_rating, pain_log, source)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pwa-api')
      on conflict (id) do update set
        user_id = excluded.user_id,
        workout_day_id = excluded.workout_day_id,
@@ -141,8 +149,9 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
        total_volume = excluded.total_volume,
        readiness_check_in = excluded.readiness_check_in,
        quality_score = excluded.quality_score,
-       user_rating = excluded.user_rating`,
-    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null, sanitizedEntry.userRating ?? null],
+       user_rating = excluded.user_rating,
+       pain_log = excluded.pain_log`,
+    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null, sanitizedEntry.userRating ?? null, painLog],
   )
 
   await client.query('delete from public.workout_sets where session_id = $1', [sanitizedEntry.id])
@@ -328,6 +337,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
         totalVolume: sanitizedEntry.totalVolume,
         qualityScore: sanitizedEntry.qualityScore ?? null,
         userRating: sanitizedEntry.userRating ?? null,
+        painLog,
         readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
         exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
           exerciseId: e.exerciseId ?? '',
@@ -467,6 +477,30 @@ function isValidCompletedSet(set: WorkoutSetInput): boolean {
 
 function roundGuardrailNumber(value: unknown): number {
   return Number(Number(value).toFixed(1))
+}
+
+// Issue #163: build pain_log object from exercise entries with pain details.
+// Returns a record keyed by exerciseId, or null if no exercise has pain data.
+// Локация и флаги приходят из браузера, поэтому в jsonb уезжает только то,
+// что есть в общем словаре (shared/painChannel) — как с RPE (#93) и оценкой
+// (#161), мусор отбрасываем, а не сохраняем «на всякий случай».
+function buildPainLog(exercises: ExerciseEntryInput[]): PainLog | null {
+  const log: PainLog = {}
+  for (const exercise of exercises) {
+    if (!exercise.pain && !exercise.painLocation && exercise.painIntensity === undefined && !exercise.redFlags?.length) continue
+    const entry: PainLogEntry = { pain: Boolean(exercise.pain) }
+    if (exercise.painLocation && PAIN_ZONE_IDS.includes(exercise.painLocation)) {
+      entry.painLocation = exercise.painLocation
+    }
+    const intensity = Number(exercise.painIntensity)
+    if (Number.isFinite(intensity) && intensity >= 0 && intensity <= 10) {
+      entry.painIntensity = Math.round(intensity)
+    }
+    const redFlags = (exercise.redFlags ?? []).filter((flag) => RED_FLAG_IDS.includes(flag))
+    if (redFlags.length > 0) entry.redFlags = redFlags
+    log[exercise.exerciseId ?? exercise.exerciseName ?? 'unknown'] = entry
+  }
+  return Object.keys(log).length > 0 ? log : null
 }
 
 // Фаза 2Б.1 (план развития): отметка «выполнено» — фундамент детекции

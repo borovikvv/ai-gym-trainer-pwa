@@ -16,6 +16,7 @@
 
 import type { DbClient } from './dbClient.js'
 import type { WorkoutHistoryEntry, ReadinessCheckIn } from '../shared/types.js'
+import type { PainLog, PainLogEntry } from '../shared/painChannel.js'
 // Issue #108: capture analysis flags and decision source in training records
 import type { ProgressAnalysis } from './coachProgressAnalysis.js'
 
@@ -73,6 +74,8 @@ export interface TrainingRecord {
     // Issue #161: user rating 1–5 after workout, collected on review screen.
     // Used by #88 (extractTrainingRecords) to filter records with feedback ≥ 3.
     userRating?: number | null
+    // Issue #163: pain log per exercise for fine-tuning data
+    painDetails?: Array<PainLogEntry & { exerciseId: string }>
   } | null
 }
 
@@ -89,6 +92,7 @@ export async function saveTrainingRecord(
     totalVolume: number
     qualityScore?: number | null
     userRating?: number | null
+    painLog?: PainLog | null
     readinessCheckIn?: ReadinessCheckIn | null
     exercises: WorkoutHistoryEntry['exercises']
   },
@@ -179,6 +183,10 @@ export async function saveTrainingRecord(
       totalVolume: entry.totalVolume,
       qualityScore: entry.qualityScore ?? null,
       userRating: entry.userRating ?? null,
+      // Issue #163: build pain details array from painLog map
+      painDetails: entry.painLog
+        ? Object.entries(entry.painLog).map(([exerciseId, entryValue]) => ({ exerciseId, ...entryValue }))
+        : undefined,
     },
   }
 
