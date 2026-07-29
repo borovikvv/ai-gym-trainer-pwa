@@ -394,7 +394,10 @@ function computeTrainingDataConfidence(history: WorkoutHistoryEntryInput[]): num
 }
 
 function classifyMuscleFatigue(group: MuscleGroupInfo): 'low' | 'medium' | 'high' | 'unknown' {
-  const recentlyTrained = group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1
+  // Issue #137: расширить окно recentlyTrained с 1 до 2 дней.
+  // Для PPL/upper-lower сплитов та же группа тренируется через 48-72ч,
+  // поэтому занятие позавчера должно давать как минимум 'medium'.
+  const recentlyTrained = group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 2
   if (group.recentMaxEffortSets > 0 || (recentlyTrained && group.recentHardSets >= 2)) return 'high'
   if (recentlyTrained || group.recentHardSets > 0) return 'medium'
   return 'low'
