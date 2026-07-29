@@ -37,6 +37,8 @@ export interface NormalizedProgramExercise {
   previous: string
   todayGoal: string
   coachFocus: string
+  /** Issue #173: 'load' | 'assistance' из exercise_library.weight_direction. */
+  weightDirection: string | null
 }
 
 export interface NormalizedLibraryExercise {
@@ -154,6 +156,9 @@ export function normalizeProgramExercise(row: DbRow): NormalizedProgramExercise 
     previous: String(row.previous_text ?? ''),
     todayGoal: String(row.today_goal ?? ''),
     coachFocus: String(row.coach_focus ?? ''),
+    // Issue #173: направление веса из справочника должно доезжать до клиента —
+    // иначе он вынужден определять его разбором названия.
+    weightDirection: (row.weight_direction as string | null) ?? null,
   }
 }
 

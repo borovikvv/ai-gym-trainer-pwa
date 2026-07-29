@@ -5,6 +5,7 @@
 import type { WorkoutDay  } from '../../shared/types'
 import type { WorkoutSetInput } from './progression'
 import { roundWeight } from '../lib/format'
+import { resolveWeightDirection, easierWeight } from '../../shared/weightDirection'
 
 const russianWeekdayOrder = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
@@ -52,6 +53,10 @@ export type NextSetRecommendationInput = {
   repMin: number
   repMax: number
   weightStep: number
+  /** Issue #173: название и направление веса упражнения. Для гравитрона вес —
+   * это помощь: «снизить нагрузку» = УВЕЛИЧИТЬ вес. Без них считаем 'load'. */
+  exerciseName?: string
+  weightDirection?: string | null
 }
 
 export type NextSetRecommendation = {
@@ -66,10 +71,17 @@ export function recommendNextSet(input: NextSetRecommendationInput): NextSetReco
 
   const step = input.weightStep > 0 ? input.weightStep : 0
   if (lastSet.rpe >= 10) {
+    // Issue #173: облегчение считаем через общий хелпер направления веса —
+    // для упражнений с помощью (гравитрон) это увеличение противовеса, а не
+    // вычитание. Прямое `weight - step` делало подход ТЯЖЕЛЕЕ сразу после
+    // отказного, причём именно эта подсказка автозаполняет поле веса в зале.
+    const direction = resolveWeightDirection({ name: input.exerciseName, weightDirection: input.weightDirection })
     return {
-      weight: Math.max(0, roundWeight(lastSet.weight - step)),
+      weight: roundWeight(easierWeight(lastSet.weight, step, direction)),
       reps: input.repMin,
-      reason: 'прошлый подход был на пределе — снижаем вес и держим нижнюю границу повторов',
+      reason: direction === 'assistance'
+        ? 'прошлый подход был на пределе — добавляем помощь и держим нижнюю границу повторов'
+        : 'прошлый подход был на пределе — снижаем вес и держим нижнюю границу повторов',
     }
   }
 

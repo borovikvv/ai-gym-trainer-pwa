@@ -18,6 +18,8 @@ interface PlannedExerciseRow {
   instruction: string
   common_mistakes: string[] | null
   alternatives: string[] | null
+  /** Issue #173: 'load' | 'assistance' из справочника. */
+  weight_direction: string | null
   sort_order: string | number
   sets_count: string | number
   rep_min: string | number
@@ -157,6 +159,7 @@ export async function loadPlannedWorkouts(client: DbClient, userId: string, opti
             el.instruction,
             el.common_mistakes,
             el.alternatives,
+            el.weight_direction,
             pwe.sort_order,
             pwe.sets_count,
             pwe.rep_min,

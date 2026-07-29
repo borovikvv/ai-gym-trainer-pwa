@@ -68,4 +68,47 @@ describe('next set recommendation', () => {
     expect(recommendation?.reps).toBe(8)
     expect(recommendation?.reason).toContain('на пределе')
   })
+
+  // Issue #173: на гравитроне вес — это противовес (помощь), больше = легче.
+  // Локальная подсказка автозаполняет поле веса в зале, поэтому вычитание шага
+  // делало подход ТЯЖЕЛЕЕ сразу после отказного.
+  it('adds assistance after a max-effort set on an assisted exercise (catalog field)', () => {
+    const recommendation = recommendNextSet({
+      completedSets: [{ weight: 35, reps: 5, rpe: 10, completed: true }],
+      repMin: 6,
+      repMax: 10,
+      weightStep: 5,
+      exerciseName: 'Подтягивания в гравитроне',
+      weightDirection: 'assistance',
+    })
+
+    expect(recommendation?.weight).toBe(40)
+    expect(recommendation?.reason).toContain('добавляем помощь')
+  })
+
+  it('falls back to the exercise name when the catalog field is missing', () => {
+    const recommendation = recommendNextSet({
+      completedSets: [{ weight: 35, reps: 5, rpe: 10, completed: true }],
+      repMin: 6,
+      repMax: 10,
+      weightStep: 5,
+      exerciseName: 'Подтягивания в гравитроне',
+    })
+
+    expect(recommendation?.weight).toBe(40)
+  })
+
+  it('keeps subtracting for a regular load exercise when direction is explicit', () => {
+    const recommendation = recommendNextSet({
+      completedSets: [{ weight: 50, reps: 6, rpe: 10, completed: true }],
+      repMin: 8,
+      repMax: 10,
+      weightStep: 2.5,
+      exerciseName: 'Жим лёжа',
+      weightDirection: 'load',
+    })
+
+    expect(recommendation?.weight).toBe(47.5)
+    expect(recommendation?.reason).toContain('снижаем вес')
+  })
 })

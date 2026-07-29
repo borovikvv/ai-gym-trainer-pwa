@@ -57,8 +57,12 @@ export function useCoachRecommendations({
       repMin: activeExercise.repMin,
       repMax: activeExercise.repMax,
       weightStep: activeExercise.weightStep,
+      // Issue #173: без направления веса локальная подсказка на гравитроне
+      // снижала противовес после отказного подхода, то есть делала тяжелее.
+      exerciseName: activeExercise.name,
+      weightDirection: activeExercise.weightDirection,
     }),
-    [activeExercise.repMin, activeExercise.repMax, activeExercise.weightStep],
+    [activeExercise.repMin, activeExercise.repMax, activeExercise.weightStep, activeExercise.name, activeExercise.weightDirection],
   )
 
   const localNextSetRecommendation = useMemo(

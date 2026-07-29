@@ -1,11 +1,18 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 import type { CompletedExerciseHistory, ReadinessCheckIn } from '../shared/types.js'
 import { formatWeight, pluralRu } from '../shared/format.js'
+// Issue #162: единая нормированная шкала качества (была продублирована здесь
+// и в src/domain/workoutDebrief.ts, обе упирались в кламп 100).
+import { computeWorkoutQualityScore, type QualityPrescription } from '../shared/workoutQuality.js'
+
+export { computeWorkoutQualityScore }
 
 interface ExerciseEntry extends CompletedExerciseHistory {
   exerciseName: string
   nextRecommendedWeight: number
   progressionReason: string
+  /** Предписание из плана — опора счёта качества (#162). */
+  planned?: QualityPrescription | null
 }
 
 interface WorkoutEntry {
@@ -28,53 +35,6 @@ interface WorkoutDebrief {
   nextChanges: string[]
   why: string
   qualityScore: number
-}
-
-export function computeWorkoutQualityScore(entry: WorkoutEntry = {}): number {
-  const exercises = entry.exercises ?? []
-  if (exercises.length === 0) return 0
-
-  let score = 75
-
-  for (const exercise of exercises) {
-    if (exercise.pain) {
-      score -= 15
-      continue
-    }
-
-    if (exercise.progressionType === 'increase') {
-      score += 5
-    } else if (['deload', 'pain', 'skip'].includes(exercise.progressionType)) {
-      score -= 5
-    }
-
-    const completedSets = (exercise.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
-    if (completedSets.length === 0) continue
-
-    let exerciseUnderControl = false
-    for (const set of completedSets) {
-      const rpe = Number(set.rpe)
-      if (rpe >= 7 && rpe <= 8) {
-        score += 2
-        exerciseUnderControl = true
-      } else if (rpe === 9) {
-        score -= 2
-      } else if (rpe >= 10) {
-        score -= 5
-      }
-    }
-
-    if (exerciseUnderControl) score += 3
-
-    if (completedSets.every((set) => Number(set.rpe) >= 1 && Number(set.rpe) <= 6)) {
-      score += 3
-    }
-  }
-
-  const totalVolume = Number(entry.totalVolume ?? 0)
-  if (totalVolume <= 0) score -= 20
-
-  return Math.max(0, Math.min(100, Math.round(score)))
 }
 
 export function buildWorkoutDebrief(entry: WorkoutEntry = {}): WorkoutDebrief {
