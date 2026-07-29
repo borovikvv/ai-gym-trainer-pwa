@@ -143,6 +143,12 @@ export interface MesocycleState {
   phase: MesocyclePhase
   phaseDescription: string
   weekInCycle: number
+  /**
+   * Issue #174: понедельник первой недели текущего блока (YYYY-MM-DD).
+   * Идентичность блока — по ней привязывается цель блока
+   * (public.mesocycle_block_goals). null, пока нет ни одной тренировки.
+   */
+  cycleStartedOn: string | null
   cycleLength: number
   loadingWeeks: number
   deloadWeeks: number

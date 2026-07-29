@@ -10,6 +10,8 @@ import { groupBy, normalizeLibraryExercise, normalizeProfile, normalizeProgramEx
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { loadVolumeLandmarkOverrides, saveVolumeLandmarkAdjustments } from '../volumeLandmarkOverrides.js'
 import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import { syncBlockGoal } from '../mesocycleBlockGoal.js'
+import { applyMemoryUpdates, loadGoals } from '../coachLongTermMemory.js'
 
 export async function loadProgramData(client: DbClient) {
   const [users, profileRows, dayRows, exerciseRows, libraryRows] = await Promise.all([
@@ -390,9 +392,47 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   } catch (err) {
     console.error('volumeLandmarkOverrides save failed (non-fatal):', (err as Error).message)
   }
+  // Issue #174: цель блока — поставить новому блоку, сверить факт с ожиданием,
+  // закрыть оценкой блок, который только что закончился. Сбой не фатален:
+  // состояние тренера возвращается и без цели.
+  let blockGoal = null
+  try {
+    blockGoal = (await syncBlockGoalForUser(client, userId, { profile, history, e1rmHistories, coachState })).goal
+  } catch (err) {
+    console.error('syncBlockGoal failed (non-fatal):', (err as Error).message)
+  }
   // profile / history / e1rmHistories are already computed here — expose them
   // so per-set live coach calls (liveCoachContext) don't re-query everything.
-  return { coachMemory, coachState, profile, history, e1rmHistories }
+  return { coachMemory, coachState, profile, history, e1rmHistories, blockGoal }
+}
+
+/**
+ * Issue #174: цель блока работает на долгосрочную цель пользователя (если та
+ * задана), а её оценка по завершении блока попадает в долгосрочную память —
+ * это то, что блок меняет в модели человека.
+ */
+async function syncBlockGoalForUser(
+  client: DbClient,
+  userId: string,
+  input: {
+    profile: NormalizedProfile
+    history: WorkoutHistoryEntry[]
+    e1rmHistories: ReturnType<typeof buildAllExerciseE1RMHistories>
+    coachState: CoachState
+  },
+) {
+  const macroGoals = await loadGoals(client, userId, 'active').catch(() => [])
+  const result = await syncBlockGoal(client, userId, {
+    profile: { age: input.profile?.age, level: input.profile?.level },
+    mesocycle: input.coachState.mesocycle,
+    e1rmHistories: input.e1rmHistories,
+    history: input.history,
+    preferredExerciseId: macroGoals.find((goal) => goal.exerciseId)?.exerciseId ?? null,
+  })
+  for (const outcome of result.closedOutcomes) {
+    await applyMemoryUpdates(client, userId, [{ op: 'add', kind: 'load_response', content: outcome }], 'rules')
+  }
+  return result
 }
 
 export async function loadRecentCoachDecisionLogs(client: DbClient, userId: string) {

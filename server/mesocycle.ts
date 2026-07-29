@@ -33,6 +33,7 @@ import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPo
 import { CANONICAL_MUSCLE_KEYS, labelFor } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, easierWeight } from '../shared/weightDirection.js'
 import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
+import { dateToDateOnly } from './utils.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -182,6 +183,8 @@ export function computeMesocycleState({
   return {
     phase: finalPhase,
     weekInCycle,
+    // Issue #174: идентичность блока для цели блока — понедельник его первой недели.
+    cycleStartedOn: weeks[cycleStartWeekIndex] ? dateToDateOnly(weeks[cycleStartWeekIndex].start) : null,
     cycleLength,
     loadingWeeks: config.loadingWeeks,
     deloadWeeks: config.deloadWeeks,

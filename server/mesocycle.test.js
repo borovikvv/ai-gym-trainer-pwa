@@ -96,6 +96,23 @@ describe('computeMesocycleState', () => {
     expect(result.cycleLength).toBe(5)
     expect(result.loadingWeeks).toBe(4)
   })
+
+  // Issue #174: цель блока привязывается к дате его старта.
+  it('exposes cycleStartedOn — Monday of the block first week', () => {
+    const result = computeMesocycleState({
+      profile: { workoutsPerWeek: 1 },
+      // Две недели подряд: блок начался в неделю 2026-06-01 (понедельник).
+      history: [session('2026-06-03T12:00:00'), session('2026-06-10T12:00:00')],
+      now: '2026-06-11T12:00:00',
+    })
+
+    expect(result.cycleStartedOn).toBe('2026-06-01')
+  })
+
+  it('cycleStartedOn is null without history', () => {
+    const result = computeMesocycleState({ profile: { workoutsPerWeek: 3 }, history: [], now: '2026-06-15T12:00:00Z' })
+    expect(result.cycleStartedOn).toBeNull()
+  })
 })
 
 // ---------------------------------------------------------------------------

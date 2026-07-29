@@ -96,7 +96,7 @@ Delete a draft.
 ### `GET /coach/state/:userId`
 Returns current coach state (readiness, recovery, mesocycle, muscleGroups, exercises).
 ### `GET /coach/memory/:userId`
-Returns coach memory (weekly balance, muscle group profiles, recommendations) + coach state + long-term `memoryFacts` and `goals` (Фаза 2).
+Returns coach memory (weekly balance, muscle group profiles, recommendations) + coach state + long-term `memoryFacts` and `goals` (Фаза 2) + `blockGoal` — измеримая цель текущего блока мезоцикла со сверкой факта с ожиданием (#174): `{ title, baselineValue, targetValue, expectedRatePerWeek, horizonWeeks, failureDropValue, failurePainSessions, progressNote, progressVerdict }`. `progressVerdict`: `achieved|ahead|on_track|regaining|behind|stalled|failed`.
 ### `POST /coach/next-set`
 Recommends the next set (weight, reps, rest, action). Фаза 1: the rules baseline is refined by a FAST-tier LLM using the full live context (readiness, mesocycle, exercise history, session so far), clamped by user policy; falls back to rules on any LLM failure. Every decision is logged to `coach_decision_log`.
 ```json

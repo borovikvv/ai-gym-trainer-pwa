@@ -115,14 +115,15 @@ coachRoutes.get('/coach/state/:userId', requireAllowedUserId, async (req, res) =
 
 coachRoutes.get('/coach/memory/:userId', requireAllowedUserId, async (req, res) => {
   const userId = String(req.params.userId)
-  const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, userId)
+  const { coachMemory, coachState, blockGoal } = await loadCoachMemoryForUser(pool, userId)
   // Фаза 2: единая «память тренера» — статистическая (coachMemory) +
   // долгосрочные факты и цели.
   const [memoryFacts, goals] = await Promise.all([
     loadMemoryFacts(pool, userId, 'active').catch(() => []),
     loadGoals(pool, userId, 'all').catch(() => []),
   ])
-  res.json({ ok: true, coachMemory, coachState, memoryFacts, goals })
+  // Issue #174: blockGoal — цель текущего блока со сверкой факта и ожидания.
+  res.json({ ok: true, coachMemory, coachState, memoryFacts, goals, blockGoal })
 })
 
 coachRoutes.post('/coach/live-strategy', requireAllowedUserId, async (req, res) => {
