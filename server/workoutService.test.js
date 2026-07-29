@@ -850,3 +850,50 @@ describe('Issue #165: таймстемп подхода доезжает до in
     expect(setsInsertParam(client.queries, 'performed_at')).toBeNull()
   })
 })
+
+// Issue #167: отклонение повторов от ожидания попадает в обучающую запись
+describe('Issue #167: training record captures rep deviation', () => {
+  it('передаёт агрегат отклонения повторов в saveTrainingRecord', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadRecentHistory } = await import('./services/programService.js')
+
+    vi.mocked(saveTrainingRecord).mockClear()
+    // Две сессии на 60 кг по 8 повторов в первом подходе → ожидание 8.
+    vi.mocked(loadRecentHistory).mockResolvedValue([
+      {
+        completedAt: '2026-07-01T18:00:00.000Z',
+        exercises: [{ exerciseId: 'bench-press', exerciseName: 'Жим лёжа', sets: [{ weight: 60, reps: 8, rpe: 7, completed: true }] }],
+      },
+      {
+        completedAt: '2026-07-08T18:00:00.000Z',
+        exercises: [{ exerciseId: 'bench-press', exerciseName: 'Жим лёжа', sets: [{ weight: 60, reps: 8, rpe: 7, completed: true }] }],
+      },
+    ])
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-167',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-15T18:00:00.000Z',
+      totalVolume: 3600,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 62.5,
+        progressionType: 'increase',
+        progressionReason: 'ok',
+        sets: [{ weight: 60, reps: 6, rpe: 8, completed: true }],
+      }],
+    })
+
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+
+    const [, entryArg] = vi.mocked(saveTrainingRecord).mock.calls[0]
+    expect(entryArg.repDeviation.avgDeviation).toBe(-2)
+    expect(entryArg.repDeviation.setsWithExpectation).toBe(1)
+    expect(entryArg.repDeviation.exercises[0].exerciseId).toBe('bench-press')
+  })
+})

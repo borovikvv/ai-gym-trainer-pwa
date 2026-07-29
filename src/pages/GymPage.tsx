@@ -41,6 +41,8 @@ interface GymPageProps {
   progressionSummary: import("../domain/progression").ProgressionResult[]
   totalVolume: number
   reviewDebrief: import("../domain/workoutDebrief").WorkoutDebrief | null | undefined
+  // Issue #167: отклонение фактических повторов от ожидаемых на том же весе
+  reviewRepDeviation: import("../domain/repExpectation").SessionRepDeviation | null | undefined
   userRating: number
   onUserRatingChange: (rating: number) => void
   isSavingWorkout: boolean
@@ -176,6 +178,7 @@ export function GymPage(props: GymPageProps) {
           progressionSummary={props.progressionSummary}
           totalVolume={props.totalVolume}
           debrief={props.reviewDebrief}
+          repDeviation={props.reviewRepDeviation}
           isSaving={props.isSavingWorkout}
           userRating={props.userRating}
           onUserRatingChange={props.onUserRatingChange}

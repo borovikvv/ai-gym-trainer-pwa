@@ -181,3 +181,38 @@ describe('WorkoutReviewScreen', () => {
     expect(checked).toEqual([3])
   })
 })
+
+// Issue #167: повторы против ожидания — показываем, но только когда ожидание есть
+describe('WorkoutReviewScreen — отклонение повторов (#167)', () => {
+  const repDeviation = {
+    exercises: [{
+      exerciseId: 'bench-press',
+      exerciseName: 'Жим лёжа',
+      sets: [{ setIndex: 1, weight: 60, actualReps: 9, expectedReps: 10, deviation: -1 }],
+      avgDeviation: -1,
+      setsWithExpectation: 1,
+      setsWithoutExpectation: 0,
+    }],
+    avgDeviation: -1,
+    setsWithExpectation: 1,
+    setsWithoutExpectation: 0,
+  }
+
+  it('показывает блок с отклонением по упражнениям', () => {
+    render(<WorkoutReviewScreen {...defaultProps} repDeviation={repDeviation} />)
+
+    expect(screen.getByTestId('review-rep-deviation')).toBeInTheDocument()
+    expect(screen.getAllByTestId('review-rep-deviation-row')).toHaveLength(1)
+  })
+
+  it('без ожидания блок не показывается — пустое число хуже отсутствия', () => {
+    render(
+      <WorkoutReviewScreen
+        {...defaultProps}
+        repDeviation={{ exercises: [], avgDeviation: null, setsWithExpectation: 0, setsWithoutExpectation: 4 }}
+      />,
+    )
+
+    expect(screen.queryByTestId('review-rep-deviation')).not.toBeInTheDocument()
+  })
+})

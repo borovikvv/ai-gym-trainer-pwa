@@ -3,11 +3,15 @@
 // «Тренер» debrief card, «На главную» button.
 import type { ProgressionResult } from '../domain/progression'
 import type { WorkoutDebrief } from '../../shared/types'
+import type { SessionRepDeviation } from '../domain/repExpectation'
 
 type WorkoutReviewScreenProps = {
   progressionSummary: ProgressionResult[]
   totalVolume: number
   debrief?: WorkoutDebrief | null
+  // Issue #167: отклонение фактических повторов от ожидаемых на том же весе.
+  // Показываем как есть — на решения тренера пока не влияет.
+  repDeviation?: SessionRepDeviation | null
   isSaving?: boolean
   // Issue #161: user rating 1–5, 0 = not rated yet
   userRating: number
@@ -20,6 +24,7 @@ export function WorkoutReviewScreen({
   progressionSummary,
   totalVolume,
   debrief,
+  repDeviation = null,
   isSaving = false,
   userRating,
   onUserRatingChange,
@@ -108,6 +113,27 @@ export function WorkoutReviewScreen({
         </div>
       )}
 
+      {/* Issue #167: повторы против ожидания на том же весе */}
+      {repDeviation && repDeviation.setsWithExpectation > 0 && (
+        <div className="review-section" data-testid="review-rep-deviation">
+          <h2>Повторы против ожидания</h2>
+          <div className="card review-debrief-card">
+            <p className="review-debrief__summary" data-testid="review-rep-deviation-summary">
+              {formatDeviation(repDeviation.avgDeviation)} к ожиданию на подход
+              {repDeviation.setsWithoutExpectation > 0 && ` · без ожидания ${repDeviation.setsWithoutExpectation} подх.`}
+            </p>
+            {repDeviation.exercises
+              .filter((exercise) => exercise.setsWithExpectation > 0)
+              .map((exercise) => (
+                <div className="review-exercise-row" key={exercise.exerciseId} data-testid="review-rep-deviation-row">
+                  <p>{exercise.exerciseName}</p>
+                  <span className="muted">{formatDeviation(exercise.avgDeviation)}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Issue #125: «Тренер» debrief card */}
       {debrief && (
         <div className="review-section">
@@ -172,4 +198,12 @@ export function WorkoutReviewScreen({
       </div>
     </section>
   )
+}
+
+// Issue #167: «+1» / «−0.7» / «в ожидании» — знак важнее числа.
+function formatDeviation(deviation: number | null): string {
+  if (deviation === null) return 'нет ожидания'
+  if (deviation === 0) return 'ровно в ожидании'
+  const rounded = Math.abs(deviation).toLocaleString('ru-RU')
+  return deviation > 0 ? `+${rounded} повт.` : `−${rounded} повт.`
 }
