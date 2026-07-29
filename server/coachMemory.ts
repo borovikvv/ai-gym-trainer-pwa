@@ -11,6 +11,7 @@ import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { completedSetsOf, daysBetween, clampNumber, roundNumber } from './lib/numeric.js'
+import { RECENTLY_TRAINED_DAYS } from './coachState.js'
 
 const TRAINER_PROFILE = 'Профиль тренера: персональный силовой тренер: безопасность, техника, постепенная прогрессия, восстановление и недельный баланс важнее случайного набора упражнений.'
 
@@ -344,13 +345,17 @@ function classifyMuscleStatus(group: MuscleGroupProfileExtended, profile: Profil
   if (group.pain) return 'avoid'
   if (profileIsReturningAfterBreak(profile) && group.key === 'legs' && group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 2) return 'avoid'
   if (group.fatigue === 'high') return 'fatigued'
-  if (group.fatigue === 'medium' || (group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1)) return 'medium'
+  // Отдельная проверка lastTrainedDaysAgo здесь не нужна: 'medium' по свежести
+  // уже выставляет classifyMuscleFatigue / classifyFatigue (RECENTLY_TRAINED_DAYS).
+  if (group.fatigue === 'medium') return 'medium'
   return 'ready'
 }
 
+// Fallback, когда coachState не дал fatigue по группе (coachMemory.ts:274).
+// Окно свежести — то же, что в classifyMuscleFatigue.
 function classifyFatigue(group: MuscleGroupProfileExtended): 'low' | 'medium' | 'high' | 'unknown' {
   if (group.maxEffortSetsLast7Days > 0 || group.heavySetsLast7Days >= 3) return 'high'
-  if (group.heavySetsLast7Days > 0 || (group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 1)) return 'medium'
+  if (group.heavySetsLast7Days > 0 || (group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= RECENTLY_TRAINED_DAYS)) return 'medium'
   return 'low'
 }
 

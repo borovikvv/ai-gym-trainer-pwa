@@ -80,6 +80,31 @@ describe('coach planning service', () => {
     )
   })
 
+  it('Issue #137: coachState считается на дату следующей тренировки, а не на момент завершения текущей', async () => {
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+    await planAndApplyNextWorkout(client, {
+      id: 'session-anchor',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      completedAt: '2026-06-08T12:00:00.000Z',
+      exercises: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          nextRecommendedWeight: 50,
+          sets: [{ weight: 50, reps: 6, rpe: 8, completed: true }],
+        },
+      ],
+    })
+
+    const logCall = client.query.mock.calls.find(([, params]) => params?.includes('coach_decision_log'))
+    const { inputs } = JSON.parse(logCall[1][4])
+    // Якорь на completedAt давал бы 0 — только что отработанная группа выглядела
+    // бы максимально уставшей на сессию, до которой ещё несколько дней отдыха.
+    expect(inputs.coachState.daysSinceLastWorkout).toBeGreaterThan(0)
+    expect(inputs.coachState.muscleGroups.chest.lastTrainedDaysAgo).toBeGreaterThan(0)
+  })
+
   it('Issue #95: falls back to rules when LLM call exceeds timeout (5s)', async () => {
     // Enable LLM path
     vi.stubEnv('OPENAI_API_KEY', 'test-key')

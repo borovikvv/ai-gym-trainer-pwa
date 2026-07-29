@@ -195,6 +195,67 @@ describe('Coach State', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Issue #137: окно RECENTLY_TRAINED_DAYS. Группа, тренированная позавчера, уже
+// не 'low' (иначе планировщик считает её свежей и даёт +30), но и не 'high' —
+// 'high' работает как хард-фильтр и остаётся окном в 1 день.
+// ---------------------------------------------------------------------------
+
+describe('Issue #137: muscle fatigue window', () => {
+  const now = new Date('2026-07-29T12:00:00.000Z')
+  const pushDay = [{
+    id: 'day-push',
+    dayKey: 'day-push',
+    name: 'Push',
+    exercises: [{ id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'грудь', targetWeight: 60, repMin: 8, repMax: 12 }],
+  }]
+
+  const stateAfterSession = ({ daysAgo, rpe }) => computeCoachState({
+    profile,
+    workoutDays: pushDay,
+    history: [{
+      id: `session-${daysAgo}d`,
+      userId: 'vyacheslav',
+      workoutDayId: 'day-push',
+      workoutDayName: 'Push',
+      completedAt: new Date(now.getTime() - daysAgo * 86_400_000).toISOString(),
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        muscleGroup: 'грудь',
+        pain: false,
+        sets: [
+          { weight: 60, reps: 10, rpe, completed: true },
+          { weight: 60, reps: 9, rpe, completed: true },
+        ],
+      }],
+    }],
+    now,
+  })
+
+  it('группа, тренированная позавчера, получает medium, а не low', () => {
+    const state = stateAfterSession({ daysAgo: 2, rpe: 7 })
+    expect(state.muscleGroups.chest).toMatchObject({ lastTrainedDaysAgo: 2, fatigue: 'medium' })
+  })
+
+  it('тяжёлая сессия позавчера не даёт high — хард-фильтр остаётся окном в 1 день', () => {
+    const state = stateAfterSession({ daysAgo: 2, rpe: 9 })
+    expect(state.muscleGroups.chest).toMatchObject({ lastTrainedDaysAgo: 2, fatigue: 'medium' })
+    expect(state.recoveryStatus).toBe('ready')
+    expect(state.readinessScore).toBeGreaterThanOrEqual(55)
+  })
+
+  it('тяжёлая сессия вчера по-прежнему даёт high', () => {
+    const state = stateAfterSession({ daysAgo: 1, rpe: 9 })
+    expect(state.muscleGroups.chest).toMatchObject({ lastTrainedDaysAgo: 1, fatigue: 'high' })
+  })
+
+  it('через 3 дня без тяжёлых подходов группа снова low', () => {
+    const state = stateAfterSession({ daysAgo: 3, rpe: 7 })
+    expect(state.muscleGroups.chest).toMatchObject({ lastTrainedDaysAgo: 3, fatigue: 'low' })
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Issue #173: lastWeight для упражнений с помощью (гравитрон).
 // «Лучший» подход = MIN помощи, а не MAX.
 // ---------------------------------------------------------------------------
