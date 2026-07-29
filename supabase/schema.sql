@@ -156,8 +156,6 @@ alter table public.workout_sessions add column if not exists quality_score integ
 alter table public.workout_sessions add column if not exists user_rating integer check (user_rating >= 1 and user_rating <= 5);
 -- Issue #163: pain log — per-exercise pain details (location, intensity, red flags)
 alter table public.workout_sessions add column if not exists pain_log jsonb;
--- Issue #165: client-side timestamp when the set was performed
-alter table public.workout_sets add column if not exists performed_at timestamptz;
 
 create table if not exists public.workout_sets (
   id uuid primary key default gen_random_uuid(),
@@ -175,6 +173,9 @@ create table if not exists public.workout_sets (
   created_at timestamptz not null default now(),
   unique(session_id, exercise_id, set_index)
 );
+
+-- Issue #165: client-side timestamp when the set was performed
+alter table public.workout_sets add column if not exists performed_at timestamptz;
 
 create table if not exists public.progression_events (
   id uuid primary key default gen_random_uuid(),

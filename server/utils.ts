@@ -239,7 +239,6 @@ export function normalizeSet<T extends Record<string, unknown>>(row: T): T & {
   rpe: number
   completed: boolean
   pain: boolean
-  performedAt?: string | null
 } {
   return {
     ...row,
@@ -248,8 +247,6 @@ export function normalizeSet<T extends Record<string, unknown>>(row: T): T & {
     rpe: Number(row.rpe),
     completed: Boolean(row.completed),
     pain: Boolean(row.pain),
-    // Issue #165: camelCase from snake_case DB column
-    performedAt: row.performed_at ? String(row.performed_at) : null,
   }
 }
 

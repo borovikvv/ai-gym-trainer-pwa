@@ -177,7 +177,8 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
           set.rpe,
           Boolean(set.completed),
           Boolean(exercise.pain),
-          'performedAt' in set && typeof set.performedAt === 'string' ? set.performedAt : null,
+          // Issue #165: уже провалидировано в sanitizeWorkoutHistoryEntry
+          set.performedAt ?? null,
         ],
       )
     }
