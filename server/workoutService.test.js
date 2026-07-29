@@ -653,9 +653,9 @@ describe('Issue #163: детали боли из анкеты доезжают �
         'bench-press': {
           exerciseId: 'bench-press',
           pain: true,
-          painLocation: 'плечо',
+          painLocation: 'shoulder',
           painIntensity: 7,
-          redFlags: ['онемение'],
+          redFlags: ['numbness'],
           sets: [{ weight: 50, reps: 8, rpe: 8, completed: true }],
         },
       },
@@ -663,9 +663,9 @@ describe('Issue #163: детали боли из анкеты доезжают �
 
     // Анкета не должна теряться уже на клиенте — иначе серверу нечего писать.
     expect(entry.exercises[0]).toMatchObject({
-      painLocation: 'плечо',
+      painLocation: 'shoulder',
       painIntensity: 7,
-      redFlags: ['онемение'],
+      redFlags: ['numbness'],
     })
 
     const queries = []
@@ -685,7 +685,7 @@ describe('Issue #163: детали боли из анкеты доезжают �
       .findIndex((column) => column.trim() === 'pain_log')
 
     expect(insert.params[painLogParamIndex]).toEqual({
-      'bench-press': { pain: true, painLocation: 'плечо', painIntensity: 7, redFlags: ['онемение'] },
+      'bench-press': { pain: true, painLocation: 'shoulder', painIntensity: 7, redFlags: ['numbness'] },
     })
   })
 
@@ -732,5 +732,47 @@ describe('Issue #163: детали боли из анкеты доезжают �
       .findIndex((column) => column.trim() === 'pain_log')
 
     expect(insert.params[painLogParamIndex]).toBeNull()
+  })
+
+  it('отбрасывает зоны и флаги, которых нет в общем словаре', async () => {
+    const queries = []
+    const client = {
+      query: vi.fn().mockImplementation(async (text, params) => {
+        queries.push({ text, params })
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-163-junk',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-29T12:00:00Z',
+      totalVolume: 400,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: true,
+        painLocation: '<script>alert(1)</script>',
+        painIntensity: 99,
+        redFlags: ['numbness', 'выдуманный флаг'],
+        nextRecommendedWeight: 50,
+        progressionType: 'pain',
+        progressionReason: '',
+        sets: [{ weight: 50, reps: 8, rpe: 8, completed: true }],
+      }],
+    })
+
+    const insert = queries.find((q) => q.text.includes('insert into public.workout_sessions'))
+    const painLogParamIndex = insert.text
+      .slice(insert.text.indexOf('('), insert.text.indexOf(')'))
+      .split(',')
+      .findIndex((column) => column.trim() === 'pain_log')
+
+    // Признак боли остаётся — это ответ пользователя. Мусор в деталях не сохраняем.
+    expect(insert.params[painLogParamIndex]).toEqual({
+      'bench-press': { pain: true, redFlags: ['numbness'] },
+    })
   })
 })

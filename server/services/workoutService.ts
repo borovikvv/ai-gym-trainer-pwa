@@ -6,6 +6,8 @@ import { planAndApplyNextWorkout } from './coachPlanningService.js'
 import { buildWorkoutDebrief, saveWorkoutDebriefRecommendation } from '../coachDebrief.js'
 import type { QualityPrescription } from '../../shared/workoutQuality.js'
 import { canonicalExerciseId } from '../../shared/exerciseIdentity.js'
+// Issue #163: словарь канала боли — им же валидируем то, что прислал браузер
+import { PAIN_ZONE_IDS, RED_FLAG_IDS, type PainLog, type PainLogEntry } from '../../shared/painChannel.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { cascadeRegenerateFutureWorkouts } from './plannedWorkoutService.js'
 import { saveTrainingRecord } from '../coachTrainingRecord.js'
@@ -326,17 +328,17 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
       }
     }
 
-	    await saveTrainingRecord(
-	      client,
-	      {
-	        userId: sanitizedEntry.userId!,
-	        id: sanitizedEntry.id!,
-	        completedAt: sanitizedEntry.completedAt!,
-	        totalVolume: sanitizedEntry.totalVolume,
-	        qualityScore: sanitizedEntry.qualityScore ?? null,
-	        userRating: sanitizedEntry.userRating ?? null,
-	        painLog: painLog as Record<string, { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] }> | null | undefined,
-	        readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
+    await saveTrainingRecord(
+      client,
+      {
+        userId: sanitizedEntry.userId!,
+        id: sanitizedEntry.id!,
+        completedAt: sanitizedEntry.completedAt!,
+        totalVolume: sanitizedEntry.totalVolume,
+        qualityScore: sanitizedEntry.qualityScore ?? null,
+        userRating: sanitizedEntry.userRating ?? null,
+        painLog,
+        readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
         exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
           exerciseId: e.exerciseId ?? '',
           exerciseName: e.exerciseName ?? '',
@@ -479,16 +481,23 @@ function roundGuardrailNumber(value: unknown): number {
 
 // Issue #163: build pain_log object from exercise entries with pain details.
 // Returns a record keyed by exerciseId, or null if no exercise has pain data.
-function buildPainLog(exercises: ExerciseEntryInput[]): Record<string, { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] }> | null {
-  const log: Record<string, { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] }> = {}
+// Локация и флаги приходят из браузера, поэтому в jsonb уезжает только то,
+// что есть в общем словаре (shared/painChannel) — как с RPE (#93) и оценкой
+// (#161), мусор отбрасываем, а не сохраняем «на всякий случай».
+function buildPainLog(exercises: ExerciseEntryInput[]): PainLog | null {
+  const log: PainLog = {}
   for (const exercise of exercises) {
     if (!exercise.pain && !exercise.painLocation && exercise.painIntensity === undefined && !exercise.redFlags?.length) continue
-    const entry: { pain: boolean; painLocation?: string; painIntensity?: number; redFlags?: string[] } = { pain: Boolean(exercise.pain) }
-    if (exercise.painLocation) entry.painLocation = exercise.painLocation
-    if (exercise.painIntensity !== undefined && exercise.painIntensity >= 0 && exercise.painIntensity <= 10) {
-      entry.painIntensity = Math.round(exercise.painIntensity)
+    const entry: PainLogEntry = { pain: Boolean(exercise.pain) }
+    if (exercise.painLocation && PAIN_ZONE_IDS.includes(exercise.painLocation)) {
+      entry.painLocation = exercise.painLocation
     }
-    if (exercise.redFlags?.length) entry.redFlags = exercise.redFlags
+    const intensity = Number(exercise.painIntensity)
+    if (Number.isFinite(intensity) && intensity >= 0 && intensity <= 10) {
+      entry.painIntensity = Math.round(intensity)
+    }
+    const redFlags = (exercise.redFlags ?? []).filter((flag) => RED_FLAG_IDS.includes(flag))
+    if (redFlags.length > 0) entry.redFlags = redFlags
     log[exercise.exerciseId ?? exercise.exerciseName ?? 'unknown'] = entry
   }
   return Object.keys(log).length > 0 ? log : null

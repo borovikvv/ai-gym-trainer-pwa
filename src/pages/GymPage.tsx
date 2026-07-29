@@ -1,7 +1,6 @@
 import type { WorkoutDay, ExercisePlan, Screen } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
 import type { NextSetHint } from '../components/gymTypes'
-
 import type { ExerciseAddSuggestion } from '../domain/exerciseSuggestion'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import { useProgram } from '../contexts/ProgramContext'

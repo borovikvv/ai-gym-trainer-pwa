@@ -246,6 +246,7 @@ export function GymScreen({
           painIntensity={activeLog.painIntensity}
           redFlags={activeLog.redFlags}
           onPainChange={onUpdateExercisePain}
+          onStopSession={() => navigate('review')}
         />
       )}
 

@@ -2224,13 +2224,31 @@
   margin: 0;
 }
 .pain-questionnaire__warning {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 12px;
   border-radius: 10px;
-  background: var(--danger-bg, #fef2f2);
+  /* Подложка выводится из --danger, поэтому живёт в обеих темах сама. */
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
   border: 1px solid var(--danger);
   color: var(--danger);
   font-size: 13px;
   line-height: 1.4;
+}
+.pain-questionnaire__warning-text {
+  margin: 0;
+}
+.pain-questionnaire__stop-btn {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /* --- 6. Button font-weights --- */

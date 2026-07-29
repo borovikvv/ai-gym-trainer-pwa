@@ -2,27 +2,7 @@
 // Shown after all sets of an exercise are completed. Skippable.
 
 import type { ExerciseLog } from '../domain/workoutHistory'
-
-const BODY_ZONES = [
-  'грудь',
-  'спина',
-  'плечо',
-  'шея',
-  'поясница',
-  'таз/бедро',
-  'колено',
-  'голень/стопа',
-  'рука/кисть',
-] as const
-
-const RED_FLAGS = [
-  'онемение',
-  'покалывание',
-  'простреливающая боль по конечности',
-  'боль в покое',
-  'головокружение',
-  'одышка не по нагрузке',
-] as const
+import { PAIN_ZONES, RED_FLAGS } from '../../shared/painChannel'
 
 type PainQuestionnaireProps = {
   pain: boolean
@@ -30,6 +10,9 @@ type PainQuestionnaireProps = {
   painIntensity?: number
   redFlags?: string[]
   onPainChange: (update: Partial<Pick<ExerciseLog, 'pain' | 'painLocation' | 'painIntensity' | 'redFlags'>>) => void
+  // Issue #163: красный флаг — не «боль 9», а повод прекратить тренировку.
+  // Предупреждения текстом мало: даём действие, которое реально её обрывает.
+  onStopSession: () => void
 }
 
 export function PainQuestionnaire({
@@ -38,6 +21,7 @@ export function PainQuestionnaire({
   painIntensity,
   redFlags = [],
   onPainChange,
+  onStopSession,
 }: PainQuestionnaireProps) {
   const hasRedFlags = redFlags.length > 0
 
@@ -75,15 +59,16 @@ export function PainQuestionnaire({
           <div className="pain-questionnaire__section">
             <span className="pain-questionnaire__label">Где?</span>
             <div className="pain-questionnaire__zones">
-              {BODY_ZONES.map((zone) => (
+              {PAIN_ZONES.map((zone) => (
                 <button
-                  key={zone}
+                  key={zone.id}
                   type="button"
-                  className={`pain-questionnaire__chip${painLocation === zone ? ' pain-questionnaire__chip--active' : ''}`}
-                  onClick={() => onPainChange({ painLocation: painLocation === zone ? undefined : zone })}
-                  data-testid={`pain-loc-${zone}`}
+                  className={`pain-questionnaire__chip${painLocation === zone.id ? ' pain-questionnaire__chip--active' : ''}`}
+                  onClick={() => onPainChange({ painLocation: painLocation === zone.id ? undefined : zone.id })}
+                  aria-pressed={painLocation === zone.id}
+                  data-testid={`pain-loc-${zone.id}`}
                 >
-                  {zone}
+                  {zone.label}
                 </button>
               ))}
             </div>
@@ -116,19 +101,19 @@ export function PainQuestionnaire({
             <span className="pain-questionnaire__label">Было что-то из этого?</span>
             <div className="pain-questionnaire__flags">
               {RED_FLAGS.map((flag) => (
-                <label key={flag} className="pain-questionnaire__flag" data-testid={`pain-flag-${flag}`}>
+                <label key={flag.id} className="pain-questionnaire__flag" data-testid={`pain-flag-${flag.id}`}>
                   <input
                     type="checkbox"
-                    checked={redFlags.includes(flag)}
+                    checked={redFlags.includes(flag.id)}
                     onChange={(e) => {
                       const next = e.target.checked
-                        ? [...redFlags, flag]
-                        : redFlags.filter((f) => f !== flag)
+                        ? [...redFlags, flag.id]
+                        : redFlags.filter((f) => f !== flag.id)
                       onPainChange({ redFlags: next })
                     }}
-                    data-testid={`pain-flag-input-${flag}`}
+                    data-testid={`pain-flag-input-${flag.id}`}
                   />
-                  <span>{flag}</span>
+                  <span>{flag.label}</span>
                 </label>
               ))}
             </div>
@@ -137,7 +122,18 @@ export function PainQuestionnaire({
           {/* Red flag warning */}
           {hasRedFlags && (
             <div className="pain-questionnaire__warning" role="alert" data-testid="pain-red-flag-warning">
-              <b>Остановитесь.</b> Рекомендуем обратиться к врачу.
+              <p className="pain-questionnaire__warning-text">
+                <b>Остановитесь.</b> Такие симптомы не разминаются и не «дотерпливаются». Рекомендуем
+                завершить тренировку и обратиться к врачу.
+              </p>
+              <button
+                type="button"
+                className="pain-questionnaire__stop-btn"
+                onClick={onStopSession}
+                data-testid="pain-stop-session"
+              >
+                Завершить тренировку
+              </button>
             </div>
           )}
         </div>
