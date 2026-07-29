@@ -1,4 +1,5 @@
 import type { AgeRecoveryPhase } from '../shared/types.js'
+import { harderWeight, easierWeight, type WeightDirection } from '../shared/weightDirection.js'
 
 type MaxIntensity = 'controlled' | 'controlled_aggressive'
 type ProgressionAggressiveness = 'conservative' | 'controlled_aggressive'
@@ -116,6 +117,8 @@ export interface ClampNextSetInput {
   lastSet?: { weight?: number; reps?: number; rpe?: number } | null
   weightStep?: number
   pain?: boolean
+  /** Issue #173: 'load' | 'assistance' — для гравитрона границы инвертируются. */
+  weightDirection?: string | null
   /**
    * Упражнение на время (планка и т.п.): reps — это СЕКУНДЫ удержания,
    * а вес всегда 0. Без этого флага LLM, спутавший секунды с килограммами,
@@ -156,8 +159,14 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
       // (Олег: 1 step), and never up at all right after a near-failure set
       // for no-failure users.
       const maxUpSteps = policy.allowFailureSets === false && Number.isFinite(lastRpe) && lastRpe >= 8 ? 0 : policy.maxWeightJumpSteps
-      const lower = Math.max(0, lastWeight - 2 * step)
-      const upper = lastWeight + maxUpSteps * step
+      // Issue #173: «вверх» = прогрессия (тяжелее), «вниз» = регрессия (легче).
+      // Для гравитрона прогрессия — это СНИЖЕНИЕ веса, поэтому числовые
+      // границы выводятся из направления, а не захардкожены как ±step.
+      const direction: WeightDirection = input.weightDirection === 'assistance' ? 'assistance' : 'load'
+      const harderBound = harderWeight(lastWeight, maxUpSteps * step, direction)
+      const easierBound = easierWeight(lastWeight, 2 * step, direction)
+      const lower = Math.min(harderBound, easierBound)
+      const upper = Math.max(harderBound, easierBound)
       weight = Math.min(upper, Math.max(lower, weight))
     }
 

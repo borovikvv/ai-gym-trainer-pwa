@@ -60,6 +60,8 @@ export function buildProgressDashboard(input: {
   history: WorkoutHistoryEntry[]
   workoutDays: WorkoutDay[]
   now?: Date
+  /** Issue #173: вес тела — для e1RM упражнений с помощью (гравитрон). */
+  bodyWeightKg?: number | null
 }): ProgressDashboard {
   const now = input.now ?? new Date()
   const recentCutoffMs = now.getTime() - 14 * 24 * 60 * 60 * 1000
@@ -117,7 +119,7 @@ export function buildProgressDashboard(input: {
       source: 'правила прогрессии',
     }))
 
-  const e1RMHistories = buildAllExerciseE1RMHistories(input.history)
+  const e1RMHistories = buildAllExerciseE1RMHistories(input.history, { bodyWeightKg: input.bodyWeightKg })
     .slice(0, 8)
     .map((h: ExerciseE1RMHistory) => ({
       exerciseId: h.exerciseId,

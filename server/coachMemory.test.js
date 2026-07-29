@@ -365,3 +365,82 @@ describe('Issue #99: currentWorkingWeight after deload/recovery', () => {
     expect(memory.exerciseProfiles['bench-press'].currentWorkingWeight).toBe(57.5)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #173: currentWorkingWeight для упражнений с помощью (гравитрон).
+// Помощь: МЕНЬШЕ вес = сильнее. Рабочий вес = MIN помощи за 3 сессии.
+// ---------------------------------------------------------------------------
+
+describe('Issue #173: currentWorkingWeight for assisted exercises', () => {
+  const gravitronLibrary = [
+    { id: 'assisted-pull-up', name: 'Подтягивания в гравитроне', muscleGroup: 'Спина', targetWeight: 35, repMin: 6, repMax: 10, weightDirection: 'assistance' },
+  ]
+  const gravitronSession = (id, completedAt, weights) => ({
+    id,
+    userId: 'vyacheslav',
+    workoutDayId: `generated-${id}`,
+    workoutDayName: 'силовая',
+    completedAt,
+    totalVolume: 1000,
+    exercises: [{
+      exerciseId: 'assisted-pull-up',
+      exerciseName: 'Подтягивания в гравитроне',
+      pain: false,
+      nextRecommendedWeight: weights[0],
+      progressionType: 'hold',
+      progressionReason: '',
+      sets: weights.map((weight) => ({ weight, reps: 8, rpe: 7, completed: true })),
+    }],
+  })
+  // Свежая → старая: сильнейшая работа 16.5 (последняя), середина 25, худшая 30.
+  const gravitronHistory = [
+    gravitronSession('latest', '2026-07-26T18:00:00.000Z', [19, 16.5]),
+    gravitronSession('mid', '2026-07-22T18:00:00.000Z', [25]),
+    gravitronSession('oldest', '2026-07-18T18:00:00.000Z', [30]),
+  ]
+
+  it('берёт MIN помощи за 3 сессии (сильнейшую работу), а не MAX', () => {
+    const memory = computeCoachMemory({
+      profile,
+      exerciseLibrary: gravitronLibrary,
+      history: gravitronHistory,
+      now: new Date('2026-07-28T12:00:00.000Z'),
+    })
+
+    // min(16.5, 25, 30) = 16.5 — максимум помощи (30) был бы ХУДШЕЙ сессией
+    expect(memory.exerciseProfiles['assisted-pull-up'].currentWorkingWeight).toBe(16.5)
+  })
+
+  it('работает по названию, если поле weightDirection не передано', () => {
+    const libraryWithoutField = gravitronLibrary.map((exercise) => {
+      const copy = { ...exercise }
+      delete copy.weightDirection
+      return copy
+    })
+    const memory = computeCoachMemory({
+      profile,
+      exerciseLibrary: libraryWithoutField,
+      history: gravitronHistory,
+      now: new Date('2026-07-28T12:00:00.000Z'),
+    })
+
+    expect(memory.exerciseProfiles['assisted-pull-up'].currentWorkingWeight).toBe(16.5)
+  })
+
+  it('при боли в последней сессии берёт MIN внутри неё, а не MAX', () => {
+    const historyWithPain = gravitronHistory.map((s, i) =>
+      i === 0
+        ? { ...s, exercises: s.exercises.map((e) => ({ ...e, pain: true })) }
+        : s,
+    )
+    const memory = computeCoachMemory({
+      profile,
+      exerciseLibrary: gravitronLibrary,
+      history: historyWithPain,
+      now: new Date('2026-07-28T12:00:00.000Z'),
+    })
+
+    // sets последней сессии: 19 и 16.5 → min = 16.5
+    expect(memory.exerciseProfiles['assisted-pull-up'].currentWorkingWeight).toBe(16.5)
+  })
+})

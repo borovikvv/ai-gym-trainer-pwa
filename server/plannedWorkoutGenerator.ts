@@ -19,6 +19,7 @@ import { buildCoachDecision } from './coachDecision.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { resolveWeightDirection, harderWeight, easierWeight, strongerOf } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
@@ -128,6 +129,9 @@ interface LibraryExerciseInput {
   weight_step?: number
   restSeconds?: number
   rest_seconds?: number
+  /** Issue #173: 'load' | 'assistance' из справочника (weight_direction). */
+  weightDirection?: string | null
+  weight_direction?: string | null
 }
 
 interface NormalizedLibraryExercise {
@@ -141,6 +145,8 @@ interface NormalizedLibraryExercise {
   targetWeight: number
   weightStep: number
   restSeconds: number
+  /** Issue #173: направление веса из справочника; null = определить по имени. */
+  weightDirection: string | null
 }
 
 interface PreviousGeneratedWorkout {
@@ -187,6 +193,8 @@ interface GeneratedExercise {
   coachFocus: string
   reason: string
   sortOrder?: number
+  /** Issue #173: направление веса — доезжает до LLM-клампа предписаний. */
+  weightDirection?: string | null
 }
 
 interface GeneratedPlannedWorkout {
@@ -480,6 +488,7 @@ async function refineBaselinePrescriptions({
     weightStep: exercise.weightStep,
     coachFocus: exercise.coachFocus,
     currentWorkingWeight: Number(coachMemory?.exerciseProfiles?.[exercise.exerciseId]?.currentWorkingWeight ?? NaN) || null,
+    weightDirection: exercise.weightDirection ?? null,
   }))
   const alternativesById = new Map(allowedAlternatives.map((exercise) => [exercise.id, exercise]))
 
@@ -821,8 +830,12 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   // сохраняет инвариант #136: план не опускается ниже фактического рабочего веса.
   const programWeight = Number(exercise.targetWeight)
   const weightCandidates = [historicWeight, coachWorkingWeight, programWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
+  // Issue #173: «сильнейший» кандидат зависит от направления веса. Для
+  // обычных упражнений это максимум, для гравитрона (помощь) — минимум:
+  // инвариант #136 там работает в обратную сторону (помощь не растёт).
+  const direction = resolveWeightDirection(exercise)
   const baseWeight = weightCandidates.length > 0
-    ? Math.max(...weightCandidates)
+    ? weightCandidates.reduce((best, weight) => strongerOf(best, weight, direction))
     : exercise.targetWeight
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
@@ -833,7 +846,7 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   const hasRecentWorkingWeight = Boolean(recent) && Number.isFinite(historicWeight)
   const policy = coachDecision?.exercisePolicies?.[exercise.id]
   const shouldConsolidate = policy === 'consolidate'
-  let targetWeight = roundWeight(lowReadiness && baseWeight > 0 && !hasRecentWorkingWeight ? Math.max(0, baseWeight - exercise.weightStep) : baseWeight)
+  let targetWeight = roundWeight(lowReadiness && baseWeight > 0 && !hasRecentWorkingWeight ? easierWeight(baseWeight, exercise.weightStep, direction) : baseWeight)
 
   // Issue #106: react to per-exercise analysis flags from #105.
   // These override the default weight progression based on e1RM trends.
@@ -841,12 +854,12 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     const step = Math.max(0, Number(exercise.weightStep ?? 2.5))
     switch (exerciseFlag.recommendation) {
       case 'increase_weight':
-        // e1RM trending up — push the weight one step above the base
-        if (targetWeight > 0) targetWeight = roundWeight(targetWeight + step)
+        // e1RM trending up — один шаг ТЯЖЕЛЕЕ базы (для гравитрона = меньше помощи, #173)
+        if (targetWeight > 0) targetWeight = roundWeight(harderWeight(targetWeight, step, direction))
         break
       case 'decrease_weight':
-        // e1RM trending down (non-deload) — back off one step
-        if (targetWeight > 0) targetWeight = roundWeight(Math.max(0, targetWeight - step))
+        // e1RM trending down (non-deload) — один шаг ЛЕГЧЕ (для гравитрона = больше помощи, #173)
+        if (targetWeight > 0) targetWeight = roundWeight(easierWeight(targetWeight, step, direction))
         break
       case 'consolidate':
         // Hold the weight, don't increase, keep intensity easy
@@ -887,7 +900,7 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
       setsCount,
       intensityTarget,
       weightStep: exercise.weightStep,
-    }, mesocyclePhase)
+    }, mesocyclePhase, direction)
     targetWeight = roundWeight(periodized.targetWeight)
     repMin = periodized.repMin
     repMax = periodized.repMax
@@ -904,6 +917,8 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   let deloadNote: string | null = null
   if (isDeloadWeek(mesocycleState as Parameters<typeof isDeloadWeek>[0])) {
     const deload = applyDeloadReduction({
+      name: exercise.name,
+      weightDirection: exercise.weightDirection,
       setsCount,
       targetWeight,
       repMin,
@@ -930,6 +945,7 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     weightStep: exercise.weightStep,
     restSeconds,
     intensityTarget,
+    weightDirection: direction,
     coachFocus: `${exercise.name}: ${shouldConsolidate && !deloadNote ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}${deloadNote ? `. ${deloadNote}` : ''}.`,
     reason: reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext, policy }),
   }
@@ -1140,6 +1156,7 @@ function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): Norm
     targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
     weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
     restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
+    weightDirection: (exercise.weightDirection ?? exercise.weight_direction ?? null) as string | null,
   })).filter((exercise) => exercise.id && exercise.name)
 }
 

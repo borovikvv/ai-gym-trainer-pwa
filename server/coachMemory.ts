@@ -9,6 +9,7 @@ import type {
 } from '../shared/types.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from '../shared/muscleGroups.js'
+import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { completedSetsOf, daysBetween, clampNumber, roundNumber } from './lib/numeric.js'
 
 const TRAINER_PROFILE = 'Профиль тренера: персональный силовой тренер: безопасность, техника, постепенная прогрессия, восстановление и недельный баланс важнее случайного набора упражнений.'
@@ -36,6 +37,8 @@ interface LibraryExerciseInput {
   rep_min?: number
   repMax?: number
   rep_max?: number
+  weightDirection?: string | null
+  weight_direction?: string | null
 }
 
 interface NormalizedLibraryExercise {
@@ -46,6 +49,7 @@ interface NormalizedLibraryExercise {
   targetWeight: number
   repMin: number
   repMax: number
+  weightDirection: string | null
 }
 
 interface ComputeCoachMemoryInput {
@@ -190,12 +194,21 @@ function buildExerciseProfiles({ library, history, profile }: BuildExerciseProfi
     const RECENT_SESSIONS_FOR_WORKING_WEIGHT = 3
     const recentSessions = sessions.slice(0, RECENT_SESSIONS_FOR_WORKING_WEIGHT)
     const latestHadPain = Boolean(latest.exercise.pain)
+    // Issue #173: «сильнейший» подход зависит от направления веса. Для
+    // гравитрона (помощь) это MIN веса, а не MAX: максимум помощи — худшая
+    // сессия, и запоминать её как рабочий вес делает прогрессию невозможной.
+    const direction = resolveWeightDirection(exercise)
+    const strongerSet = (best: { weight?: number }, set: { weight?: number }) =>
+      strongerOf(Number(set.weight ?? 0), Number(best.weight ?? 0), direction) === Number(set.weight ?? 0) ? set : best
     const topWeight = latestHadPain
-      ? sets.reduce((best, set) => Number(set.weight ?? 0) > Number(best.weight ?? 0) ? set : best, lastSet)
+      ? sets.reduce(strongerSet, lastSet)
       : recentSessions.reduce((best, sessionRecord) => {
           const sessionSets = completedSetsOf(sessionRecord.exercise)
-          const sessionBest = sessionSets.reduce((s, set) => Number(set.weight ?? 0) > Number(s.weight ?? 0) ? set : s, sessionSets.at(-1) ?? {})
-          return Number(sessionBest.weight ?? 0) > Number(best.weight ?? 0) ? sessionBest : best
+          // Сессия без выполненных подходов не участвует: пустой сет с
+          // weight=0 для гравитрона выглядел бы как «сильнейший» (min).
+          if (sessionSets.length === 0) return best
+          const sessionBest = sessionSets.reduce(strongerSet, sessionSets.at(-1) ?? {})
+          return strongerSet(best, sessionBest)
         }, lastSet)
     const hardSets = sets.filter((set) => Number(set.rpe) >= 9).length
     const maxEffortSets = sets.filter((set) => Number(set.rpe) >= 10).length
@@ -361,6 +374,7 @@ function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): Norm
     targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
     repMin: Number(exercise.repMin ?? exercise.rep_min ?? 8),
     repMax: Number(exercise.repMax ?? exercise.rep_max ?? 12),
+    weightDirection: (exercise.weightDirection ?? exercise.weight_direction ?? null) as string | null,
   })).filter((exercise) => exercise.id && exercise.name)
 }
 

@@ -251,7 +251,8 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     let analysisResult = null
     try {
       const fullHistory = [sanitizedEntry as unknown as WorkoutHistoryEntry, ...recentHistory]
-      const e1rmHistories = buildAllExerciseE1RMHistories(fullHistory)
+      // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
+      const e1rmHistories = buildAllExerciseE1RMHistories(fullHistory, { bodyWeightKg: userProfileForRecord?.weightKg })
       analysisResult = await analyzeProgress({
         userId: sanitizedEntry.userId!,
         history: fullHistory,

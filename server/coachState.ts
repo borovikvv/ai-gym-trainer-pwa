@@ -10,6 +10,7 @@ import type {
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { normalizeMuscleGroup, isAssistedExerciseName } from '../shared/muscleGroups.js'
+import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { computeAllAdjustments } from './adaptiveVolumeLandmarks.js'
@@ -40,6 +41,7 @@ interface WorkoutDayInput {
     targetWeight?: number
     repMin?: number
     repMax?: number
+    weightDirection?: string | null
   }>
 }
 
@@ -84,6 +86,7 @@ interface CatalogItem {
   targetWeight?: number
   repMin?: number
   repMax?: number
+  weightDirection?: string | null
 }
 
 interface MuscleGroupState extends MuscleGroupInfo {
@@ -322,7 +325,13 @@ function buildExerciseState({ history, exerciseCatalog }: BuildExerciseStateInpu
     }
     const sets = completedSetsOf(latest.exercise)
     const lastSet = sets.at(-1) ?? {}
-    const topSet = sets.reduce((best, set) => Number(set.weight ?? 0) > Number(best.weight ?? 0) ? set : best, lastSet)
+    // Issue #173: «лучший» подход зависит от направления веса — для
+    // гравитрона (помощь) это MIN веса, а не MAX.
+    const direction = resolveWeightDirection(catalogItem)
+    const topSet = sets.reduce(
+      (best, set) => strongerOf(Number(set.weight ?? 0), Number(best.weight ?? 0), direction) === Number(set.weight ?? 0) ? set : best,
+      lastSet,
+    )
     const maxEffortSets = sets.filter((set) => Number(set.rpe) >= 10).length
     const hardSets = sets.filter((set) => Number(set.rpe) >= 9).length
     const pain = Boolean(latest.exercise.pain)

@@ -30,7 +30,7 @@ export interface LiveCoachUserData {
   history: WorkoutHistoryEntry[]
   e1rmHistories: ReturnType<typeof buildAllExerciseE1RMHistories>
   policy: UserTrainingPolicy
-  profile: { age?: number | null; goal?: string; level?: string; workoutsPerWeek?: number }
+  profile: { age?: number | null; goal?: string; level?: string; workoutsPerWeek?: number; weightKg?: number | null }
   /** Фаза 2: блок долгосрочной памяти (травмы, реакции, цели) для промпта. */
   longTermMemory: string
 }
@@ -58,7 +58,8 @@ export async function loadLiveCoachUserData(client: DbClient, userId: string): P
     coachState,
     coachMemory,
     history,
-    e1rmHistories: e1rmHistories ?? buildAllExerciseE1RMHistories(history),
+    // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
+    e1rmHistories: e1rmHistories ?? buildAllExerciseE1RMHistories(history, { bodyWeightKg: profile?.weightKg }),
     policy: getUserTrainingPolicy(profile ?? userId),
     profile: profile ?? {},
     longTermMemory: await loadLongTermMemoryBlock(client, userId),

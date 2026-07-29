@@ -193,9 +193,10 @@ coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async 
   }
 
   // No cache → generate
-  const { coachMemory, coachState } = await loadCoachMemoryForUser(pool, userId)
+  const { coachMemory, coachState, profile } = await loadCoachMemoryForUser(pool, userId)
   const history = await loadRecentHistory(pool, userId)
-  const e1rmHistories = buildAllExerciseE1RMHistories(history).map((h) => ({
+  // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
+  const e1rmHistories = buildAllExerciseE1RMHistories(history, { bodyWeightKg: profile?.weightKg }).map((h) => ({
     exerciseId: h.exerciseId,
     exerciseName: h.exerciseName,
     muscleGroup: h.muscleGroup,

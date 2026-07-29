@@ -49,6 +49,9 @@ create table if not exists public.exercise_library (
   equipment text check (equipment is null or equipment in ('barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell', 'band')),
   exercise_type text check (exercise_type is null or exercise_type in ('compound', 'isolation')),
   difficulty_level text check (difficulty_level is null or difficulty_level in ('beginner', 'intermediate', 'advanced')),
+  -- Issue #173: 'load' = more weight is harder (default); 'assistance' =
+  -- counterweight machines (gravitron) where more weight = easier.
+  weight_direction text not null default 'load' check (weight_direction in ('load', 'assistance')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

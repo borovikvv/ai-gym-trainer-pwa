@@ -24,6 +24,7 @@ import {
   type SessionExerciseLog,
 } from './services/liveCoachContext.js'
 import { isTimedExercise } from '../src/domain/exerciseMetrics.js'
+import { resolveWeightDirection } from '../shared/weightDirection.js'
 
 const LLM_TIMEOUT_MS = 6000
 
@@ -44,6 +45,8 @@ interface ExerciseInputLike {
   restSeconds?: number
   targetWeight?: number
   lastKnownWeight?: number
+  /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
+  weightDirection?: string | null
 }
 
 export interface NextSetDecision extends RulesBaseline {
@@ -154,6 +157,7 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
     weightStep: input.exercise.weightStep,
     pain: input.pain,
     timed,
+    weightDirection: resolveWeightDirection({ name: input.exercise.name, weightDirection: input.exercise.weightDirection }),
   })
 
   return { decision: mapClampedToDecision(clamped, input, rulesFallback), prompt, clamped }

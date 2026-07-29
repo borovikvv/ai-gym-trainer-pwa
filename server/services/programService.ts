@@ -358,7 +358,8 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   ])
   // Build e1RM histories once — used by the adaptive volume engine to
   // detect strength trends per muscle group.
-  const e1rmHistories = buildAllExerciseE1RMHistories(history)
+  // Issue #173: bodyWeightKg нужен для e1RM упражнений с помощью (гравитрон).
+  const e1rmHistories = buildAllExerciseE1RMHistories(history, { bodyWeightKg: profile?.weightKg })
   // First pass: coachState without coachMemory (mesocycle MRV triggers unavailable).
   const coachStatePass1 = computeCoachState({
     profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, now,

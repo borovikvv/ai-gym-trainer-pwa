@@ -434,3 +434,36 @@ describe('clampNextSetDecision (direct)', () => {
     expect(clamped.nextSet).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #173: кламп решений для упражнений с помощью (гравитрон).
+// Границы инвертируются: «вверх» (прогрессия) = снижение веса.
+// ---------------------------------------------------------------------------
+
+describe('Issue #173: clampNextSetDecision for assisted exercises', () => {
+  it('прогрессия (меньше помощи) ограничена maxWeightJumpSteps вниз', () => {
+    const clamped = clampNextSetDecision(
+      {
+        nextSet: { weight: 10, reps: 8, restSeconds: 120, targetRpe: 7 },
+        strategyAction: { type: 'hold' },
+        reason: 'x',
+      },
+      { userId: 'oleg', lastSet: { weight: 30, reps: 8, rpe: 6 }, weightStep: 2.5, pain: false, weightDirection: 'assistance' },
+    )
+    // oleg: max 1 шаг прогрессии = 30 − 2.5 = 27.5 (LLM предложил 10)
+    expect(clamped.nextSet.weight).toBe(27.5)
+  })
+
+  it('регрессия (больше помощи) ограничена 2 шагами вверх', () => {
+    const clamped = clampNextSetDecision(
+      {
+        nextSet: { weight: 60, reps: 8, restSeconds: 120, targetRpe: 7 },
+        strategyAction: { type: 'hold' },
+        reason: 'x',
+      },
+      { userId: 'vyacheslav', lastSet: { weight: 30, reps: 8, rpe: 7 }, weightStep: 2.5, pain: false, weightDirection: 'assistance' },
+    )
+    // легче максимум на 2 шага: 30 + 5 = 35 (LLM предложил 60)
+    expect(clamped.nextSet.weight).toBe(35)
+  })
+})

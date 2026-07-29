@@ -29,6 +29,7 @@ interface ProfileForPlanning {
   level?: string
   workoutsPerWeek?: number
   trainingDays?: string[]
+  weightKg?: number | null
 }
 
 interface WorkoutDayRef {
@@ -96,7 +97,8 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
   // overtraining, and muscle imbalance when planning the next workout.
   let analysisResult: ProgressAnalysis | null = null
   try {
-    const e1rmHistories = buildAllExerciseE1RMHistories([completedEntry as unknown as WorkoutHistoryEntry, ...history])
+    // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
+    const e1rmHistories = buildAllExerciseE1RMHistories([completedEntry as unknown as WorkoutHistoryEntry, ...history], { bodyWeightKg: profile?.weightKg })
     analysisResult = await analyzeProgress({
       userId: completedEntry.userId,
       history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],

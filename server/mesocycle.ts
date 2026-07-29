@@ -30,7 +30,8 @@ import type {
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
-import { CANONICAL_MUSCLE_KEYS, labelFor, isAssistedExerciseName } from '../shared/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, labelFor } from '../shared/muscleGroups.js'
+import { resolveWeightDirection, easierWeight } from '../shared/weightDirection.js'
 import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
 
 // ---------------------------------------------------------------------------
@@ -93,6 +94,8 @@ interface EarlyDeloadResult {
 /** Minimal exercise shape for applyDeloadReduction. */
 interface ExerciseForDeload {
   name?: string
+  /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
+  weightDirection?: string | null
   setsCount: number
   targetWeight: number
   repMin: number
@@ -212,12 +215,11 @@ export function applyDeloadReduction(exercise: ExerciseForDeload): DeloadReducti
   const step = Math.max(0, Number(exercise.weightStep ?? 2.5))
   // For assisted exercises (gravitron), weight = counterweight.
   // Higher counterweight = easier. To make deload EASIER, we need to
-  // INCREASE the counterweight (add step, not subtract).
-  const exerciseName = String((exercise as { name?: string }).name ?? '')
-  const isAssisted = isAssistedExerciseName(exerciseName)
-  const deloadWeight = isAssisted
-    ? Math.max(0, Number(exercise.targetWeight ?? 0) + step)
-    : Math.max(0, Number(exercise.targetWeight ?? 0) - step)
+  // INCREASE the counterweight — easierWeight handles the direction (#173).
+  const exerciseName = String(exercise.name ?? '')
+  const direction = resolveWeightDirection({ name: exerciseName, weightDirection: exercise.weightDirection })
+  const isAssisted = direction === 'assistance'
+  const deloadWeight = easierWeight(Number(exercise.targetWeight ?? 0), step, direction)
   // For timed exercises (plank), reps = seconds. Don't clamp to 6-8 reps.
   const isTimed = isTimedExerciseName(exerciseName)
   const deloadRepMin = isTimed

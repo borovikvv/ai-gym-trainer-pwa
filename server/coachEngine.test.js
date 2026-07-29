@@ -463,3 +463,70 @@ describe('Coach Engine issue #87 — lastKnownWeight fallback when targetWeight 
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #173: рекомендации следующего подхода для упражнений с помощью.
+// Помощь: прогрессия = МЕНЬШЕ вес, облегчение = БОЛЬШЕ вес.
+// ---------------------------------------------------------------------------
+
+describe('Issue #173: assisted (gravitron) next-set recommendations', () => {
+  const gravitron = {
+    id: 'assisted-pull-up',
+    name: 'Подтягивания в гравитроне',
+    muscleGroup: 'Спина',
+    repMin: 6,
+    repMax: 10,
+    targetWeight: 20,
+    weightStep: 2.5,
+    restSeconds: 90,
+    weightDirection: 'assistance',
+  }
+
+  it('#135: верх диапазона с запасом при низком RPE → УМЕНЬШАЕТ помощь', () => {
+    const result = recommendNextSet({
+      exercise: gravitron,
+      completedSets: [{ weight: 20, reps: 12, rpe: 6, completed: true }],
+      remainingSets: 2,
+    })
+
+    expect(result.action).toBe('continue')
+    // 20 − 2.5 = 17.5 (меньше помощи = тяжелее)
+    expect(result.recommendedWeight).toBe(17.5)
+  })
+
+  it('предельный подход (RPE 10) → облегчение = БОЛЬШЕ помощи', () => {
+    const result = recommendNextSet({
+      exercise: gravitron,
+      completedSets: [{ weight: 20, reps: 6, rpe: 10, completed: true }],
+      remainingSets: 2,
+    })
+
+    expect(result.action).toBe('reduce_load')
+    // 20 + 2.5 = 22.5 (больше помощи = легче)
+    expect(result.recommendedWeight).toBe(22.5)
+  })
+
+  it('первый подход при низком восстановлении → БОЛЬШЕ помощи', () => {
+    const result = recommendNextSet({
+      exercise: gravitron,
+      completedSets: [],
+      remainingSets: 3,
+      context: { coachState: { recoveryStatus: 'low', muscleGroups: {} } },
+    })
+
+    expect(result.action).toBe('reduce_load')
+    expect(result.recommendedWeight).toBe(22.5)
+  })
+
+  it('направление работает по названию без поля weightDirection', () => {
+    const gravitronByName = { ...gravitron }
+    delete gravitronByName.weightDirection
+    const result = recommendNextSet({
+      exercise: gravitronByName,
+      completedSets: [{ weight: 20, reps: 12, rpe: 6, completed: true }],
+      remainingSets: 2,
+    })
+
+    expect(result.recommendedWeight).toBe(17.5)
+  })
+})

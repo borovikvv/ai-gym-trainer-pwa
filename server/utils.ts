@@ -60,6 +60,8 @@ export interface NormalizedLibraryExercise {
   equipment: string | null
   exerciseType: string | null
   difficultyLevel: string | null
+  // Issue #173: 'load' | 'assistance' from exercise_library.weight_direction
+  weightDirection: string | null
 }
 
 export interface NormalizedProfile {
@@ -186,6 +188,7 @@ export function normalizeLibraryExercise(row: DbRow): NormalizedLibraryExercise 
     equipment: (row.equipment as string | null) ?? null,
     exerciseType: (row.exercise_type as string | null) ?? null,
     difficultyLevel: (row.difficulty_level as string | null) ?? null,
+    weightDirection: (row.weight_direction as string | null) ?? null,
   }
 }
 

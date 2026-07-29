@@ -1700,3 +1700,179 @@ describe('Issue #110: no duplicate core exercises', () => {
     expect(coreExercises.length).toBeLessThanOrEqual(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #173: направление веса для упражнений с помощью (гравитрон).
+// Вес = противовес: БОЛЬШЕ вес = ЛЕГЧЕ. Прогрессия = уменьшение помощи.
+// ---------------------------------------------------------------------------
+
+describe('Issue #173: weight direction for assisted exercises (gravitron)', () => {
+  const gravitronLibrary = [
+    { id: 'assisted-pull-up', name: 'Подтягивания в гравитроне', muscleGroup: 'Спина', setsCount: 3, repMin: 6, repMax: 10, targetWeight: 32.5, weightStep: 2.5, restSeconds: 90, weightDirection: 'assistance' },
+  ]
+  const backProfile = {
+    userId: 'vyacheslav',
+    goal: 'сила и мышечная масса',
+    level: 'intermediate',
+    workoutsPerWeek: 2,
+    targetWorkoutMinutes: 60,
+    preferences: { focusAreas: ['спина'], sessionStyle: 'moderate_stable' },
+  }
+  const readyState = {
+    recoveryStatus: 'ready',
+    readinessScore: 85,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'high' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'high' },
+      shoulders: { fatigue: 'high' },
+      arms: { fatigue: 'high' },
+      core: { fatigue: 'high' },
+    },
+    exercises: {},
+  }
+  const gravitronHistory = (nextRecommendedWeight) => [{
+    completedAt: '2026-07-28T18:00:00Z',
+    exercises: [{
+      exerciseId: 'assisted-pull-up',
+      exerciseName: 'Подтягивания в гравитроне',
+      muscleGroup: 'Спина',
+      nextRecommendedWeight,
+      sets: [{ weight: nextRecommendedWeight, reps: 8, rpe: 7, completed: true }],
+    }],
+  }]
+  const makeMesocycle = (phase) => ({
+    phase,
+    phaseDescription: phase,
+    weekInCycle: 1,
+    cycleLength: 5,
+    loadingWeeks: 4,
+    deloadWeeks: 1,
+    isDeload: phase === 'deload',
+    deloadScheduled: false,
+    triggerReason: null,
+    completionRatio: 1,
+    workoutsThisCycle: 3,
+    plannedWorkoutsThisCycle: 3,
+  })
+  const flagAnalysis = (recommendation) => ({
+    date: '2026-07-29T00:00:00Z',
+    summary: '',
+    plateaus: [],
+    improvements: [],
+    warnings: [],
+    suggestions: [],
+    exerciseFlags: [{
+      exerciseId: 'assisted-pull-up',
+      exerciseName: 'Подтягивания в гравитроне',
+      status: recommendation === 'increase_weight' ? 'trending_up' : 'trending_down',
+      slopePerWeek: 1,
+      recommendation,
+      reason: 'тест',
+    }],
+    globalFlags: { overtraining: false, recommendedDeload: false },
+  })
+  const findGravitron = (plan) => plan.exercises.find((e) => e.exerciseId === 'assisted-pull-up')
+
+  it('инвариант #136 для assisted: план берёт сильнейший вес = НАИМЕНЬШУЮ помощь из кандидатов', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-07-30',
+      coachState: readyState,
+      coachMemory: { exerciseProfiles: { 'assisted-pull-up': { id: 'assisted-pull-up', currentWorkingWeight: 30 } } },
+      exerciseLibrary: gravitronLibrary,
+      history: gravitronHistory(16.5),
+    })
+
+    // Кандидаты: рекомендация 16.5, рабочий вес 30, программа 32.5.
+    // Для гравитрона сильнейший = минимальная помощь (16.5), а не максимум.
+    expect(findGravitron(plan)?.targetWeight).toBe(16.5)
+  })
+
+  it('направление работает по названию, если поле справочника не передано', async () => {
+    const libraryWithoutField = gravitronLibrary.map((exercise) => {
+      const copy = { ...exercise }
+      delete copy.weightDirection
+      return copy
+    })
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-07-30',
+      coachState: readyState,
+      coachMemory: { exerciseProfiles: { 'assisted-pull-up': { id: 'assisted-pull-up', currentWorkingWeight: 30 } } },
+      exerciseLibrary: libraryWithoutField,
+      history: gravitronHistory(16.5),
+    })
+
+    expect(findGravitron(plan)?.targetWeight).toBe(16.5)
+  })
+
+  it('флаг increase_weight для assisted УМЕНЬШАЕТ помощь на шаг', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-07-30',
+      coachState: readyState,
+      exerciseLibrary: gravitronLibrary,
+      history: gravitronHistory(30),
+      analysisResult: flagAnalysis('increase_weight'),
+    })
+
+    // 30 − 2.5 = 27.5 (меньше помощи = тяжелее)
+    expect(findGravitron(plan)?.targetWeight).toBe(27.5)
+  })
+
+  it('флаг decrease_weight для assisted УВЕЛИЧИВАЕТ помощь на шаг', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-07-30',
+      coachState: readyState,
+      exerciseLibrary: gravitronLibrary,
+      history: gravitronHistory(30),
+      analysisResult: flagAnalysis('decrease_weight'),
+    })
+
+    // 30 + 2.5 = 32.5 (больше помощи = легче)
+    expect(findGravitron(plan)?.targetWeight).toBe(32.5)
+  })
+
+  it('интенсификация мезоцикла для assisted уменьшает помощь', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-07-30',
+      coachState: { ...readyState, mesocycle: makeMesocycle('intensification') },
+      exerciseLibrary: gravitronLibrary,
+      history: gravitronHistory(30),
+    })
+
+    const ex = findGravitron(plan)
+    expect(ex?.targetWeight).toBe(27.5) // 30 − 2.5
+    expect(ex?.repMax).toBe(9)          // 10 − 1
+  })
+
+  it('разгрузка мезоцикла для assisted увеличивает помощь', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-07-30',
+      coachState: { ...readyState, mesocycle: makeMesocycle('deload') },
+      exerciseLibrary: gravitronLibrary,
+      history: gravitronHistory(30),
+    })
+
+    // Разгрузка = легче = БОЛЬШЕ помощи: 30 + 2.5 = 32.5
+    expect(findGravitron(plan)?.targetWeight).toBe(32.5)
+  })
+
+  it('низкая готовность без истории для assisted увеличивает помощь на шаг', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-07-30',
+      coachState: { ...readyState, recoveryStatus: 'low', readinessScore: 42 },
+      exerciseLibrary: gravitronLibrary,
+      history: [],
+    })
+
+    // Нет рабочего веса из истории → облегчение от программных 32.5 = +помощь
+    expect(findGravitron(plan)?.targetWeight).toBe(35)
+  })
+})

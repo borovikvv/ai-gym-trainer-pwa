@@ -237,3 +237,68 @@ describe('refinePlannedWorkoutPrescriptions', () => {
     expect(result.exercises).toEqual([])
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #173: кламп предписаний для упражнений с помощью (гравитрон).
+// Границы инвертируются: прогрессия = снижение веса, инвариант #136 —
+// помощь не поднимается выше рабочей.
+// ---------------------------------------------------------------------------
+
+describe('Issue #173: clampRefinedPlannedExercises for assisted exercises', () => {
+  const gravitron = {
+    exerciseId: 'assisted-pull-up',
+    exerciseName: 'Подтягивания в гравитроне',
+    muscleGroup: 'Спина',
+    muscleKey: 'back',
+    setsCount: 3,
+    repMin: 6,
+    repMax: 10,
+    targetWeight: 20,
+    weightStep: 2.5,
+    coachFocus: 'base focus',
+    currentWorkingWeight: 16.5,
+    weightDirection: 'assistance',
+  }
+
+  it('вне разгрузки не даёт помощи подняться выше baseline (инвариант #136 наоборот)', () => {
+    const { exercises } = clampRefinedPlannedExercises(
+      [gravitron],
+      [{ exerciseId: 'assisted-pull-up', targetWeight: 30 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    // LLM предложил 30 (намного легче) → кламп к 20, а не к 25
+    expect(exercises[0].targetWeight).toBe(20)
+  })
+
+  it('прогрессия (меньше помощи) ограничена maxWeightJumpSteps вниз', () => {
+    const { exercises } = clampRefinedPlannedExercises(
+      [gravitron],
+      [{ exerciseId: 'assisted-pull-up', targetWeight: 5 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    // тяжелее максимум на 2 шага: 20 − 5 = 15
+    expect(exercises[0].targetWeight).toBe(15)
+  })
+
+  it('если baseline легче рабочего веса, помощь не поднимается выше рабочей', () => {
+    const baselineEasierThanWorking = { ...gravitron, targetWeight: 15 }
+    const { exercises } = clampRefinedPlannedExercises(
+      [baselineEasierThanWorking],
+      [{ exerciseId: 'assisted-pull-up', targetWeight: 30 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    // рабочий вес 16.5 — план не легче него: кламп к 16.5 (по сетке 2.5 → 17.5)
+    expect(exercises[0].targetWeight).toBe(17.5)
+  })
+
+  it('направление работает по названию без поля weightDirection', () => {
+    const gravitronByName = { ...gravitron }
+    delete gravitronByName.weightDirection
+    const { exercises } = clampRefinedPlannedExercises(
+      [gravitronByName],
+      [{ exerciseId: 'assisted-pull-up', targetWeight: 30 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    expect(exercises[0].targetWeight).toBe(20)
+  })
+})

@@ -193,3 +193,72 @@ describe('Coach State', () => {
     expect(state.muscleGroups.core).toMatchObject({ lastTrainedDaysAgo: 1 })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #173: lastWeight для упражнений с помощью (гравитрон).
+// «Лучший» подход = MIN помощи, а не MAX.
+// ---------------------------------------------------------------------------
+
+describe('Issue #173: lastWeight for assisted exercises', () => {
+  const gravitronDays = [
+    {
+      id: 'day-g',
+      dayKey: 'day-g',
+      name: 'Full Body G',
+      exercises: [
+        { id: 'assisted-pull-up', name: 'Подтягивания в гравитроне', muscleGroup: 'спина', targetWeight: 35, repMin: 6, repMax: 10, weightDirection: 'assistance' },
+      ],
+    },
+  ]
+  const gravitronHistory = [
+    {
+      id: 'session-g',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-g',
+      workoutDayName: 'Full Body G',
+      completedAt: '2026-07-27T18:00:00.000Z',
+      totalVolume: 500,
+      exercises: [
+        {
+          exerciseId: 'assisted-pull-up',
+          exerciseName: 'Подтягивания в гравитроне',
+          pain: false,
+          sets: [
+            { weight: 30, reps: 8, rpe: 7, completed: true },
+            { weight: 16.5, reps: 8, rpe: 7, completed: true },
+          ],
+        },
+      ],
+    },
+  ]
+
+  it('lastWeight = MIN помощи в подходах (сильнейший), а не MAX', () => {
+    const state = computeCoachState({
+      profile,
+      workoutDays: gravitronDays,
+      history: gravitronHistory,
+      now: new Date('2026-07-28T18:00:00.000Z'),
+    })
+
+    expect(state.exercises['assisted-pull-up'].lastWeight).toBe(16.5)
+  })
+
+  it('работает по названию, если поле weightDirection не передано', () => {
+    const daysWithoutField = gravitronDays.map((day) => ({
+      ...day,
+      exercises: day.exercises.map((exercise) => {
+        const copy = { ...exercise }
+        delete copy.weightDirection
+        return copy
+      }),
+    }))
+    const state = computeCoachState({
+      profile,
+      workoutDays: daysWithoutField,
+      history: gravitronHistory,
+      now: new Date('2026-07-28T18:00:00.000Z'),
+    })
+
+    expect(state.exercises['assisted-pull-up'].lastWeight).toBe(16.5)
+  })
+})

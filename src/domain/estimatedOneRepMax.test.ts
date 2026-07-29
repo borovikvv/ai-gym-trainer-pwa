@@ -473,3 +473,80 @@ describe('trendDescription', () => {
       .toBe('стабильно')
   })
 })
+// ---------------------------------------------------------------------------
+// Issue #173: e1RM для упражнений с помощью (гравитрон).
+// Нагрузка = вес тела − помощь. Без веса тела сеты пропускаются,
+// чтобы не портить тренды бессмысленными значениями.
+// ---------------------------------------------------------------------------
+
+describe('Issue #173: e1RM for assisted exercises', () => {
+  const gravitronSession = (date: string, assistance: number, reps = 8) =>
+    makeSession(date, [{
+      exerciseId: 'assisted-pull-up',
+      exerciseName: 'Подтягивания в гравитроне',
+      muscleGroup: 'Спина',
+      sets: [{ weight: assistance, reps, rpe: 7, completed: true }],
+    }])
+
+  it('computes e1RM from effective load (bodyWeight − assistance)', () => {
+    const best = bestE1RMFromExercise(
+      {
+        exerciseName: 'Подтягивания в гравитроне',
+        sets: [{ weight: 30, reps: 10, rpe: 7, completed: true }],
+      },
+      { bodyWeightKg: 80 },
+    )
+
+    // effective load = 80 − 30 = 50 → 50 × (1 + 10/40) = 62.5
+    expect(best?.e1rm).toBe(62.5)
+    expect(best?.weight).toBe(30) // фактический вес помощи сохраняется
+  })
+
+  it('skips assisted sets when body weight is unknown', () => {
+    const best = bestE1RMFromExercise({
+      exerciseName: 'Подтягивания в гравитроне',
+      sets: [{ weight: 30, reps: 10, rpe: 7, completed: true }],
+    })
+
+    expect(best).toBeNull()
+  })
+
+  it('skips assisted sets when assistance meets or exceeds body weight', () => {
+    const best = bestE1RMFromExercise(
+      {
+        exerciseName: 'Подтягивания в гравитроне',
+        sets: [{ weight: 85, reps: 10, rpe: 7, completed: true }],
+      },
+      { bodyWeightKg: 80 },
+    )
+
+    expect(best).toBeNull()
+  })
+
+  it('trend goes UP when assistance decreases over time', () => {
+    const history = [
+      gravitronSession('2026-07-01', 40),
+      gravitronSession('2026-07-08', 35),
+      gravitronSession('2026-07-15', 30),
+      gravitronSession('2026-07-22', 25),
+    ]
+
+    const histories = buildAllExerciseE1RMHistories(history, { bodyWeightKg: 80 })
+    const gravitron = histories.find((h) => h.exerciseId === 'assisted-pull-up')
+
+    expect(gravitron).toBeDefined()
+    expect(gravitron?.trend.direction).toBe('up')
+  })
+
+  it('assisted exercise is excluded from histories without body weight', () => {
+    const history = [
+      gravitronSession('2026-07-01', 40),
+      gravitronSession('2026-07-08', 35),
+      gravitronSession('2026-07-15', 30),
+    ]
+
+    const histories = buildAllExerciseE1RMHistories(history)
+
+    expect(histories.find((h) => h.exerciseId === 'assisted-pull-up')).toBeUndefined()
+  })
+})

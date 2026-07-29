@@ -50,6 +50,8 @@ interface ExerciseInput {
   exercise_type?: string | null
   difficultyLevel?: string | null
   difficulty_level?: string | null
+  weightDirection?: string | null
+  weight_direction?: string | null
 }
 
 interface NormalizedLibraryExercise {
@@ -68,6 +70,8 @@ interface NormalizedLibraryExercise {
   equipment: string | null
   exerciseType: string | null
   difficultyLevel: string | null
+  /** Issue #173: 'load' | 'assistance' из справочника; null = по имени. */
+  weightDirection: string | null
 }
 
 interface WorkoutDayInput {
@@ -422,6 +426,7 @@ function normalizeExerciseLibrary(exerciseLibrary: ExerciseInput[]): NormalizedL
     equipment: exercise.equipment ?? null,
     exerciseType: exercise.exerciseType ?? exercise.exercise_type ?? null,
     difficultyLevel: exercise.difficultyLevel ?? exercise.difficulty_level ?? null,
+    weightDirection: exercise.weightDirection ?? exercise.weight_direction ?? null,
   })).filter((exercise) => exercise.id && exercise.name)
 }
 

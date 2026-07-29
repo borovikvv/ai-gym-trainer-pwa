@@ -1,4 +1,4 @@
-import { isAssistedExercise } from '../lib/muscleGroups'
+import { resolveWeightDirection, harderWeight, easierWeight } from '../../shared/weightDirection'
 // Issue #98 PR2: ProgressionType unified in shared/types.ts
 export type { ProgressionType } from '../../shared/types'
 import type { ProgressionType } from '../../shared/types'
@@ -29,7 +29,10 @@ export type ProgressionResult = {
 
 export function calculateProgression(input: ProgressionInput): ProgressionResult {
   const completedSets = input.sets.filter((set) => set.completed && set.reps > 0)
-  const assisted = isAssistedExercise(input.exerciseName)
+  // Issue #173: направление веса из общего хелпера (поле справочника приоритетно,
+  // здесь — фолбэк по названию, т.к. вход содержит только exerciseName).
+  const direction = resolveWeightDirection(input.exerciseName)
+  const assisted = direction === 'assistance'
 
   if (input.pain) {
     return {
@@ -53,9 +56,7 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
   const belowMinCount = completedSets.filter((set) => set.reps < input.repMin).length
 
   if (allAtTop && allControlled) {
-    const nextWeight = assisted
-      ? Math.max(0, input.currentWeight - input.weightStep)
-      : input.currentWeight + input.weightStep
+    const nextWeight = harderWeight(input.currentWeight, input.weightStep, direction)
     return {
       recommendedWeight: nextWeight,
       type: 'increase',
@@ -67,9 +68,11 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
 
   if (belowMinCount >= 2 && (input.previousFailureCount ?? 0) >= 1) {
     return {
-      recommendedWeight: Math.max(0, input.currentWeight - input.weightStep),
+      recommendedWeight: easierWeight(input.currentWeight, input.weightStep, direction),
       type: 'deload',
-      reason: `${input.exerciseName}: второй провал подряд ниже диапазона — снижаем вес на ${input.weightStep} кг.`,
+      reason: assisted
+        ? `${input.exerciseName}: второй провал подряд ниже диапазона — увеличиваем помощь на ${input.weightStep} кг.`
+        : `${input.exerciseName}: второй провал подряд ниже диапазона — снижаем вес на ${input.weightStep} кг.`,
     }
   }
 

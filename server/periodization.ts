@@ -31,6 +31,8 @@
  * readiness, fatigue, and pain checks.
  */
 
+import type { WeightDirection } from '../shared/weightDirection.js'
+
 export interface PeriodizationAdjustment {
   weightDelta: number        // signed change to targetWeight (in kg)
   repMinDelta: number        // signed change to repMin
@@ -45,11 +47,15 @@ export interface PeriodizationAdjustment {
  *
  * @param phase — 'idle' | 'loading' | 'accumulation' | 'intensification' | 'deload'
  * @param weightStep — the exercise's weight step (e.g. 2.5 kg)
+ * @param weightDirection — issue #173: 'load' (default) | 'assistance'.
+ *   For assisted machines "heavier" means LESS counterweight, so the
+ *   intensification weight delta flips sign.
  * @returns PeriodizationAdjustment (deltas, all 0 for idle/deload)
  */
 export function getPeriodizationAdjustment(
   phase: string | null | undefined,
   weightStep: number,
+  weightDirection: WeightDirection = 'load',
 ): PeriodizationAdjustment {
   const step = Math.max(0, Number(weightStep) || 2.5)
 
@@ -75,13 +81,16 @@ export function getPeriodizationAdjustment(
       }
 
     case 'intensification':
+      // Issue #173: «тяжелее» для гравитрона = МЕНЬШЕ помощи (дельта со знаком минус).
       return {
-        weightDelta: step,    // +1 step (e.g. +2.5 kg) — heavier
+        weightDelta: weightDirection === 'assistance' ? -step : step,
         repMinDelta: 0,
         repMaxDelta: -1,      // -1 rep on the maximum → fewer reps at higher weight
         setsCountDelta: 0,
         intensityShift: 'harder',
-        focusNote: `Интенсификация: повышаем вес на ${step} кг, сокращаем повторный диапазон.`,
+        focusNote: weightDirection === 'assistance'
+          ? `Интенсификация: уменьшаем помощь на ${step} кг, сокращаем повторный диапазон.`
+          : `Интенсификация: повышаем вес на ${step} кг, сокращаем повторный диапазон.`,
       }
 
     // idle, deload, or unknown — no adjustment (deload handled separately)
@@ -111,6 +120,7 @@ export function applyPeriodization(
     weightStep: number
   },
   phase: string | null | undefined,
+  weightDirection: WeightDirection = 'load',
 ): {
   targetWeight: number
   repMin: number
@@ -119,7 +129,7 @@ export function applyPeriodization(
   intensityTarget: string
   periodizationNote: string
 } {
-  const adj = getPeriodizationAdjustment(phase, base.weightStep)
+  const adj = getPeriodizationAdjustment(phase, base.weightStep, weightDirection)
 
   return {
     targetWeight: Math.max(0, base.targetWeight + adj.weightDelta),

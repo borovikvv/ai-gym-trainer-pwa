@@ -7,6 +7,7 @@ import type {
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { resolveWeightDirection, harderWeight, easierWeight } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
 import { findComplementaryExercises } from './exerciseMatcher.js'
 
@@ -30,6 +31,8 @@ interface ExerciseInput {
   repMin?: number
   repMax?: number
   restSeconds?: number
+  /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
+  weightDirection?: string | null
 }
 
 interface SetInput {
@@ -85,6 +88,8 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
   const repMax = Math.max(repMin, safeNumber(exercise.repMax, repMin))
   const step = Math.max(0, safeNumber(exercise.weightStep, 2.5))
   const baseRest = Math.max(45, safeNumber(exercise.restSeconds, 90))
+  // Issue #173: направление веса — для гравитрона «легче» = БОЛЬШЕ вес.
+  const direction = resolveWeightDirection(exercise)
   const readinessConstraint = liveReadinessConstraint({ exercise, readinessCheckIn: input.context?.session?.readinessCheckIn })
 
   if (input.pain || readinessConstraint === 'pain') {
@@ -104,7 +109,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
     if (coachState?.recoveryStatus === 'low' || targetMuscleFatigue === 'high' || readinessConstraint === 'sore') {
       return withRemainingSetUpdates({
         action: 'reduce_load',
-        recommendedWeight: roundWeight(Math.max(0, resolveStartingWeight(exercise) - step)),
+        recommendedWeight: roundWeight(easierWeight(resolveStartingWeight(exercise), step, direction)),
         recommendedReps: repMin,
         recommendedRestSeconds: Math.max(baseRest, 180),
         reason: readinessConstraint === 'sore'
@@ -207,7 +212,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
   if (lastRpe >= 10) {
     return withRemainingSetUpdates({
       action: 'reduce_load',
-      recommendedWeight: roundWeight(Math.max(0, lastWeight - step)),
+      recommendedWeight: roundWeight(easierWeight(lastWeight, step, direction)),
       recommendedReps: repMin,
       recommendedRestSeconds: Math.max(baseRest, 180),
       reason: 'прошлый подход был на пределе — снижаем вес на шаг, цель нижняя граница повторов и более длинный отдых',
@@ -217,7 +222,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
   if (userTrainingPolicy?.allowFailureSets === false && lastRpe >= 9) {
     return withRemainingSetUpdates({
       action: 'reduce_load',
-      recommendedWeight: roundWeight(Math.max(0, lastWeight - step)),
+      recommendedWeight: roundWeight(easierWeight(lastWeight, step, direction)),
       recommendedReps: repMin,
       recommendedRestSeconds: Math.max(baseRest, 180),
       reason: 'Олег: подход уже очень тяжёлый — снижаем вес на шаг, работаем без отказа и держим технику',
@@ -247,7 +252,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
     const steps = lastReps >= repMax + 4 && maxSteps >= 2 ? 2 : 1
     return withRemainingSetUpdates({
       action: 'continue',
-      recommendedWeight: roundWeight(lastWeight + steps * step),
+      recommendedWeight: roundWeight(harderWeight(lastWeight, steps * step, direction)),
       recommendedReps: repMin,
       recommendedRestSeconds: baseRest,
       reason: `верх диапазона взят с запасом (${lastReps} повторов, легко) — повышаем вес на ${steps * step} кг и возвращаемся к нижней границе повторов`,

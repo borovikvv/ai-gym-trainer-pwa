@@ -1,4 +1,5 @@
 import { getCanonicalExerciseId } from './exerciseIdentity'
+import { resolveWeightDirection } from '../../shared/weightDirection'
 
 /**
  * Estimated One-Rep Max (e1RM) — Helms / RTS formula.
@@ -33,6 +34,17 @@ export function estimateE1RM(weight: number, reps: number): number {
 // History Processing
 // ---------------------------------------------------------------------------
 
+/**
+ * Options for e1RM extraction (issue #173).
+ * bodyWeightKg — user body weight (from the questionnaire). Required to
+ * compute a meaningful e1RM for ASSISTED exercises (gravitron): the actual
+ * load is bodyWeight − counterweight. Without it assisted sets are skipped
+ * entirely, so they never pollute strength trends with nonsense values.
+ */
+export type E1RMOptions = {
+  bodyWeightKg?: number | null
+}
+
 export type E1RMDataPoint = {
   date: string          // ISO date of the workout
   e1rm: number          // estimated 1RM from the best set
@@ -46,8 +58,13 @@ export type E1RMDataPoint = {
  * "Best" = highest estimated 1RM among completed sets.
  */
 export function bestE1RMFromExercise(
-  exercise: { sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean }> },
+  exercise: { exerciseName?: string; sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean }> },
+  options?: E1RMOptions,
 ): E1RMDataPoint | null {
+  // Issue #173: для упражнений с помощью (гравитрон) «вес» — это противовес.
+  // Реальная нагрузка = вес тела − помощь; без веса тела e1RM бессмысленен.
+  const direction = resolveWeightDirection(exercise.exerciseName)
+  const bodyWeight = Number(options?.bodyWeightKg)
   let best: E1RMDataPoint | null = null
   for (const set of exercise.sets ?? []) {
     if (!set.completed && set.reps <= 0) continue
@@ -56,7 +73,13 @@ export function bestE1RMFromExercise(
     // e1RM formula gives 0 for weight=0 which is meaningless — these
     // exercises (plank, crunches, push-ups) track reps/seconds, not load.
     if (set.weight <= 0) continue
-    const e1rm = estimateE1RM(set.weight, set.reps)
+    let loadWeight = set.weight
+    if (direction === 'assistance') {
+      if (!Number.isFinite(bodyWeight) || bodyWeight <= 0) continue
+      loadWeight = Math.max(0, bodyWeight - set.weight)
+      if (loadWeight <= 0) continue
+    }
+    const e1rm = estimateE1RM(loadWeight, set.reps)
     if (!best || e1rm > best.e1rm) {
       best = {
         date: '', // caller fills this in
@@ -106,6 +129,7 @@ export function buildExerciseE1RMHistory(
       sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean }>
     }>
   }>,
+  options?: E1RMOptions,
 ): ExerciseE1RMHistory {
   const dataPoints: E1RMDataPoint[] = []
 
@@ -115,7 +139,7 @@ export function buildExerciseE1RMHistory(
       (e) => e.exerciseId === exerciseId,
     )
     if (!exercise) continue
-    const best = bestE1RMFromExercise(exercise)
+    const best = bestE1RMFromExercise({ ...exercise, exerciseName }, options)
     if (best) {
       dataPoints.push({ ...best, date: session.completedAt })
     }
@@ -147,6 +171,7 @@ export function buildAllExerciseE1RMHistories(
       sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean }>
     }>
   }>,
+  options?: E1RMOptions,
 ): ExerciseE1RMHistory[] {
   const exerciseMap = new Map<string, {
     name: string
@@ -169,7 +194,7 @@ export function buildAllExerciseE1RMHistories(
           points: [],
         })
       }
-      const best = bestE1RMFromExercise(exercise)
+      const best = bestE1RMFromExercise(exercise, options)
       if (best) {
         exerciseMap.get(canonicalId)!.points.push({ ...best, date: session.completedAt })
       }

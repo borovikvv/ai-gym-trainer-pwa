@@ -16,6 +16,7 @@
 // упражнения) делает генератор — он владеет applyPrescription/периодизацией.
 import { isLlmConfigured, requestLlmJson } from '../lib/llmClient.js'
 import { roundWeight } from '../../shared/format.js'
+import { resolveWeightDirection, harderWeight, easierWeight, easierOf } from '../../shared/weightDirection.js'
 
 /** Предписание одного упражнения — вход и выход советника. */
 export interface PlannedExercisePrescription {
@@ -33,6 +34,8 @@ export interface PlannedExercisePrescription {
   /** Запомненный рабочий вес (MAX топ-подхода за 3 сессии, #99) — нижняя
    * граница веса вне разгрузки (инвариант #136). */
   currentWorkingWeight?: number | null
+  /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
+  weightDirection?: string | null
 }
 
 /** Безопасная альтернатива для свапа (из детерминированного whitelist). */
@@ -176,15 +179,20 @@ export function clampRefinedPlannedExercises(
     // упражнений с весом тела и на время (targetWeight = 0) вес не трогаем.
     let targetWeight = base.targetWeight
     if (base.targetWeight > 0 && Number.isFinite(Number(proposal.targetWeight))) {
-      const upper = base.targetWeight + maxJumpSteps * step
       const workingFloor = Number.isFinite(Number(base.currentWorkingWeight)) && Number(base.currentWorkingWeight) > 0
         ? Number(base.currentWorkingWeight)
         : base.targetWeight
-      // Вне разгрузки не опускаемся ниже рабочего веса (инвариант #136).
-      // В разгрузку допускаем снижение до 2 шагов.
-      const lower = options.isDeload
-        ? Math.max(0, base.targetWeight - 2 * step)
-        : Math.max(0, Math.min(base.targetWeight, workingFloor))
+      // Issue #173: границы выводятся из направления веса. Для гравитрона
+      // «тяжелее» = МЕНЬШЕ помощи, а инвариант #136 инвертируется: вне
+      // разгрузки не назначаем ЛЕГЧЕ рабочего веса (помощь не выше рабочей).
+      // В разгрузку допускаем облегчение до 2 шагов.
+      const direction = resolveWeightDirection({ name: base.exerciseName, weightDirection: base.weightDirection })
+      const easiestAllowed = options.isDeload
+        ? easierWeight(base.targetWeight, 2 * step, direction)
+        : easierOf(base.targetWeight, workingFloor, direction)
+      const hardestAllowed = harderWeight(base.targetWeight, maxJumpSteps * step, direction)
+      const lower = Math.min(easiestAllowed, hardestAllowed)
+      const upper = Math.max(easiestAllowed, hardestAllowed)
       targetWeight = roundToStep(clampNumber(Number(proposal.targetWeight), lower, upper), step)
     }
 

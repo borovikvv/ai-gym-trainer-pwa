@@ -190,3 +190,48 @@ describe('calculateProgression', () => {
     expect(result.recommendedWeight).toBe(0)
   })
 })
+
+// Issue #173: повторный провал на гравитроне — разгрузка = БОЛЬШЕ помощи,
+// а не меньше веса (для assisted меньший вес = тяжелее).
+describe('Issue #173: deload for assisted exercises', () => {
+  it('increases assistance on repeated failure (deload = more help)', () => {
+    const result = calculateProgression({
+      exerciseName: 'Подтягивания в гравитроне',
+      currentWeight: 20,
+      repMin: 6,
+      repMax: 10,
+      weightStep: 2.5,
+      sets: [
+        { weight: 20, reps: 4, rpe: 9, completed: true },
+        { weight: 20, reps: 3, rpe: 10, completed: true },
+        { weight: 20, reps: 4, rpe: 9, completed: true },
+      ],
+      pain: false,
+      previousFailureCount: 1,
+    })
+
+    expect(result.type).toBe('deload')
+    // 20 + 2.5 = 22.5: больше помощи = легче. Было бы 17.5 — это УТЯЖЕЛЕНИЕ.
+    expect(result.recommendedWeight).toBe(22.5)
+  })
+
+  it('still reduces weight on repeated failure for load exercises', () => {
+    const result = calculateProgression({
+      exerciseName: 'Жим лёжа',
+      currentWeight: 60,
+      repMin: 6,
+      repMax: 10,
+      weightStep: 2.5,
+      sets: [
+        { weight: 60, reps: 4, rpe: 9, completed: true },
+        { weight: 60, reps: 3, rpe: 10, completed: true },
+        { weight: 60, reps: 4, rpe: 9, completed: true },
+      ],
+      pain: false,
+      previousFailureCount: 1,
+    })
+
+    expect(result.type).toBe('deload')
+    expect(result.recommendedWeight).toBe(57.5)
+  })
+})
