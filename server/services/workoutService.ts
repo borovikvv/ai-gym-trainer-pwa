@@ -427,9 +427,18 @@ export function sanitizeWorkoutHistoryEntry(entry: WorkoutHistoryEntryInput): Wo
     })
   }
 
+  // Issue #161: schema column is `integer check (1..5)`, so an out-of-range or
+  // non-numeric rating would fail the INSERT and roll back the entire workout
+  // save (same failure mode as the RPE guard above, issue #93). Unlike RPE we
+  // don't clamp — rating is optional, and dropping a bad one is honest whereas
+  // rounding 7 to 5 would invent an opinion the user never gave.
+  const rating = Number(entry.userRating)
+  const userRating = Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : null
+
   return {
     ...entry,
     exercises,
+    userRating,
     totalVolume: roundGuardrailNumber(exercises.reduce((sum, exercise) => sum + Number(exercise.volume ?? 0), 0)),
   }
 }
