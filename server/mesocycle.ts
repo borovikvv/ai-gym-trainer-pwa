@@ -33,7 +33,7 @@ import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPo
 import { CANONICAL_MUSCLE_KEYS, labelFor } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, easierWeight } from '../shared/weightDirection.js'
 import { classifyVolumeStatus, getVolumeLandmarks } from './volumeLandmarks.js'
-import { dateToDateOnly } from './utils.js'
+import { dateToDateOnly, endOfWeek, startOfWeek } from './utils.js'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -494,23 +494,6 @@ function isoWeekKey(date: Date): string {
   const oneDay = 86_400_000
   const weekNumber = Math.ceil(((d.getTime() - jan4.getTime()) / oneDay + jan4.getDay() + 1) / 7)
   return `${d.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`
-}
-
-function startOfWeek(date: Date): Date {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1) // Monday
-  const start = new Date(d.setDate(diff))
-  start.setHours(0, 0, 0, 0)
-  return start
-}
-
-function endOfWeek(date: Date): Date {
-  const start = startOfWeek(date)
-  const end = new Date(start)
-  end.setDate(start.getDate() + 6)
-  end.setHours(23, 59, 59, 999)
-  return end
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {

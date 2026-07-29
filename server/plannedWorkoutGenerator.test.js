@@ -1876,3 +1876,78 @@ describe('Issue #173: weight direction for assisted exercises (gravitron)', () =
     expect(findGravitron(plan)?.targetWeight).toBe(35)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #166: планирование сессии тратит остаток недельной цели по группам
+// ---------------------------------------------------------------------------
+
+describe('Issue #166: планирование под остаток недельной цели', () => {
+  const readyState = {
+    recoveryStatus: 'ready',
+    readinessScore: 80,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' }, back: { fatigue: 'low' }, legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' }, arms: { fatigue: 'low' }, core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+
+  function status(entries) {
+    const result = {}
+    for (const [muscleKey, [targetSets, actualSets]] of Object.entries(entries)) {
+      result[muscleKey] = { muscleKey, targetSets, actualSets, remainingSets: targetSets - actualSets, reason: 'тест' }
+    }
+    return result
+  }
+
+  it('группа с недобором опережает группу, выбравшую недельную цель', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: { ...profile, targetWorkoutMinutes: 30 },
+      scheduledDate: '2026-07-22',
+      coachState: readyState,
+      exerciseLibrary,
+      history: [],
+      weeklyVolume: status({ legs: [16, 2], chest: [12, 14], back: [14, 15] }),
+    })
+
+    const muscleGroups = plan.exercises.map((exercise) => exercise.muscleGroup)
+    expect(muscleGroups).toContain('Ноги')
+    expect(muscleGroups).not.toContain('Грудь')
+  })
+
+  it('не выписывает больше подходов, чем осталось от недельной цели', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-07-22',
+      coachState: readyState,
+      exerciseLibrary,
+      history: [],
+      weeklyVolume: status({ legs: [12, 10] }),
+    })
+
+    for (const exercise of plan.exercises.filter((e) => e.muscleGroup === 'Ноги')) {
+      expect(exercise.setsCount).toBeLessThanOrEqual(2)
+    }
+  })
+
+  it('без недельных целей план не меняется', async () => {
+    const withoutTargets = await buildGeneratedPlannedWorkout({
+      profile, scheduledDate: '2026-07-22', coachState: readyState, exerciseLibrary, history: [],
+    })
+    const withEmptyTargets = await buildGeneratedPlannedWorkout({
+      profile, scheduledDate: '2026-07-22', coachState: readyState, exerciseLibrary, history: [], weeklyVolume: {},
+    })
+    expect(withEmptyTargets.exercises.map((e) => e.exerciseId)).toEqual(withoutTargets.exercises.map((e) => e.exerciseId))
+  })
+
+  it('расхождение цели и факта видно в обосновании упражнения', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile, scheduledDate: '2026-07-22', coachState: readyState, exerciseLibrary, history: [],
+      weeklyVolume: status({ legs: [16, 3] }),
+    })
+
+    const legs = plan.exercises.find((exercise) => exercise.muscleGroup === 'Ноги')
+    expect(legs.reason).toContain('недельный объём 3/16')
+  })
+})
