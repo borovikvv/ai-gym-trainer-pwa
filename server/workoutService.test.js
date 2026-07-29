@@ -173,6 +173,32 @@ describe('workout service guardrails', () => {
 
     expect(sanitized.exercises[0].sets.map((s) => s.rpe)).toEqual([7, 8])
   })
+
+  // Issue #161: user_rating is `integer check (1..5)` — an unusable value must
+  // never reach the INSERT, or the whole workout save rolls back.
+  it('drops userRating that would violate the 1..5 column constraint (#161)', () => {
+    const base = {
+      id: 'session-rating',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-29T10:00:00Z',
+      totalVolume: 0,
+      exercises: [],
+    }
+
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: 1 }).userRating).toBe(1)
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: 4 }).userRating).toBe(4)
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: 5 }).userRating).toBe(5)
+    // Out of range / not an integer / not a number → not rated, never invented
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: 7 }).userRating).toBeNull()
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: 0 }).userRating).toBeNull()
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: -3 }).userRating).toBeNull()
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: 3.7 }).userRating).toBeNull()
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: 'abc' }).userRating).toBeNull()
+    expect(sanitizeWorkoutHistoryEntry({ ...base, userRating: null }).userRating).toBeNull()
+    expect(sanitizeWorkoutHistoryEntry(base).userRating).toBeNull()
+  })
 })
 
 describe('saveWorkoutHistoryEntry — issue #94 cache invalidation', () => {

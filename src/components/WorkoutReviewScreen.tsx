@@ -9,6 +9,9 @@ type WorkoutReviewScreenProps = {
   totalVolume: number
   debrief?: WorkoutDebrief | null
   isSaving?: boolean
+  // Issue #161: user rating 1–5, 0 = not rated yet
+  userRating: number
+  onUserRatingChange: (rating: number) => void
   onBackToWorkout: () => void
   onSaveAndExit: () => void
 }
@@ -18,6 +21,8 @@ export function WorkoutReviewScreen({
   totalVolume,
   debrief,
   isSaving = false,
+  userRating,
+  onUserRatingChange,
   onBackToWorkout,
   onSaveAndExit,
 }: WorkoutReviewScreenProps) {
@@ -48,6 +53,33 @@ export function WorkoutReviewScreen({
             <b className="review-stat__value">{qualityScore}<span className="review-stat__unit">/100</span></b>
           </div>
         )}
+      </div>
+
+      {/* Issue #161: user rating 1–5 stars */}
+      <div className="review-section review-rating">
+        <h2>Оцени тренировку</h2>
+        <div className="review-stars" role="radiogroup" aria-label="Оценка тренировки">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              type="button"
+              className={`review-star${star <= userRating ? ' review-star--filled' : ''}`}
+              disabled={isSaving}
+              onClick={() => onUserRatingChange(star)}
+              aria-label={`${star} ${star === 1 ? 'звезда' : star < 5 ? 'звезды' : 'звёзд'}`}
+              data-testid={`star-${star}`}
+              role="radio"
+              // Only one radio in a radiogroup may be checked — the fill below
+              // is cumulative, the selection is not.
+              aria-checked={star === userRating}
+            >
+              {star <= userRating ? '★' : '☆'}
+            </button>
+          ))}
+        </div>
+        <p className="muted review-rating__hint" data-testid="rating-hint" data-rated={userRating > 0}>
+          {userRating > 0 ? 'Оценка сохранится вместе с тренировкой' : 'Насколько тренировка была полезной?'}
+        </p>
       </div>
 
       {/* Issue #125: «По упражнениям» — progression summary with marks */}

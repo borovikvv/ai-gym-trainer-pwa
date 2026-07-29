@@ -47,6 +47,8 @@ interface WorkoutHistoryEntryInput {
   totalVolume?: number
   readinessCheckIn?: ReadinessCheckIn | null
   qualityScore?: number | null
+  // Issue #161: user rating 1–5 after workout, optional, null = not rated
+  userRating?: number | null
   exercises?: ExerciseEntryInput[]
   debrief?: { qualityScore?: number } | null
 }
@@ -129,8 +131,8 @@ export async function loadWorkoutHistory(client: DbClient): Promise<WorkoutHisto
 export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHistoryEntryInput): Promise<{ coachPlan: SafeCoachPlan | null; debrief: ReturnType<typeof buildWorkoutDebrief> }> {
   const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry) as SanitizedEntry
   await client.query(
-    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, source)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, 'pwa-api')
+    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, user_rating, source)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pwa-api')
      on conflict (id) do update set
        user_id = excluded.user_id,
        workout_day_id = excluded.workout_day_id,
@@ -138,8 +140,9 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
        completed_at = excluded.completed_at,
        total_volume = excluded.total_volume,
        readiness_check_in = excluded.readiness_check_in,
-       quality_score = excluded.quality_score`,
-    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null],
+       quality_score = excluded.quality_score,
+       user_rating = excluded.user_rating`,
+    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null, sanitizedEntry.userRating ?? null],
   )
 
   await client.query('delete from public.workout_sets where session_id = $1', [sanitizedEntry.id])
@@ -324,6 +327,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
         completedAt: sanitizedEntry.completedAt!,
         totalVolume: sanitizedEntry.totalVolume,
         qualityScore: sanitizedEntry.qualityScore ?? null,
+        userRating: sanitizedEntry.userRating ?? null,
         readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
         exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
           exerciseId: e.exerciseId ?? '',
@@ -434,9 +438,18 @@ export function sanitizeWorkoutHistoryEntry(entry: WorkoutHistoryEntryInput): Wo
     })
   }
 
+  // Issue #161: schema column is `integer check (1..5)`, so an out-of-range or
+  // non-numeric rating would fail the INSERT and roll back the entire workout
+  // save (same failure mode as the RPE guard above, issue #93). Unlike RPE we
+  // don't clamp — rating is optional, and dropping a bad one is honest whereas
+  // rounding 7 to 5 would invent an opinion the user never gave.
+  const rating = Number(entry.userRating)
+  const userRating = Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : null
+
   return {
     ...entry,
     exercises,
+    userRating,
     totalVolume: roundGuardrailNumber(exercises.reduce((sum, exercise) => sum + Number(exercise.volume ?? 0), 0)),
   }
 }

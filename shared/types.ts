@@ -107,6 +107,10 @@ export interface WorkoutHistoryEntry {
   // be attached to the history entry. Optional because not all loaders
   // populate it (e.g. loadRecentHistory on backend doesn't).
   debrief?: WorkoutDebrief
+  // Issue #161: user rating 1–5 after workout, collected on review screen.
+  // Optional — rating can be skipped without blocking save.
+  // Used by #88 (fine-tuning) to filter records by feedback quality.
+  userRating?: number
   exercises: CompletedExerciseHistory[]
 }
 

@@ -70,6 +70,9 @@ export interface TrainingRecord {
     painCount: number
     totalVolume: number
     qualityScore: number | null
+    // Issue #161: user rating 1–5 after workout, collected on review screen.
+    // Used by #88 (extractTrainingRecords) to filter records with feedback ≥ 3.
+    userRating?: number | null
   } | null
 }
 
@@ -85,6 +88,7 @@ export async function saveTrainingRecord(
     completedAt: string
     totalVolume: number
     qualityScore?: number | null
+    userRating?: number | null
     readinessCheckIn?: ReadinessCheckIn | null
     exercises: WorkoutHistoryEntry['exercises']
   },
@@ -174,6 +178,7 @@ export async function saveTrainingRecord(
       painCount,
       totalVolume: entry.totalVolume,
       qualityScore: entry.qualityScore ?? null,
+      userRating: entry.userRating ?? null,
     },
   }
 

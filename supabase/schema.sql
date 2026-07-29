@@ -152,6 +152,8 @@ create table if not exists public.workout_sessions (
 
 alter table public.workout_sessions add column if not exists readiness_check_in jsonb;
 alter table public.workout_sessions add column if not exists quality_score integer check (quality_score >= 0 and quality_score <= 100);
+-- Issue #161: user rating 1–5 after workout, used by #88 to filter training records
+alter table public.workout_sessions add column if not exists user_rating integer check (user_rating >= 1 and user_rating <= 5);
 
 create table if not exists public.workout_sets (
   id uuid primary key default gen_random_uuid(),
