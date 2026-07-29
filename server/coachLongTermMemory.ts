@@ -12,6 +12,7 @@
 // - дедупликация по нормализованному содержимому
 // - факты-травмы LLM архивировать НЕ может — только пользователь
 import type { DbClient } from './dbClient.js'
+import { formatBlockGoalForPrompt, loadActiveBlockGoal } from './mesocycleBlockGoal.js'
 
 export type MemoryFactKind = 'injury' | 'load_response' | 'preference' | 'constraint' | 'milestone'
 export type MemoryFactSource = 'llm' | 'user' | 'rules'
@@ -125,11 +126,16 @@ export function formatLongTermMemoryForPrompt(facts: CoachMemoryFact[], goals: C
  */
 export async function loadLongTermMemoryBlock(client: DbClient, userId: string): Promise<string> {
   try {
-    const [facts, goals] = await Promise.all([
+    const [facts, goals, blockGoal] = await Promise.all([
       loadMemoryFacts(client, userId, 'active'),
       loadGoals(client, userId, 'active'),
+      // Issue #174: тактическая цель текущего блока — что этот мезоцикл должен
+      // дать и как факт соотносится с ожиданием.
+      loadActiveBlockGoal(client, userId).catch(() => null),
     ])
-    return formatLongTermMemoryForPrompt(facts, goals)
+    return [formatLongTermMemoryForPrompt(facts, goals), formatBlockGoalForPrompt(blockGoal)]
+      .filter(Boolean)
+      .join('\n')
   } catch (error) {
     console.warn('loadLongTermMemoryBlock failed (non-fatal):', error instanceof Error ? error.message : error)
     return ''

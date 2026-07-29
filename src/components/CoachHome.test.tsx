@@ -103,6 +103,7 @@ function makeMesocycleState(overrides: Partial<CoachState['mesocycle']> = {}): N
     phase: 'loading',
     phaseDescription: 'Загрузка — первую неделю мезоцикла, умеренный объём',
     weekInCycle: 1,
+    cycleStartedOn: '2026-06-01',
     cycleLength: 5,
     loadingWeeks: 4,
     deloadWeeks: 1,
