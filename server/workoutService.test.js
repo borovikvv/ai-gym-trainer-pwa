@@ -776,3 +776,77 @@ describe('Issue #163: детали боли из анкеты доезжают �
     })
   })
 })
+
+describe('Issue #165: таймстемп подхода доезжает до insert', () => {
+  function fakeClient() {
+    const queries = []
+    return {
+      queries,
+      query: vi.fn().mockImplementation(async (text, params) => {
+        queries.push({ text, params })
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+  }
+
+  // Индекс параметра по имени колонки в списке insert into ... (a, b, c).
+  function setsInsertParam(queries, column) {
+    const insert = queries.find((q) => q.text.includes('insert into public.workout_sets'))
+    const columns = insert.text
+      .slice(insert.text.indexOf('('), insert.text.indexOf(')'))
+      .replace(/[()]/g, '')
+      .split(',')
+      .map((name) => name.trim())
+    // Колонка skipped вписана в values литералом false, поэтому позиция
+    // параметра — не позиция колонки: считаем плейсхолдеры $N по values.
+    const values = insert.text.slice(insert.text.lastIndexOf('values'))
+    const placeholders = values.slice(values.indexOf('(') + 1, values.indexOf(')')).split(',').map((v) => v.trim())
+    const columnIndex = columns.indexOf(column)
+    const placeholder = placeholders[columnIndex]
+    return insert.params[Number(placeholder.replace('$', '')) - 1]
+  }
+
+  function entryWithPerformedAt(performedAt) {
+    return {
+      id: 'session-165',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-29T12:00:00Z',
+      totalVolume: 400,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 50,
+        progressionType: 'hold',
+        progressionReason: '',
+        sets: [{ weight: 50, reps: 8, rpe: 8, completed: true, performedAt }],
+      }],
+    }
+  }
+
+  it('пишет клиентский таймстемп в колонку performed_at', async () => {
+    const client = fakeClient()
+
+    await saveWorkoutHistoryEntry(client, entryWithPerformedAt('2026-07-29T11:58:20.000Z'))
+
+    expect(setsInsertParam(client.queries, 'performed_at')).toBe('2026-07-29T11:58:20.000Z')
+  })
+
+  it('кладёт null вместо кривого таймстемпа — иначе timestamptz уронит весь insert', async () => {
+    const client = fakeClient()
+
+    await saveWorkoutHistoryEntry(client, entryWithPerformedAt('вчера вечером'))
+
+    expect(setsInsertParam(client.queries, 'performed_at')).toBeNull()
+  })
+
+  it('терпит подходы без таймстемпа — старые черновики и офлайн-очередь', async () => {
+    const client = fakeClient()
+
+    await saveWorkoutHistoryEntry(client, entryWithPerformedAt(undefined))
+
+    expect(setsInsertParam(client.queries, 'performed_at')).toBeNull()
+  })
+})

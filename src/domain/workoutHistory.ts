@@ -99,3 +99,23 @@ export function buildNextTargets(history: WorkoutHistoryEntry[]): Record<string,
 function firstCompletedWeight(sets: WorkoutSetInput[]): number | undefined {
   return sets.find((set) => set.completed)?.weight
 }
+
+// Issue #165: интервал между завершениями соседних подходов (секунды).
+// Один элемент на пару соседей (n-1 значений на n подходов).
+// Пары без performedAt пропускаем — старые данные, смешанная история.
+//
+// ponytail: это НЕ чистый отдых — внутрь входит и работа следующего подхода
+// (~20–40 с на подход), поэтому значение систематически выше назначенного
+// отдыха. Разделить можно только вторым таймстемпом — началом подхода;
+// пока его нет, сравнивать с предписанным отдыхом напрямую нельзя.
+export function computeSetIntervals(sets: Array<{ performedAt?: string | null }>): number[] {
+  const intervals: number[] = []
+  for (let i = 1; i < sets.length; i++) {
+    const prev = sets[i - 1]?.performedAt
+    const curr = sets[i]?.performedAt
+    if (!prev || !curr) continue
+    const ms = new Date(curr).getTime() - new Date(prev).getTime()
+    if (Number.isFinite(ms)) intervals.push(Math.round(ms / 1000))
+  }
+  return intervals
+}

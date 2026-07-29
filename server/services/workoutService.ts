@@ -25,6 +25,8 @@ interface WorkoutSetInput {
   reps?: number
   rpe?: number
   completed?: boolean
+  // Issue #165: client-side ISO timestamp when the set was performed
+  performedAt?: string
 }
 
 interface ExerciseEntryInput {
@@ -64,6 +66,7 @@ interface SanitizedSet {
   reps: number
   rpe: number
   completed: true
+  performedAt?: string
 }
 
 interface SanitizedExercise extends ExerciseEntryInput {
@@ -108,7 +111,7 @@ export async function loadWorkoutHistory(client: DbClient): Promise<WorkoutHisto
 
   const [sets, progressions] = await Promise.all([
     client.query(
-      `select session_id, exercise_id, exercise_name, set_index, weight, reps, rpe, completed, pain
+      `select session_id, exercise_id, exercise_name, set_index, weight, reps, rpe, completed, pain, performed_at
        from public.workout_sets
        where session_id = any($1)
        order by session_id, exercise_id, set_index`,
@@ -161,8 +164,8 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     for (const [index, set] of (exercise.sets ?? []).entries()) {
       await client.query(
         `insert into public.workout_sets
-         (session_id, user_id, exercise_id, exercise_name, set_index, weight, reps, rpe, completed, pain, skipped)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,false)`,
+         (session_id, user_id, exercise_id, exercise_name, set_index, weight, reps, rpe, completed, pain, skipped, performed_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,false,$11)`,
         [
           sanitizedEntry.id,
           sanitizedEntry.userId,
@@ -174,6 +177,8 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
           set.rpe,
           Boolean(set.completed),
           Boolean(exercise.pain),
+          // Issue #165: уже провалидировано в sanitizeWorkoutHistoryEntry
+          set.performedAt ?? null,
         ],
       )
     }
@@ -425,6 +430,8 @@ export function sanitizeWorkoutHistoryEntry(entry: WorkoutHistoryEntryInput): Wo
           // guarantees 1 <= rpe <= 10.
           rpe: Math.round(roundGuardrailNumber(set.rpe)),
           completed: true as const,
+          // Issue #165: validate client-side timestamp — invalid ISO → undefined
+          performedAt: typeof set.performedAt === 'string' && !Number.isNaN(Date.parse(set.performedAt)) ? set.performedAt : undefined,
         }))
       droppedSets += Math.max(0, beforeSetCount - sets.length)
       const volume = roundGuardrailNumber(sets.reduce((sum, set) => sum + set.weight * set.reps, 0))

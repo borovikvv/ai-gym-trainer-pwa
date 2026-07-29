@@ -174,6 +174,9 @@ create table if not exists public.workout_sets (
   unique(session_id, exercise_id, set_index)
 );
 
+-- Issue #165: client-side timestamp when the set was performed
+alter table public.workout_sets add column if not exists performed_at timestamptz;
+
 create table if not exists public.progression_events (
   id uuid primary key default gen_random_uuid(),
   session_id text not null references public.workout_sessions(id) on delete cascade,
