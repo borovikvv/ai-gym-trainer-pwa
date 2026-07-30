@@ -13,6 +13,7 @@ import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/
 import { syncBlockGoal } from '../mesocycleBlockGoal.js'
 import { syncWeeklyVolumeTargets, type SyncWeeklyVolumeResult } from '../weeklyVolumeTargets.js'
 import { applyMemoryUpdates, loadGoals } from '../coachLongTermMemory.js'
+import { loadBodyWeightLog } from '../bodyWeightLog.js'
 
 export async function loadProgramData(client: DbClient) {
   const [users, profileRows, dayRows, exerciseRows, libraryRows] = await Promise.all([
@@ -318,8 +319,11 @@ export async function loadRecentHistory(client: DbClient, userId: string) {
   // This caused computeMesocycleState to see fewer week buckets than actually
   // exist, shifting weekInCycle back by 1 (e.g. 3/4 instead of 4/4).
   // Increased to 16 to cover a full cycle + buffer.
+  // Issue #175: readiness_check_in нужен как сигнал самочувствия при
+  // диагностике перегрузки. Он же оживляет признак «крепатура не уходит» в
+  // недельных целях объёма (#166), который до этого читал всегда пустое поле.
   const sessions = await client.query(
-    `select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume
+    `select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in
      from public.workout_sessions
      where user_id = $1
      order by completed_at desc
@@ -352,6 +356,7 @@ export async function loadRecentHistory(client: DbClient, userId: string) {
       workoutDayName: String(row.workout_day_name ?? ""),
       completedAt: String((row.completed_at as Date)?.toISOString?.() ?? row.completed_at ?? ""),
       totalVolume: Number(row.total_volume),
+      readinessCheckIn: (row.readiness_check_in ?? null) as WorkoutHistoryEntry['readinessCheckIn'],
       exercises: [...setsByExercise.entries()].map(([exerciseId, exerciseSets]) => {
         const progression = progressionsByExercise.get(exerciseId) ?? {}
         return {
@@ -424,7 +429,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   // состояние тренера возвращается и без цели.
   let blockGoal = null
   try {
-    blockGoal = (await syncBlockGoalForUser(client, userId, { profile, history, e1rmHistories, coachState })).goal
+    blockGoal = (await syncBlockGoalForUser(client, userId, { profile, history, e1rmHistories, coachState, now })).goal
   } catch (err) {
     console.error('syncBlockGoal failed (non-fatal):', (err as Error).message)
   }
@@ -456,15 +461,30 @@ async function syncBlockGoalForUser(
     history: WorkoutHistoryEntry[]
     e1rmHistories: ReturnType<typeof buildAllExerciseE1RMHistories>
     coachState: CoachState
+    now: Date
   },
 ) {
-  const macroGoals = await loadGoals(client, userId, 'active').catch(() => [])
+  // Issue #175: ряд веса — единственный вход диагностики, которого нет в
+  // истории тренировок. Сбой чтения не должен ронять цель блока.
+  const [macroGoals, bodyWeightLog] = await Promise.all([
+    loadGoals(client, userId, 'active').catch(() => []),
+    loadBodyWeightLog(client, userId).catch(() => []),
+  ])
   const result = await syncBlockGoal(client, userId, {
-    profile: { age: input.profile?.age, level: input.profile?.level },
+    profile: {
+      age: input.profile?.age,
+      level: input.profile?.level,
+      // Issue #175: цель и план тренировок — входы диагнозов «энергетический
+      // дефицит» и «проблема не в программе».
+      goal: input.profile?.goal,
+      workoutsPerWeek: input.profile?.workoutsPerWeek,
+    },
     mesocycle: input.coachState.mesocycle,
     e1rmHistories: input.e1rmHistories,
     history: input.history,
     preferredExerciseId: macroGoals.find((goal) => goal.exerciseId)?.exerciseId ?? null,
+    bodyWeightLog,
+    now: input.now,
   })
   for (const outcome of result.closedOutcomes) {
     await applyMemoryUpdates(client, userId, [{ op: 'add', kind: 'load_response', content: outcome }], 'rules')
