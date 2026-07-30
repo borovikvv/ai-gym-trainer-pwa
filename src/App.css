@@ -891,6 +891,7 @@ select:disabled {
 .inputs input,
 .inline-date-edit input,
 .planned-date-editor input,
+.body-weight-card__row input,
 .coach-edit textarea {
   width: 100%;
   padding: 12px 11px;
@@ -2746,3 +2747,22 @@ select:disabled {
   margin-bottom: 2px;
 }
 
+
+/* Issue #176: ввод веса тела перед тренировкой — одно число и одна кнопка. */
+.body-weight-card__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.body-weight-card__row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 18px;
+  font-weight: 820;
+}
+
+.body-weight-card__row .primary {
+  flex: 0 0 auto;
+  width: auto;
+}

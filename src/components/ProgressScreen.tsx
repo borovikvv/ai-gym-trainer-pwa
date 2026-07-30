@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import type { ProgressDashboard } from '../domain/progressDashboard'
 import { ScreenHeader, SectionList } from './ui'
 import { isProgramApiConfigured } from '../data/programApi'
+import { pluralRu } from '../lib/format'
+import { useBodyWeightLog } from '../hooks/useBodyWeightLog'
+import { BODY_WEIGHT_TREND_WINDOW_DAYS } from '../../shared/bodyWeight'
 
 type ProgressScreenProps = {
   progressDashboard: ProgressDashboard
@@ -87,6 +90,19 @@ function progressHeadline(progressDashboard: ProgressDashboard) {
   return 'Копим стабильную базу'
 }
 
+// Issue #176: вес только описывается. Ни советов по питанию, ни оценки
+// «хорошо/плохо» — что с этим делать, решает диагностика застоя (#175).
+function bodyWeightTrendText(direction: string, deltaKg: number, spanDays: number) {
+  const abs = Math.abs(deltaKg).toLocaleString('ru-RU')
+  // Период называем явно: «−8 кг» без указания, за сколько, читается как
+  // катастрофа или как успех в зависимости от настроения.
+  const span = `за ${spanDays} ${pluralRu(spanDays, 'день', 'дня', 'дней')}`
+  if (direction === 'up') return `+${abs} кг ${span}`
+  if (direction === 'down') return `−${abs} кг ${span}`
+  if (direction === 'flat') return `держится ${span}`
+  return 'нужен второй замер'
+}
+
 function rhythmLabel(workouts14d: number) {
   if (workouts14d >= 6) return 'ритм сильный'
   if (workouts14d >= 3) return 'ритм держится'
@@ -119,6 +135,12 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
     summary: string | null
   } | null>(null)
   const [changesLoading, setChangesLoading] = useState(false)
+
+  // Issue #176: тренд веса тела. Показываем скользящее среднее, а не
+  // отдельные замеры: суточные колебания воды больше недельной динамики.
+  // Вес объясняет застой (энергетический дефицит против недостаточного
+  // стимула) и ничего не ограничивает — ни целей, ни рекомендаций по питанию.
+  const bodyWeight = useBodyWeightLog(activeUserId)
 
   useEffect(() => {
     if (!activeUserId || !isProgramApiConfigured) return
@@ -290,7 +312,39 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
           </div>
 		        )}
 	
-	      {/* Secondary sections — collapsed by default (issue #47) */}
+	      {bodyWeight.trend && (
+        <div data-testid="body-weight-trend">
+          <div className="ser" style={{ fontSize: 22, fontWeight: 500, color: 'var(--text-primary)', margin: '22px 0 2px' }}>Вес тела</div>
+          <div style={{ font: '500 12px var(--font-ui)', color: 'var(--text-tertiary)', marginBottom: 10 }}>
+            Скользящее среднее за {BODY_WEIGHT_TREND_WINDOW_DAYS} {pluralRu(BODY_WEIGHT_TREND_WINDOW_DAYS, 'день', 'дня', 'дней')}, кг
+          </div>
+          <article className="e1rm-sparkline-card">
+            <div className="e1rm-sparkline-card__header">
+              <b data-testid="body-weight-average">{bodyWeight.trend.averageKg.toLocaleString('ru-RU')} кг</b>
+              <span className="e1rm-sparkline-card__best">{bodyWeight.trend.points.length} зам.</span>
+            </div>
+            <div className="e1rm-sparkline-card__chart">
+              <SparklineSVG
+                points={bodyWeight.trend.points.map((point, index) => ({ x: index, y: point.averageKg }))}
+                trendDirection={bodyWeight.trend.direction}
+                width={140}
+                height={36}
+              />
+            </div>
+            <div className="e1rm-sparkline-card__footer">
+              <small className="e1rm-sparkline-card__muscle">последний замер {bodyWeight.trend.latestKg.toLocaleString('ru-RU')} кг</small>
+              <small
+                className={bodyWeight.trend.direction === 'up' ? 'e1rm-trend--up' : bodyWeight.trend.direction === 'down' ? 'e1rm-trend--down' : 'muted'}
+                data-testid="body-weight-direction"
+              >
+                {bodyWeightTrendText(bodyWeight.trend.direction, bodyWeight.trend.deltaKg, bodyWeight.trend.spanDays)}
+              </small>
+            </div>
+          </article>
+        </div>
+      )}
+
+      {/* Secondary sections — collapsed by default (issue #47) */}
       <details className="progress-details">
         <summary>
           <span>Лучшие движения</span>
