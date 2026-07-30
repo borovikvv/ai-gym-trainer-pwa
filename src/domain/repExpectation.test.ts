@@ -117,6 +117,83 @@ describe('buildRepExpectation', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Окрестность веса (#190)
+// ---------------------------------------------------------------------------
+
+describe('ожидание по окрестности веса', () => {
+  /** Прогрессирующий человек: 55 → 57.5 → 60, точного повтора веса нет. */
+  const progressing = [
+    session('2026-07-01', [bench([set(55, 10)])]),
+    session('2026-07-08', [bench([set(57.5, 9)])]),
+    session('2026-07-15', [bench([set(60, 8)])]),
+  ]
+
+  it('строит ожидание там, где точного совпадения не набралось', () => {
+    const expectation = buildRepExpectation(progressing, { exerciseId: 'bench-press', weight: 60, setIndex: 1 })
+    expect(expectation.basis).toBe('history_near_weight')
+    expect(expectation.expectedReps).not.toBeNull()
+    // Окрестность узкая: 57.5 внутри ±3 кг от 60, а 55 уже за границей.
+    expect(expectation.sessionsUsed).toBe(2)
+  })
+
+  it('точное совпадение остаётся первым выбором', () => {
+    // К ряду на 60 добавлена соседняя сессия на 57.5 — basis не должен смениться.
+    const mixed = [...history, session('2026-07-18', [bench([set(57.5, 11)])])]
+    const expectation = buildRepExpectation(mixed, { exerciseId: 'bench-press', weight: 60, setIndex: 1 })
+    expect(expectation.basis).toBe('history_at_weight')
+    expect(expectation.expectedReps).toBe(10)
+  })
+
+  it('за границей окрестности вес не берётся', () => {
+    // Окрестность на 60 кг — 3 кг; 55 внутри, 50 уже нет.
+    const far = [
+      session('2026-07-01', [bench([set(50, 12)])]),
+      session('2026-07-08', [bench([set(50, 12)])]),
+    ]
+    expect(buildRepExpectation(far, { exerciseId: 'bench-press', weight: 60, setIndex: 1 }).basis)
+      .toBe('insufficient_data')
+  })
+
+  it('повторы переносятся как есть, без поправки на разницу веса', () => {
+    const lighter = [
+      session('2026-07-01', [bench([set(57.5, 10)])]),
+      session('2026-07-08', [bench([set(57.5, 10)])]),
+    ]
+    const expectation = buildRepExpectation(lighter, { exerciseId: 'bench-press', weight: 60, setIndex: 1 })
+    // Ряд ровный, наклон 0. Приведение через e1RM дало бы здесь 8 и оказалось
+    // на боевых данных хуже простого переноса — см. шапку модуля.
+    expect(expectation.slopePerSession).toBe(0)
+    expect(expectation.expectedReps).toBe(10)
+  })
+
+  it('работает и на упражнении с помощью — перенос повторов не зависит от направления веса', () => {
+    // Приведение к другому весу требовало бы знать, нагрузка это или противовес
+    // (#173). Перенос как есть — не требует, поэтому гравитрон не особый случай.
+    const gravitron = (sets: Array<{ weight: number; reps: number }>) =>
+      ({ exerciseId: 'gravitron-pullup', exerciseName: 'Подтягивания в гравитроне', sets })
+    const assisted = [
+      session('2026-07-01', [gravitron([set(27.5, 10)])]),
+      session('2026-07-08', [gravitron([set(27.5, 10)])]),
+    ]
+    const expectation = buildRepExpectation(assisted, { exerciseId: 'gravitron-pullup', weight: 25, setIndex: 1 })
+    expect(expectation.basis).toBe('history_near_weight')
+    expect(expectation.expectedReps).toBe(10)
+  })
+
+  it('номер подхода считается среди подходов в окрестности', () => {
+    // Первый подход на 40 кг вне окрестности 60 — он не должен сдвинуть нумерацию.
+    const withLightOpener = [
+      session('2026-07-01', [bench([set(40, 12), set(57.5, 9), set(57.5, 8)])]),
+      session('2026-07-08', [bench([set(40, 12), set(57.5, 9), set(57.5, 8)])]),
+    ]
+    const first = buildRepExpectation(withLightOpener, { exerciseId: 'bench-press', weight: 60, setIndex: 1 })
+    const second = buildRepExpectation(withLightOpener, { exerciseId: 'bench-press', weight: 60, setIndex: 2 })
+    expect(first.basis).toBe('history_near_weight')
+    expect(first.expectedReps).toBeGreaterThan(second.expectedReps!)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Отклонение
 // ---------------------------------------------------------------------------
 
