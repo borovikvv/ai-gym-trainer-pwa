@@ -32,7 +32,8 @@
   "include": [
     "server/**/*.ts",
     "server/**/*.js",
-    "shared/**/*.ts"
+    "shared/**/*.ts",
+    "scripts/**/*.ts"
   ],
   "exclude": [
     "server/**/*.test.js",

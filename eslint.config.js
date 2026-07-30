@@ -52,7 +52,7 @@ export default defineConfig([
     // Server-side TypeScript files (gradual migration in progress).
     // Uses lax tsconfig — type-checked ESLint rules are disabled here
     // until strict mode is enabled.
-    files: ['server/**/*.ts', 'shared/**/*.ts'],
+    files: ['server/**/*.ts', 'shared/**/*.ts', 'scripts/**/*.ts'],
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
