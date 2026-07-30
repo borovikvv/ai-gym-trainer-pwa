@@ -1,6 +1,6 @@
 // Issue #67 (#36 decomposition): all `any` replaced with concrete types.
 import type { WorkoutHistoryEntry } from '../../shared/types.js'
-import type { DbClient } from '../dbClient.js'
+import { nonFatal, type DbClient } from '../dbClient.js'
 import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
 import { buildGeneratedPlannedWorkout } from '../plannedWorkoutGenerator.js'
@@ -8,7 +8,7 @@ import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramE
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 import { formatWeight } from '../../shared/format.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
-import { formatWeeklyVolumeForPrompt, loadWeeklyVolumeStatus } from '../weeklyVolumeTargets.js'
+import { formatWeeklyVolumeForPrompt, loadWeeklyVolumeStatus, type WeeklyVolumeStatus } from '../weeklyVolumeTargets.js'
 
 interface PlannedExerciseRow {
   planned_workout_id: string
@@ -255,8 +255,11 @@ export async function createGeneratedPlannedWorkoutForDate(client: DbClient, { u
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
   const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
   // Issue #166: сессия планируется под остаток недельной цели по группам.
-  const weeklyVolume = await loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) }).catch(() => ({}))
-  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [await loadLongTermMemoryBlock(client, userId), formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), weeklyVolume })
+  // Оба чтения необязательные и идут внутри транзакции создания — только через
+  // nonFatal, иначе их сбой роняет сам insert (см. комментарий в dbClient).
+  const weeklyVolume = await nonFatal(client, 'weeklyVolume', () => loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) }), {} as Record<string, WeeklyVolumeStatus>)
+  const longTermMemory = await nonFatal(client, 'longTermMemory', () => loadLongTermMemoryBlock(client, userId), '')
+  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [longTermMemory, formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), weeklyVolume })
   const id = `planned-${userId}-${scheduledDate}-${Date.now()}`
   await insertGeneratedPlannedWorkout(client, { id, userId, generated, source })
   return (await loadPlannedWorkouts(client, userId, { includePast: true })).find((workout) => workout.id === id)
@@ -324,8 +327,9 @@ export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkou
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
   const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
   // Issue #166: сессия планируется под остаток недельной цели по группам.
-  const weeklyVolume = await loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) }).catch(() => ({}))
-  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [await loadLongTermMemoryBlock(client, userId), formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), refineWithLlm, weeklyVolume })
+  const weeklyVolume = await nonFatal(client, 'weeklyVolume', () => loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) }), {} as Record<string, WeeklyVolumeStatus>)
+  const longTermMemory = await nonFatal(client, 'longTermMemory', () => loadLongTermMemoryBlock(client, userId), '')
+  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [longTermMemory, formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), refineWithLlm, weeklyVolume })
   await client.query('delete from public.planned_workout_exercises where planned_workout_id = $1', [plannedWorkoutId])
   await updateGeneratedPlannedWorkout(client, { id: plannedWorkoutId, generated })
 }

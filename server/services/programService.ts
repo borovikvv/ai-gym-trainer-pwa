@@ -1,7 +1,7 @@
 // Issue #67 (#36 decomposition): all `any` replaced with concrete types.
 // Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
 import type { CoachState, WorkoutHistoryEntry } from '../../shared/types.js'
-import type { DbClient } from '../dbClient.js'
+import { nonFatal, type DbClient } from '../dbClient.js'
 import type { NormalizedProfile } from '../utils.js'
 import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
@@ -417,32 +417,32 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   // Persist any non-hold adjustment decisions to volume_landmark_overrides.
   // This updates lastAdjustmentIso so the 2-week cooldown applies next time.
   // Errors here are non-fatal — coach state is still returned.
-  try {
+  //
+  // Все три блока ниже некритичны, но состояние тренера считается и внутри
+  // транзакции сохранения тренировки: там простого try/catch мало — сбой
+  // запроса убивает транзакцию целиком (см. nonFatal в dbClient).
+  await nonFatal(client, 'volumeLandmarkOverrides', async () => {
     if (coachState.volumeAdjustmentLog && coachState.volumeAdjustmentLog.length > 0) {
       await saveVolumeLandmarkAdjustments(client, userId, coachState.volumeAdjustmentLog, now)
     }
-  } catch (err) {
-    console.error('volumeLandmarkOverrides save failed (non-fatal):', (err as Error).message)
-  }
+  }, undefined)
   // Issue #174: цель блока — поставить новому блоку, сверить факт с ожиданием,
   // закрыть оценкой блок, который только что закончился. Сбой не фатален:
   // состояние тренера возвращается и без цели.
-  let blockGoal = null
-  try {
-    blockGoal = (await syncBlockGoalForUser(client, userId, { profile, history, e1rmHistories, coachState, now })).goal
-  } catch (err) {
-    console.error('syncBlockGoal failed (non-fatal):', (err as Error).message)
-  }
+  const blockGoal = await nonFatal(
+    client,
+    'syncBlockGoal',
+    async () => (await syncBlockGoalForUser(client, userId, { profile, history, e1rmHistories, coachState, now })).goal,
+    null,
+  )
   // Issue #166: недельные цели по группам — способ достичь цели блока. Ставим
   // цели текущей неделе и закрываем сверкой прошедшие. Тоже не фатально.
-  let weeklyVolume: SyncWeeklyVolumeResult | null = null
-  try {
-    weeklyVolume = await syncWeeklyVolumeTargets(client, userId, {
-      history, coachState, blockGoalId: blockGoal?.id ?? null, now,
-    })
-  } catch (err) {
-    console.error('syncWeeklyVolumeTargets failed (non-fatal):', (err as Error).message)
-  }
+  const weeklyVolume = await nonFatal<SyncWeeklyVolumeResult | null>(
+    client,
+    'syncWeeklyVolumeTargets',
+    () => syncWeeklyVolumeTargets(client, userId, { history, coachState, blockGoalId: blockGoal?.id ?? null, now }),
+    null,
+  )
   // profile / history / e1rmHistories are already computed here — expose them
   // so per-set live coach calls (liveCoachContext) don't re-query everything.
   return { coachMemory, coachState, profile, history, e1rmHistories, blockGoal, weeklyVolume }
