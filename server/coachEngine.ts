@@ -8,6 +8,7 @@ import type {
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, harderWeight, easierWeight } from '../shared/weightDirection.js'
+import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, isAxialFreeWeight } from '../shared/teenLimits.js'
 import { roundWeight } from '../shared/format.js'
 import { findComplementaryExercises } from './exerciseMatcher.js'
 
@@ -33,6 +34,11 @@ interface ExerciseInput {
   restSeconds?: number
   /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
   weightDirection?: string | null
+  // Issue #171: метаданные справочника для признака осевого свободновесного
+  // движения (см. isAxialFreeWeight).
+  equipment?: string | null
+  exerciseType?: string | null
+  movementPattern?: string | null
 }
 
 interface SetInput {
@@ -84,7 +90,12 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
   const userTrainingPolicy = input.userTrainingPolicy ?? getUserTrainingPolicy(input.userId)
   const completedSets = (input.completedSets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0)
   const lastSet = completedSets.at(-1)
-  const repMin = safeNumber(exercise.repMin, 8)
+  // Issue #171: подростковые ограничения — возраст (через политику) И осевое
+  // свободновесное движение. На изоляции и тренажёрах не действуют.
+  const teenLimited = userTrainingPolicy?.ageRecoveryProfile?.phase === 'teen' && isAxialFreeWeight(exercise)
+  // Подростку на таком движении подход короче пяти повторов не назначается,
+  // даже если в справочнике диапазон начинается с четырёх (становая: 4–6).
+  const repMin = Math.max(teenLimited ? TEEN_MIN_REPS : 0, safeNumber(exercise.repMin, 8))
   const repMax = Math.max(repMin, safeNumber(exercise.repMax, repMin))
   const step = Math.max(0, safeNumber(exercise.weightStep, 2.5))
   const baseRest = Math.max(45, safeNumber(exercise.restSeconds, 90))
@@ -225,7 +236,12 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
       recommendedWeight: roundWeight(easierWeight(lastWeight, step, direction)),
       recommendedReps: repMin,
       recommendedRestSeconds: Math.max(baseRest, 180),
-      reason: 'Олег: подход уже очень тяжёлый — снижаем вес на шаг, работаем без отказа и держим технику',
+      // Issue #171: причина ограничения называется явно и берётся из того же
+      // места, где ограничение объявлено. Раньше здесь было имя пользователя
+      // («Олег: …») — правило выглядело персональным, хотя таковым не является.
+      reason: teenLimited
+        ? `подход уже очень тяжёлый — снижаем вес на шаг: ${TEEN_LIMIT_REASONS.no_failure}`
+        : 'подход уже очень тяжёлый — снижаем вес на шаг, работаем без отказа и держим технику',
     }, input.remainingSets)
   }
 
@@ -247,7 +263,12 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
   // (≥2) при большом запасе (reps ≥ repMax+4) разрешаем +2 шага, остальным +1.
   // Это остаётся в пределах clampNextSetDecision (up-скачок разрешён при низком
   // RPE), поэтому безопасно и для режима без отказа.
-  if (lastReps >= repMax + 2 && lastRpe <= 6 && step > 0) {
+  // Issue #171 (правило 4, «мельче шаг — чаще прибавки»): подростку порог
+  // запаса ниже, поэтому прибавка приходит раньше. Величина прибавки при этом
+  // остаётся одним шагом (maxWeightJumpSteps=1 в подростковой политике) — доля
+  // шага не берётся: на штанге минимальная реальная прибавка и есть weightStep.
+  const surplusForBump = teenLimited ? 1 : 2
+  if (lastReps >= repMax + surplusForBump && lastRpe <= 6 && step > 0) {
     const maxSteps = Math.max(1, Math.floor(safeNumber(userTrainingPolicy?.maxWeightJumpSteps, 1)))
     const steps = lastReps >= repMax + 4 && maxSteps >= 2 ? 2 : 1
     return withRemainingSetUpdates({
@@ -255,7 +276,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
       recommendedWeight: roundWeight(harderWeight(lastWeight, steps * step, direction)),
       recommendedReps: repMin,
       recommendedRestSeconds: baseRest,
-      reason: `верх диапазона взят с запасом (${lastReps} повторов, легко) — повышаем вес на ${steps * step} кг и возвращаемся к нижней границе повторов`,
+      reason: `верх диапазона взят с запасом (${lastReps} повторов, легко) — повышаем вес на ${steps * step} кг и возвращаемся к нижней границе повторов${teenLimited ? `: ${TEEN_LIMIT_REASONS.small_steps}` : ''}`,
     }, input.remainingSets)
   }
 

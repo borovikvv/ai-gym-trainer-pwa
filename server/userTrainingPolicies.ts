@@ -1,5 +1,6 @@
 import type { AgeRecoveryPhase } from '../shared/types.js'
 import { harderWeight, easierWeight, type WeightDirection } from '../shared/weightDirection.js'
+import { TEEN_MIN_REPS, isTeenAge } from '../shared/teenLimits.js'
 
 type MaxIntensity = 'controlled' | 'controlled_aggressive'
 type ProgressionAggressiveness = 'conservative' | 'controlled_aggressive'
@@ -24,38 +25,49 @@ export interface UserTrainingPolicy extends UserPolicy {
   ageRecoveryProfile: AgeRecoveryProfile
 }
 
-const POLICIES: Record<string, UserPolicy> = {
-  vyacheslav: {
-    userId: 'vyacheslav',
-    maxIntensity: 'controlled_aggressive',
-    allowFailureSets: true,
-    progressionAggressiveness: 'controlled_aggressive',
-    maxWeightJumpSteps: 2,
-    safetyNotes: [
-      'прогрессировать только при нормальном восстановлении',
-      'не ломать технику ради веса',
-    ],
-  },
-  oleg: {
-    userId: 'oleg',
-    maxIntensity: 'controlled',
-    allowFailureSets: false,
-    progressionAggressiveness: 'conservative',
-    maxWeightJumpSteps: 1,
-    safetyNotes: [
-      'без повторных отказных подходов',
-      'приоритет техники и стабильного диапазона повторов',
-    ],
-  },
-}
+// Issue #171: политика выводится из ВОЗРАСТА профиля, а не из таблицы по
+// идентификатору пользователя. Раньше здесь были поимённые записи `vyacheslav`
+// и `oleg`; при добавлении второго подростка ограничения пришлось бы вписывать
+// руками, а до этого он тренировался бы по взрослым правилам.
+type AgePolicy = Omit<UserPolicy, 'userId'>
 
-const DEFAULT_POLICY: UserPolicy = {
-  userId: 'unknown',
+const TEEN_POLICY: AgePolicy = {
   maxIntensity: 'controlled',
   allowFailureSets: false,
   progressionAggressiveness: 'conservative',
   maxWeightJumpSteps: 1,
-  safetyNotes: ['частный режим: неизвестному пользователю даём консервативную нагрузку'],
+  safetyNotes: [
+    'без отказных подходов на осевых и свободновесных движениях',
+    'без проходок и подходов короче пяти повторов',
+    'приоритет техники и стабильного диапазона повторов',
+  ],
+}
+
+const ADULT_POLICY: AgePolicy = {
+  maxIntensity: 'controlled_aggressive',
+  allowFailureSets: true,
+  progressionAggressiveness: 'controlled_aggressive',
+  maxWeightJumpSteps: 2,
+  safetyNotes: [
+    'прогрессировать только при нормальном восстановлении',
+    'не ломать технику ради веса',
+  ],
+}
+
+// Возраст неизвестен — самая консервативная из трёх. Неизвестный возраст может
+// оказаться подростковым, поэтому неопределённость разрешается вниз.
+const UNKNOWN_AGE_POLICY: AgePolicy = {
+  maxIntensity: 'controlled',
+  allowFailureSets: false,
+  progressionAggressiveness: 'conservative',
+  maxWeightJumpSteps: 1,
+  safetyNotes: ['возраст не указан — даём консервативную нагрузку'],
+}
+
+function policyForAge(age: number): AgePolicy {
+  if (isTeenAge(age)) return TEEN_POLICY
+  if (Number.isFinite(age) && age > 0) return ADULT_POLICY
+  return UNKNOWN_AGE_POLICY
 }
 
 interface ProfileLike {
@@ -74,8 +86,8 @@ export function getUserTrainingPolicy(userOrProfile: ProfileLike | string | null
   const rawAge = profile?.age
   const age = rawAge === null || rawAge === undefined ? NaN : Number(rawAge)
   return {
-    ...DEFAULT_POLICY,
-    ...(POLICIES[key] ?? { userId: key || DEFAULT_POLICY.userId }),
+    userId: key || 'unknown',
+    ...policyForAge(age),
     ageRecoveryProfile: buildAgeRecoveryProfile(age),
   }
 }
@@ -125,6 +137,12 @@ export interface ClampNextSetInput {
    * проходил кламп (якорный вес 0 не даёт границ).
    */
   timed?: boolean
+  /**
+   * Issue #171: текущее упражнение — осевое/свободновесное многосуставное
+   * (см. isAxialFreeWeight). Для подросткового профиля включает нижнюю границу
+   * повторов: LLM не может предложить подход на 1–4 повтора.
+   */
+  axialFreeWeight?: boolean
 }
 
 export interface ClampedNextSetDecision {
@@ -141,6 +159,9 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
   const lastRpe = Number(input.lastSet?.rpe)
 
   const maxRpe = policy.allowFailureSets === false ? 8 : 9
+  // Issue #171: подростковые ограничения — возраст (через политику) И осевое
+  // свободновесное движение. На изоляции они не действуют.
+  const teenLimited = policy.ageRecoveryProfile?.phase === 'teen' && input.axialFreeWeight === true
   const rawAction = String(proposal.strategyAction?.type ?? 'hold')
   let actionType = ALLOWED_NEXT_SET_STRATEGY_ACTIONS.has(rawAction) ? rawAction : 'hold'
   // Pain overrides everything the LLM said: stop and pick a safe replacement.
@@ -180,7 +201,11 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
       if (Number.isFinite(lastSeconds) && lastSeconds > 0) reps = Math.min(reps, Math.round(lastSeconds) + 30)
     } else {
       if (!Number.isFinite(reps)) reps = 8
-      reps = Math.min(20, Math.max(3, reps))
+      // Issue #171: подростку на осевом свободновесном движении подход короче
+      // пяти повторов не назначается — это проходка, а не рабочий подход.
+      // Ограничение стоит ЗДЕСЬ, после LLM: советник его обойти не может.
+      const minReps = teenLimited ? TEEN_MIN_REPS : 3
+      reps = Math.min(20, Math.max(minReps, reps))
     }
 
     let rest = Math.round(Number(rawNextSet.restSeconds))

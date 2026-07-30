@@ -5,12 +5,14 @@ import { buildNextSetDecision } from '../coachSetAdvisor.js'
 import { buildWorkoutTodayPlan } from '../coachToday.js'
 import { recommendNextSet } from '../coachEngine.js'
 import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecisionLog.js'
-import { loadCoachMemoryForUser, loadCoachStateForUser, loadExerciseLibrary, loadUserProfile, loadUserWorkoutDays, loadRecentHistory } from '../services/programService.js'
+import { loadCoachMemoryForUser, loadCoachStateForUser, loadExerciseLibrary, loadExerciseMovementMeta, loadUserProfile, loadUserWorkoutDays, loadRecentHistory } from '../services/programService.js'
+import { getUserTrainingPolicy } from '../userTrainingPolicies.js'
+import { canonicalExerciseId } from '../../shared/exerciseIdentity.js'
 import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../activityLog.js'
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
-import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { requireAllowedUserId } from '../privateUsers.js'
 import { loadGoals, loadLongTermMemoryBlock, loadMemoryFacts, refreshGoalProgress } from '../coachLongTermMemory.js'
 
@@ -54,9 +56,23 @@ coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res) => {
     }
   }
 
+  // Issue #171: ограничения выводятся из ВОЗРАСТА профиля и из метаданных
+  // движения в справочнике — не из идентификатора пользователя и не из того,
+  // что прислал клиент. Оба источника читаются здесь и дальше идут одним
+  // набором в правила и в кламп LLM.
+  const [profile, movementMeta] = await Promise.all([
+    body.userId ? loadUserProfile(pool, String(body.userId)) : Promise.resolve(null),
+    exercisePayload.id
+      ? loadExerciseMovementMeta(pool, canonicalExerciseId(String(exercisePayload.id)))
+      : Promise.resolve(null),
+  ])
+  if (movementMeta) Object.assign(exercisePayload, movementMeta)
+  const userTrainingPolicy = getUserTrainingPolicy(profile ?? String(body.userId ?? ''))
+
   const rulesDecision = recommendNextSet({
     userId: body.userId,
     exercise: exercisePayload,
+    userTrainingPolicy,
     completedSets,
     remainingSets: body.remainingSets,
     pain: Boolean(body.pain),
@@ -68,6 +84,7 @@ coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res) => {
   const { decision, prompt, clamped } = await buildNextSetDecision({
     client: pool,
     userId: String(body.userId ?? ''),
+    policy: userTrainingPolicy,
     exercise: exercisePayload,
     completedSets,
     remainingSets: Number(body.remainingSets ?? 0),
@@ -130,9 +147,15 @@ coachRoutes.get('/coach/memory/:userId', requireAllowedUserId, async (req, res) 
 coachRoutes.post('/coach/live-strategy', requireAllowedUserId, async (req, res) => {
   const body = req.body ?? {}
   const context = body.context ?? {}
-  const coachState = context.coachState || (body.userId ? await loadCoachStateForUser(pool, body.userId) : null)
+  // Issue #171: возраст — вход политики; без него подросток получал бы
+  // взрослые границы RPE в клампе стратегии.
+  const [coachState, strategyProfile] = await Promise.all([
+    context.coachState ?? (body.userId ? loadCoachStateForUser(pool, body.userId) : null),
+    body.userId ? loadUserProfile(pool, String(body.userId)) : null,
+  ])
   const decision = await buildLiveStrategyDecision({
     userId: body.userId,
+    age: strategyProfile?.age ?? null,
     exercise: body.exercise,
     completedSets: body.completedSets,
     coachState,
@@ -198,7 +221,7 @@ coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async 
   const { coachMemory, coachState, profile } = await loadCoachMemoryForUser(pool, userId)
   const history = await loadRecentHistory(pool, userId)
   // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
-  const e1rmHistories = buildAllExerciseE1RMHistories(history, { bodyWeightKg: profile?.weightKg }).map((h) => ({
+  const e1rmHistories = buildAllExerciseE1RMHistories(history, e1rmOptionsForProfile(profile)).map((h) => ({
     exerciseId: h.exerciseId,
     exerciseName: h.exerciseName,
     muscleGroup: h.muscleGroup,

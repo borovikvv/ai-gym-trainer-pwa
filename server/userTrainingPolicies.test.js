@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 
 describe('user training policies', () => {
-  it('keeps Oleg on conservative progression with no repeated max-effort sets', () => {
-    expect(getUserTrainingPolicy('oleg')).toMatchObject({
+  // Issue #171: политика выводится из возраста профиля, а не из имени
+  // пользователя. Раньше в этих тестах передавалась строка-идентификатор.
+  it('keeps an under-18 profile on conservative progression with no failure sets', () => {
+    expect(getUserTrainingPolicy({ userId: 'oleg', age: 15 })).toMatchObject({
       userId: 'oleg',
       maxIntensity: 'controlled',
       allowFailureSets: false,
@@ -12,13 +14,34 @@ describe('user training policies', () => {
     })
   })
 
-  it('allows Vyacheslav controlled aggressive progression when recovered', () => {
-    expect(getUserTrainingPolicy('vyacheslav')).toMatchObject({
+  it('allows an adult profile controlled aggressive progression when recovered', () => {
+    expect(getUserTrainingPolicy({ userId: 'vyacheslav', age: 43 })).toMatchObject({
       userId: 'vyacheslav',
       maxIntensity: 'controlled_aggressive',
       allowFailureSets: true,
       progressionAggressiveness: 'controlled_aggressive',
       maxWeightJumpSteps: 2,
+    })
+  })
+
+  it('does not read the limits off the user id — the same name with a teen age is limited', () => {
+    // Ограничения применяются по возрасту: тот же идентификатор с подростковым
+    // возрастом получает подростковую политику, и наоборот.
+    expect(getUserTrainingPolicy({ userId: 'vyacheslav', age: 15 })).toMatchObject({
+      allowFailureSets: false,
+      maxWeightJumpSteps: 1,
+    })
+    expect(getUserTrainingPolicy({ userId: 'oleg', age: 25 })).toMatchObject({
+      allowFailureSets: true,
+      maxWeightJumpSteps: 2,
+    })
+  })
+
+  it('falls back to the conservative policy when the age is unknown', () => {
+    // Неизвестный возраст может оказаться подростковым — разрешаем вниз.
+    expect(getUserTrainingPolicy('vyacheslav')).toMatchObject({
+      allowFailureSets: false,
+      maxWeightJumpSteps: 1,
     })
   })
 

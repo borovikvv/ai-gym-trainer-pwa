@@ -3,6 +3,9 @@ import { buildGeneratedPlannedWorkout } from './plannedWorkoutGenerator.js'
 
 const profile = {
   userId: 'vyacheslav',
+  // Issue #171: возраст — вход политики (без него профиль считается
+  // неизвестным и получает консервативные границы).
+  age: 43,
   goal: 'сила и мышечная масса',
   level: 'intermediate',
   workoutsPerWeek: 2,
@@ -709,6 +712,8 @@ describe('planned workout generator', () => {
       profile: {
         ...profile,
         userId: 'oleg',
+        // Issue #171: ограничение включает возраст, а не идентификатор.
+        age: 15,
         preferences: {
           focusAreas: ['грудь', 'спина'],
           exerciseStyle: 'mixed',
@@ -982,6 +987,7 @@ describe('planned workout generator', () => {
 describe('buildGeneratedPlannedWorkout — intra-cycle periodization', () => {
   const profile = {
     userId: 'vyacheslav',
+    age: 43,
     goal: 'сила и мышечная масса',
     level: 'intermediate',
     workoutsPerWeek: 2,
@@ -1712,6 +1718,7 @@ describe('Issue #173: weight direction for assisted exercises (gravitron)', () =
   ]
   const backProfile = {
     userId: 'vyacheslav',
+    age: 43,
     goal: 'сила и мышечная масса',
     level: 'intermediate',
     workoutsPerWeek: 2,

@@ -1,5 +1,6 @@
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { resolveWeightDirection } from '../../shared/weightDirection'
+import { TEEN_MIN_REPS, isTeenAge } from '../../shared/teenLimits'
 
 /**
  * Estimated One-Rep Max (e1RM) — Helms / RTS formula.
@@ -43,6 +44,27 @@ export function estimateE1RM(weight: number, reps: number): number {
  */
 export type E1RMOptions = {
   bodyWeightKg?: number | null
+  /**
+   * Issue #171: минимальное число повторов, с которого подход берётся в
+   * расчёт силы. Для подросткового профиля — TEEN_MIN_REPS: оценка силы не
+   * должна опираться на подходы, которых тренер не назначает. Иначе один
+   * случайный подход на 3 повтора задирает e1RM, а система принимает это за
+   * прирост силы и назначает вес под него.
+   */
+  minReps?: number
+}
+
+/**
+ * Опции e1RM для профиля пользователя — один вызов вместо повторения правила
+ * на каждой стороне (сервер, история, прогресс, живой контекст).
+ */
+export function e1rmOptionsForProfile(
+  profile: { age?: number | null; weightKg?: number | null } | null | undefined,
+): E1RMOptions {
+  return {
+    bodyWeightKg: profile?.weightKg ?? null,
+    minReps: isTeenAge(profile?.age) ? TEEN_MIN_REPS : 1,
+  }
 }
 
 export type E1RMDataPoint = {
@@ -65,10 +87,13 @@ export function bestE1RMFromExercise(
   // Реальная нагрузка = вес тела − помощь; без веса тела e1RM бессмысленен.
   const direction = resolveWeightDirection(exercise.exerciseName)
   const bodyWeight = Number(options?.bodyWeightKg)
+  // Issue #171: подходы короче minReps в оценку силы не берутся.
+  const minReps = Math.max(1, Number(options?.minReps) || 1)
   let best: E1RMDataPoint | null = null
   for (const set of exercise.sets ?? []) {
     if (!set.completed && set.reps <= 0) continue
     if (set.reps <= 0) continue
+    if (set.reps < minReps) continue
     // Issue #54: skip sets with weight=0 (bodyweight/isometric exercises).
     // e1RM formula gives 0 for weight=0 which is meaningless — these
     // exercises (plank, crunches, push-ups) track reps/seconds, not load.

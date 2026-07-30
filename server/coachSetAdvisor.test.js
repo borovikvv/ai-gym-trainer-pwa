@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { buildNextSetDecision } from './coachSetAdvisor.ts'
-import { clampNextSetDecision } from './userTrainingPolicies.ts'
+import { clampNextSetDecision, getUserTrainingPolicy } from './userTrainingPolicies.ts'
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -201,6 +201,8 @@ describe('buildNextSetDecision', () => {
     const { decision } = await buildNextSetDecision({
       client: fakeClient,
       userId: 'vyacheslav',
+      // Issue #171: политика приходит из роута и выведена из возраста профиля.
+      policy: getUserTrainingPolicy({ userId: 'vyacheslav', age: 43 }),
       exercise: EXERCISE,
       completedSets: COMPLETED_SETS,
       remainingSets: 1,
@@ -208,7 +210,7 @@ describe('buildNextSetDecision', () => {
       rulesDecision: RULES_DECISION,
     })
     expect(decision.source).toBe('llm')
-    // vyacheslav: max 2 steps up from last set 60 → 65
+    // взрослый профиль: max 2 шага вверх от последнего подхода 60 → 65
     expect(decision.recommendedWeight).toBe(65)
     expect(decision.recommendedReps).toBe(20)
     expect(decision.recommendedRestSeconds).toBe(30)

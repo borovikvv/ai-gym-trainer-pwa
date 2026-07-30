@@ -14,7 +14,7 @@ import type { CoachMemory, CoachSessionContext, CoachState, ExerciseProfile, Rea
 import type { DbClient } from '../dbClient.js'
 import { loadCoachMemoryForUser } from './programService.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from '../userTrainingPolicies.js'
-import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { normalizeMuscleGroup } from '../../shared/muscleGroups.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 import { isTimedExercise } from '../../src/domain/exerciseMetrics.js'
@@ -59,7 +59,7 @@ export async function loadLiveCoachUserData(client: DbClient, userId: string): P
     coachMemory,
     history,
     // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
-    e1rmHistories: e1rmHistories ?? buildAllExerciseE1RMHistories(history, { bodyWeightKg: profile?.weightKg }),
+    e1rmHistories: e1rmHistories ?? buildAllExerciseE1RMHistories(history, e1rmOptionsForProfile(profile)),
     policy: getUserTrainingPolicy(profile ?? userId),
     profile: profile ?? {},
     longTermMemory: await loadLongTermMemoryBlock(client, userId),

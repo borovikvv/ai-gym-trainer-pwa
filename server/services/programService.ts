@@ -9,7 +9,7 @@ import { dayTemplate } from '../programTemplates.js'
 import { groupBy, normalizeLibraryExercise, normalizeProfile, normalizeProgramExercise, normalizeSet } from '../utils.js'
 import { assertAllowedRowOwner } from '../privateUsers.js'
 import { loadVolumeLandmarkOverrides, saveVolumeLandmarkAdjustments } from '../volumeLandmarkOverrides.js'
-import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { syncBlockGoal } from '../mesocycleBlockGoal.js'
 import { syncWeeklyVolumeTargets, type SyncWeeklyVolumeResult } from '../weeklyVolumeTargets.js'
 import { applyMemoryUpdates, loadGoals } from '../coachLongTermMemory.js'
@@ -286,6 +286,32 @@ export async function loadExerciseLibrary(client: DbClient): Promise<unknown[]> 
   return result.rows.map(normalizeLibraryExercise)
 }
 
+/**
+ * Issue #171: метаданные движения для одного упражнения. Клиент присылает в
+ * /coach/next-set только id, имя и диапазоны — по ним нельзя понять, осевое ли
+ * это свободновесное движение. Справочник читается на сервере: признак, от
+ * которого зависят ограничения, не должен приходить из клиентского payload.
+ * Отдельный запрос вместо loadExerciseLibrary — на каждый подход читать весь
+ * справочник незачем.
+ */
+export async function loadExerciseMovementMeta(
+  client: DbClient,
+  exerciseId: string,
+): Promise<{ equipment: string | null; exerciseType: string | null; movementPattern: string | null } | null> {
+  const result = await client.query(
+    `select equipment, exercise_type, movement_pattern
+     from public.exercise_library where id = $1`,
+    [exerciseId],
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    equipment: (row.equipment as string | null) ?? null,
+    exerciseType: (row.exercise_type as string | null) ?? null,
+    movementPattern: (row.movement_pattern as string | null) ?? null,
+  }
+}
+
 export async function loadRecentHistory(client: DbClient, userId: string) {
   // Issue #74: limit was 8, which dropped the oldest workout in a 4-week
   // mesocycle cycle when the user trained 3x/week (3*4=12 workouts per cycle).
@@ -364,7 +390,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   // Build e1RM histories once — used by the adaptive volume engine to
   // detect strength trends per muscle group.
   // Issue #173: bodyWeightKg нужен для e1RM упражнений с помощью (гравитрон).
-  const e1rmHistories = buildAllExerciseE1RMHistories(history, { bodyWeightKg: profile?.weightKg })
+  const e1rmHistories = buildAllExerciseE1RMHistories(history, e1rmOptionsForProfile(profile))
   // First pass: coachState without coachMemory (mesocycle MRV triggers unavailable).
   const coachStatePass1 = computeCoachState({
     profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, now,

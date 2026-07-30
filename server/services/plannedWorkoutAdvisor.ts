@@ -17,6 +17,7 @@
 import { isLlmConfigured, requestLlmJson } from '../lib/llmClient.js'
 import { roundWeight } from '../../shared/format.js'
 import { resolveWeightDirection, harderWeight, easierWeight, easierOf } from '../../shared/weightDirection.js'
+import { TEEN_MIN_REPS } from '../../shared/teenLimits.js'
 
 /** Предписание одного упражнения — вход и выход советника. */
 export interface PlannedExercisePrescription {
@@ -36,6 +37,13 @@ export interface PlannedExercisePrescription {
   currentWorkingWeight?: number | null
   /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
   weightDirection?: string | null
+  /**
+   * Issue #171: к упражнению применены подростковые ограничения (осевое
+   * свободновесное движение + возраст до 18). Здесь это значит две вещи:
+   * нижняя граница повторов не опускается ниже TEEN_MIN_REPS и текст с
+   * причиной ограничения не переписывается формулировкой LLM.
+   */
+  teenLimited?: boolean
 }
 
 /** Безопасная альтернатива для свапа (из детерминированного whitelist). */
@@ -203,14 +211,20 @@ export function clampRefinedPlannedExercises(
 
     // Повторы: близко к baseline (защита от абсурда, в т.ч. для упражнений на
     // время, где reps — это секунды).
+    // Issue #171: для подростка на осевом свободновесном движении нижняя
+    // граница жёсткая. Без неё LLM опускал бы repMin на 3 от baseline и
+    // выписывал подростку проходку — ограничение обходилось бы через советника.
+    const repFloor = base.teenLimited ? TEEN_MIN_REPS : 1
     const repMin = Number.isFinite(Number(proposal.repMin))
-      ? Math.round(clampNumber(Number(proposal.repMin), Math.max(1, base.repMin - 3), base.repMin + 5))
+      ? Math.round(clampNumber(Number(proposal.repMin), Math.max(repFloor, base.repMin - 3), Math.max(repFloor, base.repMin + 5)))
       : base.repMin
     const repMax = Number.isFinite(Number(proposal.repMax))
       ? Math.round(clampNumber(Number(proposal.repMax), repMin + 1, base.repMax + 5))
       : Math.max(repMin + 1, base.repMax)
 
-    const coachFocus = typeof proposal.coachFocus === 'string' && proposal.coachFocus.trim().length > 0
+    // Issue #171: текст с причиной ограничения LLM не переписывает — иначе
+    // объяснение, которое обязано дойти до пользователя, теряется.
+    const coachFocus = !base.teenLimited && typeof proposal.coachFocus === 'string' && proposal.coachFocus.trim().length > 0
       ? proposal.coachFocus.trim().slice(0, 500)
       : base.coachFocus
 
