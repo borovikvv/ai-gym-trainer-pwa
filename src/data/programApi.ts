@@ -1,4 +1,5 @@
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
+import type { BodyWeightMeasurement } from '../../shared/bodyWeight'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { users as fallbackUsers, workoutDays as fallbackWorkoutDays } from './mockProgram'
 import type { ExercisePlan, UserProfile, WorkoutDay } from '../../shared/types'
@@ -651,4 +652,35 @@ function createFallbackQuestionnaire(user: UserProfile): UserQuestionnaire {
     preferences: {},
     notes: '',
   }
+}
+
+// Issue #176: ряд измерений веса тела. Вес объясняет стагнацию, но ничего
+// не ограничивает — сервер отдаёт ряд, тренд считает shared/bodyWeight.ts.
+export async function fetchBodyWeightLogFromApi(
+  userId: string,
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<BodyWeightMeasurement[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/body-weight/${encodeURIComponent(userId)}`)
+  if (!response.ok) throw new Error(`API body weight load failed: ${response.status}`)
+  const data = await response.json() as { measurements?: BodyWeightMeasurement[] }
+  return data.measurements ?? []
+}
+
+export async function recordBodyWeightInApi(
+  userId: string,
+  weightKg: number,
+  fetcher: typeof fetch = fetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<BodyWeightMeasurement[]> {
+  if (!baseUrl) return []
+  const response = await fetcher(`${baseUrl}/api/body-weight/${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ weightKg }),
+  })
+  if (!response.ok) throw new Error(`API body weight save failed: ${response.status}`)
+  const data = await response.json() as { measurements?: BodyWeightMeasurement[] }
+  return data.measurements ?? []
 }

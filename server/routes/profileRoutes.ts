@@ -5,8 +5,35 @@ import { ensureProgramMatchesWorkoutFrequency, updateUserProfile } from '../serv
 import { optionalNumber, safeEnum, splitLines } from '../utils.js'
 import { buildProfileUpdatedEvent, logActivity } from '../activityLog.js'
 import { assertAllowedUserId } from '../privateUsers.js'
+import { isValidBodyWeight, loadBodyWeightLog, recordBodyWeight } from '../bodyWeightLog.js'
 
 export const profileRoutes = Router()
+
+// Issue #176: ряд измерений веса тела. Вес объясняет стагнацию (#175), но
+// ничего не ограничивает — ни рекомендаций по питанию, ни целевого веса.
+profileRoutes.get('/body-weight/:userId', async (req, res, next) => {
+  try {
+    const userId = assertAllowedUserId(req.params.userId)
+    res.json({ ok: true, measurements: await loadBodyWeightLog(pool, userId) })
+  } catch (error) {
+    next(error)
+  }
+})
+
+profileRoutes.post('/body-weight/:userId', async (req, res, next) => {
+  try {
+    const userId = assertAllowedUserId(req.params.userId)
+    const weightKg = req.body?.weightKg
+    if (!isValidBodyWeight(weightKg)) return res.status(400).json({ error: 'weightKg must be between 20 and 300' })
+    const measuredOn = req.body?.measuredOn ? String(req.body.measuredOn) : undefined
+    if (measuredOn && !/^\d{4}-\d{2}-\d{2}$/.test(measuredOn)) return res.status(400).json({ error: 'measuredOn must be YYYY-MM-DD' })
+    await recordBodyWeight(pool, { userId, weightKg, measuredOn })
+    logActivity('body_weight.recorded', { userId, weightKg: Number(weightKg) })
+    res.json({ ok: true, measurements: await loadBodyWeightLog(pool, userId) })
+  } catch (error) {
+    next(error)
+  }
+})
 
 profileRoutes.patch('/user-profiles/:userId', async (req, res, next) => {
   const userId = assertAllowedUserId(req.params.userId)
@@ -48,6 +75,9 @@ profileRoutes.patch('/user-profiles/:userId', async (req, res, next) => {
       preferredExercises, bannedExercises, preferences, notes,
 	    })
 	    await ensureProgramMatchesWorkoutFrequency(client, userId, workoutsPerWeek)
+	    // Issue #176: вес из анкеты — это первый замер, а не отдельное поле.
+	    // Иначе онбординг остаётся вне ряда и тренд стартует с пустого места.
+	    await recordBodyWeight(client, { userId, weightKg })
 	    await client.query('commit')
 	    logActivity('profile.updated', buildProfileUpdatedEvent({ userId, age, workoutsPerWeek, targetWorkoutMinutes, trainingDays, preferences }))
 	    res.json({ ok: true, userId: result.user_id, programDaysTarget: Math.max(1, Math.min(workoutsPerWeek, 7)) })

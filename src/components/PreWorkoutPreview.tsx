@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { WorkoutDay  } from '../../shared/types'
 import { toHumanCoachText } from '../domain/coachCopy'
 import {
@@ -33,6 +34,8 @@ type PreWorkoutPreviewProps = {
   onBegin: () => void
   estimateWorkoutMinutes: (day: WorkoutDay) => number
   formatWeight: (weight: number) => string
+  /** Issue #176: карточка веса тела, если с последнего замера прошла неделя. */
+  bodyWeightCard?: ReactNode
 }
 
 export function PreWorkoutPreview({
@@ -46,6 +49,7 @@ export function PreWorkoutPreview({
   onBegin,
   estimateWorkoutMinutes,
   formatWeight,
+  bodyWeightCard,
 }: PreWorkoutPreviewProps) {
   const painAreas = readinessCheckIn.painAreas
   const soreMuscleGroups = readinessCheckIn.soreMuscleGroups ?? []
@@ -201,6 +205,8 @@ export function PreWorkoutPreview({
           </div>
         )}
       </div>
+
+      {bodyWeightCard}
 
       <div className="card top-gap">
         <div className="set-head">

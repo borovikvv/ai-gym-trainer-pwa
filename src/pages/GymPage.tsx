@@ -3,7 +3,10 @@ import type { ExerciseLog } from '../domain/workoutHistory'
 import type { NextSetHint } from '../components/gymTypes'
 import type { ExerciseAddSuggestion } from '../domain/exerciseSuggestion'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
+import { useState } from 'react'
 import { useProgram } from '../contexts/ProgramContext'
+import { useBodyWeightLog } from '../hooks/useBodyWeightLog'
+import { BodyWeightCard } from '../components/BodyWeightCard'
 import { PreWorkoutPreview } from '../components/PreWorkoutPreview'
 import { GymScreen } from '../components/GymScreen'
 import { WorkoutReviewScreen } from '../components/WorkoutReviewScreen'
@@ -111,6 +114,22 @@ export function GymPage(props: GymPageProps) {
 
   const { screen, onNavigate } = props
 
+  // Issue #176: вес тела спрашиваем ПЕРЕД тренировкой — после зала измерение
+  // занижено обезвоживанием и в тренд не годится. Пропуск живёт до выхода с
+  // экрана: закрытая карточка ничего не блокирует и ни на что не влияет.
+  const bodyWeight = useBodyWeightLog(program.activeUserId)
+  const [bodyWeightDismissed, setBodyWeightDismissed] = useState(false)
+  const bodyWeightCard = bodyWeight.shouldAsk && !bodyWeightDismissed
+    ? (
+      <BodyWeightCard
+        isSaving={bodyWeight.isSaving}
+        lastKnownKg={bodyWeight.trend?.latestKg ?? null}
+        onSubmit={(weightKg) => { void bodyWeight.record(weightKg) }}
+        onDismiss={() => setBodyWeightDismissed(true)}
+      />
+    )
+    : null
+
   return (
     <>
       {screen === 'preview' && (
@@ -125,6 +144,7 @@ export function GymPage(props: GymPageProps) {
           onBegin={props.onBeginPreparedWorkout}
           estimateWorkoutMinutes={props.estimateWorkoutMinutes}
           formatWeight={formatWeight}
+          bodyWeightCard={bodyWeightCard}
         />
       )}
 
