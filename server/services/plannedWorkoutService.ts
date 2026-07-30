@@ -268,9 +268,15 @@ export async function createGeneratedPlannedWorkoutForDate(client: DbClient, { u
 // видит фактическую историю и уже перегенерированные предыдущие (тот же
 // принцип цепочки, что в replaceCalendarWeek). Тренировки, составленные
 // пользователем вручную (source='user'), не трогаем.
+//
+// Issue #169: `limit` сужает каскад до N ближайших. После сохранения
+// тренировки вызывающий передаёт limit=1: если между двумя тренировками
+// меняются веса, состав и группы во всех будущих сессиях сразу, отклик не
+// атрибутируется — меняется не одна переменная, а десяток. Дальние сессии
+// пересобираются при недельном планировании (replacePlannedTrainingRange).
 export async function cascadeRegenerateFutureWorkouts(
   client: DbClient,
-  { userId, horizonDays = 14 }: { userId: string; horizonDays?: number },
+  { userId, horizonDays = 14, limit = Number.POSITIVE_INFINITY }: { userId: string; horizonDays?: number; limit?: number },
 ): Promise<number> {
   const future = await client.query(
     `select id, scheduled_date, source from public.planned_workouts
@@ -286,8 +292,10 @@ export async function cascadeRegenerateFutureWorkouts(
   // тренировки — она следующая для пользователя. Остальные остаются
   // детерминированными, чтобы не делать N синхронных LLM-вызовов после save.
   let llmSlotUsed = false
-  for (const row of future.rows as Array<{ id: unknown; scheduled_date: unknown; source: unknown }>) {
-    if (String(row.source) === 'user') continue
+  const targets = (future.rows as Array<{ id: unknown; scheduled_date: unknown; source: unknown }>)
+    .filter((row) => String(row.source) !== 'user')
+    .slice(0, Math.max(0, limit))
+  for (const row of targets) {
     const scheduledDate = dateToDateOnly(row.scheduled_date as Date)
     const refineWithLlm = !llmSlotUsed
     llmSlotUsed = true

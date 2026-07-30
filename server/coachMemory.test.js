@@ -444,3 +444,60 @@ describe('Issue #173: currentWorkingWeight for assisted exercises', () => {
     expect(memory.exerciseProfiles['assisted-pull-up'].currentWorkingWeight).toBe(16.5)
   })
 })
+
+// Issue #170: MAX за три сессии (#99) не должен переезжать через длинный
+// перерыв. Иначе после месяца без зала вторая тренировка возврата снова
+// назначит доперерывный пик, который человек сейчас не поднимет.
+describe('Issue #170: рабочий вес пересобирается после перерыва дольше четырёх недель', () => {
+  const benchLibrary = [{ id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', targetWeight: 40, repMin: 6, repMax: 8 }]
+  const benchSession = (completedAt, weight) => ({
+    id: `session-${completedAt}`,
+    userId: 'vyacheslav',
+    completedAt,
+    totalVolume: 0,
+    exercises: [{
+      exerciseId: 'bench-press',
+      exerciseName: 'Жим лёжа',
+      pain: false,
+      nextRecommendedWeight: weight,
+      progressionType: 'hold',
+      progressionReason: '',
+      sets: [{ weight, reps: 8, rpe: 7, completed: true }],
+    }],
+  })
+  const workingWeightOf = (history) => computeCoachMemory({
+    profile: { userId: 'vyacheslav', workoutsPerWeek: 2 },
+    exerciseLibrary: benchLibrary,
+    history,
+    now: new Date('2026-08-15T12:00:00.000Z'),
+  }).exerciseProfiles['bench-press'].currentWorkingWeight
+
+  it('доперерывный пик не попадает в оценку: берутся только сессии после перерыва', () => {
+    const weight = workingWeightOf([
+      benchSession('2026-08-10T18:00:00.000Z', 40), // первая после перерыва
+      benchSession('2026-06-22T18:00:00.000Z', 52.5), // 49 дней раньше
+      benchSession('2026-06-18T18:00:00.000Z', 55),
+    ])
+
+    expect(weight).toBe(40)
+  })
+
+  it('после возврата оценка снова растёт по фактическим подходам', () => {
+    const weight = workingWeightOf([
+      benchSession('2026-08-13T18:00:00.000Z', 45),
+      benchSession('2026-08-10T18:00:00.000Z', 40),
+      benchSession('2026-06-18T18:00:00.000Z', 55),
+    ])
+
+    expect(weight).toBe(45)
+  })
+
+  it('обычный разрыв между тренировками оценку не сбрасывает (регрессия #99)', () => {
+    const weight = workingWeightOf([
+      benchSession('2026-08-10T18:00:00.000Z', 40),
+      benchSession('2026-08-03T18:00:00.000Z', 55),
+    ])
+
+    expect(weight).toBe(55)
+  })
+})

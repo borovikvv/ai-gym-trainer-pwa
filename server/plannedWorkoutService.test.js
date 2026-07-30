@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { formatPlannedExerciseGoal } from './services/plannedWorkoutService.js'
+import { describe, expect, it, vi } from 'vitest'
+import { cascadeRegenerateFutureWorkouts, formatPlannedExerciseGoal } from './services/plannedWorkoutService.js'
 
 describe('planned workout service formatting', () => {
   it('keeps planned exercise goal compact instead of showing internal reason text', () => {
@@ -24,5 +24,56 @@ describe('planned workout service formatting', () => {
       rep_max: 60,
       target_weight: 0,
     })).toBe('40–60 сек / 40–60 сек / 40–60 сек')
+  })
+})
+
+// Issue #169: после сохранения тренировки перестраивается только ближайшая
+// запланированная. Каскад «все на две недели вперёд» менял между двумя
+// тренировками десяток переменных сразу, и отклик было не к чему привязать.
+describe('cascadeRegenerateFutureWorkouts — сужение до ближайшей (#169)', () => {
+  const futureRows = [
+    { id: 'planned-1', scheduled_date: new Date('2026-08-03T00:00:00Z'), source: 'coach' },
+    { id: 'planned-2', scheduled_date: new Date('2026-08-05T00:00:00Z'), source: 'coach' },
+    { id: 'planned-3', scheduled_date: new Date('2026-08-07T00:00:00Z'), source: 'coach' },
+  ]
+
+  // Клиент отвечает пустыми выборками на всё, кроме списка будущих
+  // тренировок: перегенерация проходит целиком, а по DELETE предписаний
+  // видно, какие именно тренировки пересобирались.
+  const fakeClient = (rows) => {
+    const regeneratedIds = []
+    const client = {
+      regeneratedIds,
+      query: vi.fn().mockImplementation(async (text, params) => {
+        if (text.includes('select id, scheduled_date, source from public.planned_workouts')) return { rows, rowCount: rows.length }
+        if (text.includes('delete from public.planned_workout_exercises')) regeneratedIds.push(params[0])
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+    return client
+  }
+
+  it('с limit=1 пересобирает только ближайшую по дате', async () => {
+    const client = fakeClient(futureRows)
+    const regenerated = await cascadeRegenerateFutureWorkouts(client, { userId: 'vyacheslav', limit: 1 })
+
+    expect(regenerated).toBe(1)
+    expect(client.regeneratedIds).toEqual(['planned-1'])
+  })
+
+  it('без limit пересобирает весь горизонт (перенос даты, пропуск)', async () => {
+    const client = fakeClient(futureRows)
+    const regenerated = await cascadeRegenerateFutureWorkouts(client, { userId: 'vyacheslav' })
+
+    expect(regenerated).toBe(3)
+    expect(client.regeneratedIds).toEqual(['planned-1', 'planned-2', 'planned-3'])
+  })
+
+  it('ближайшей считается ближайшая тренерская: составленную вручную не трогаем', async () => {
+    const client = fakeClient([{ ...futureRows[0], source: 'user' }, futureRows[1], futureRows[2]])
+    const regenerated = await cascadeRegenerateFutureWorkouts(client, { userId: 'vyacheslav', limit: 1 })
+
+    expect(regenerated).toBe(1)
+    expect(client.regeneratedIds).toEqual(['planned-2'])
   })
 })

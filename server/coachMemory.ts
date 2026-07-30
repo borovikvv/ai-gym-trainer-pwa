@@ -150,6 +150,23 @@ export function computeCoachMemory({
   }
 }
 
+/** Issue #170: перерыв, после которого доперерывные веса больше не оценка. */
+const LONG_BREAK_RESET_DAYS = 28
+
+/**
+ * Сессии от последней назад до первого перерыва длиннее LONG_BREAK_RESET_DAYS.
+ * Вход отсортирован от новых к старым, поэтому обрываем на первом разрыве.
+ */
+function sessionsSinceLastLongBreak(sessions: ExerciseSession[]): ExerciseSession[] {
+  const result: ExerciseSession[] = []
+  for (const [index, record] of sessions.entries()) {
+    const newer = sessions[index - 1]
+    if (newer && daysBetween(new Date(record.session.completedAt), new Date(newer.session.completedAt)) > LONG_BREAK_RESET_DAYS) break
+    result.push(record)
+  }
+  return result
+}
+
 function buildExerciseProfiles({ library, history, profile }: BuildExerciseProfilesInput): Record<string, ExerciseProfile> {
   const profiles: Record<string, ExerciseProfile> = {}
   for (const exercise of library) {
@@ -193,7 +210,12 @@ function buildExerciseProfiles({ library, history, profile }: BuildExerciseProfi
     // the historical max — the user may have backed off because of injury,
     // and forcing the old weight would be unsafe.
     const RECENT_SESSIONS_FOR_WORKING_WEIGHT = 3
-    const recentSessions = sessions.slice(0, RECENT_SESSIONS_FOR_WORKING_WEIGHT)
+    // Issue #170: окно рабочего веса не переезжает через длинный перерыв.
+    // Иначе после месяца без зала MAX за три сессии вернёт доперерывный пик, и
+    // вторая тренировка после возврата снова назначит вес, который человек
+    // сейчас не поднимет. После такого перерыва оценка собирается заново — по
+    // фактическим подходам сессий, сделанных уже после него.
+    const recentSessions = sessionsSinceLastLongBreak(sessions).slice(0, RECENT_SESSIONS_FOR_WORKING_WEIGHT)
     const latestHadPain = Boolean(latest.exercise.pain)
     // Issue #173: «сильнейший» подход зависит от направления веса. Для
     // гравитрона (помощь) это MIN веса, а не MAX: максимум помощи — худшая

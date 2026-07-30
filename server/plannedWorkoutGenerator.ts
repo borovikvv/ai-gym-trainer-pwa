@@ -20,7 +20,7 @@ import type { WeeklyVolumeStatus } from './weeklyVolumeTargets.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from '../shared/muscleGroups.js'
-import { resolveWeightDirection, harderWeight, easierWeight, strongerOf } from '../shared/weightDirection.js'
+import { resolveWeightDirection, harderWeight, easierWeight, strongerOf, easierOf } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
 import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, teenLimitsApply } from '../shared/teenLimits.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
@@ -211,6 +211,9 @@ interface GeneratedExercise {
   reason: string
   /** Issue #171: применены подростковые ограничения (см. teenLimitsApply). */
   teenLimited?: boolean
+  /** Issue #170: инвариант «не ниже рабочего веса» приостановлен (перерыв,
+   * боль или разгрузка) — LLM-кламп тоже не должен держать вес снизу. */
+  workingFloorSuspended?: boolean
   sortOrder?: number
   /** Issue #173: направление веса — доезжает до LLM-клампа предписаний. */
   weightDirection?: string | null
@@ -519,6 +522,7 @@ async function refineBaselinePrescriptions({
     currentWorkingWeight: Number(coachMemory?.exerciseProfiles?.[exercise.exerciseId]?.currentWorkingWeight ?? NaN) || null,
     weightDirection: exercise.weightDirection ?? null,
     teenLimited: exercise.teenLimited === true,
+    workingFloorSuspended: exercise.workingFloorSuspended === true,
   }))
   const alternativesById = new Map(allowedAlternatives.map((exercise) => [exercise.id, exercise]))
 
@@ -851,6 +855,10 @@ function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemo
 function applyPrescription({ exercise, profile, coachState, coachMemory = null, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null, exerciseFlag = null }: ApplyPrescriptionParams): GeneratedExercise {
   const recent = latestExerciseHistory(history, exercise.id)
   const historicWeight = Number(recent?.nextRecommendedWeight ?? NaN)
+  // Разгрузка нужна дважды: она снимает инвариант рабочего веса (#170) и
+  // переписывает предписание в самом конце — считаем один раз.
+  const mesocycleState = coachState?.mesocycle
+  const isDeloadSession = isDeloadWeek(mesocycleState as Parameters<typeof isDeloadWeek>[0])
   // Issue #100: use currentWorkingWeight from coachMemory as a fallback.
   // coachMemory computes currentWorkingWeight as the MAX of the last 3
   // sessions (issue #99), so after a deload it remembers the real working
@@ -882,8 +890,18 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   // обычных упражнений это максимум, для гравитрона (помощь) — минимум:
   // инвариант #136 там работает в обратную сторону (помощь не растёт).
   const direction = resolveWeightDirection(exercise)
+  // Issue #170: инвариант #136 разрешает неопределённость ВВЕРХ — при трёх
+  // расходящихся кандидатах берётся сильнейший. Внутри нормального цикла это
+  // верно, но цена недогруженной тренировки близка к нулю, а цена
+  // перегруженной на невосстановленном организме — травма. Поэтому инвариант
+  // не отменяется, а приостанавливается: в трёх ситуациях ниже из тех же
+  // кандидатов берётся самый лёгкий, и вес свободно опускается.
+  const invariantSuspended = isLongBreakBeforeSession(coachState, weeklyContext)
+    || hasActivePainFlag(exercise.id, coachState, coachMemory)
+    || isDeloadSession
+  const resolveCandidates = invariantSuspended ? easierOf : strongerOf
   const baseWeight = weightCandidates.length > 0
-    ? weightCandidates.reduce((best, weight) => strongerOf(best, weight, direction))
+    ? weightCandidates.reduce((best, weight) => resolveCandidates(best, weight, direction))
     : exercise.targetWeight
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
@@ -966,9 +984,8 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
 
   // Mesocycle deload: if the user's mesocycle is in a deload week, override
   // the prescription with reduced sets/weight/reps and 'easy' intensity.
-  const mesocycleState = coachState?.mesocycle
   let deloadNote: string | null = null
-  if (isDeloadWeek(mesocycleState as Parameters<typeof isDeloadWeek>[0])) {
+  if (isDeloadSession) {
     const deload = applyDeloadReduction({
       name: exercise.name,
       weightDirection: exercise.weightDirection,
@@ -1013,6 +1030,7 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     intensityTarget,
     weightDirection: direction,
     teenLimited,
+    workingFloorSuspended: invariantSuspended,
     // Причина ограничения идёт вместе с предписанием: необъяснённое ограничение
     // читается как недоверие (см. #171, правило 5).
     coachFocus: `${exercise.name}: ${shouldConsolidate && !deloadNote ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}${deloadNote ? `. ${deloadNote}` : ''}.${teenNotes.length ? ` ${teenNotes.join('; ')}.` : ''}`,
@@ -1189,6 +1207,35 @@ function isCoachDecisionRestricted(exercise: NormalizedLibraryExercise, coachDec
   if (!coachDecision) return false
   if (coachDecision.avoidMuscleGroups?.includes(exercise.muscleKey)) return true
   return coachDecision.exercisePolicies?.[exercise.id] === 'avoid_today'
+}
+
+/**
+ * Issue #170: перерыв, после которого доперерывный вес назначать нельзя.
+ * Нижняя граница из задачи — 2–4 недели; берём 2 недели: цена лишнего
+ * осторожного веса близка к нулю, цена пропущенного перерыва — травма.
+ */
+const LONG_BREAK_DAYS = 14
+
+/**
+ * Issue #170: перерыв меряем до ДАТЫ планируемой сессии, поэтому одного
+ * daysSinceLastWorkout мало — он же вырастет, если тренировка запланирована
+ * далеко вперёд при регулярных занятиях. Если в календаре перед этой датой
+ * есть тренировка (своя или уже выполненная), перерыва нет.
+ */
+function isLongBreakBeforeSession(coachState: CoachState | null, weeklyContext: WeeklyContext = emptyWeeklyContext()): boolean {
+  const daysSinceLastWorkout = Number(coachState?.daysSinceLastWorkout ?? NaN)
+  if (!Number.isFinite(daysSinceLastWorkout) || daysSinceLastWorkout <= LONG_BREAK_DAYS) return false
+  return weeklyContext.daysSincePreviousWorkout === null || weeklyContext.daysSincePreviousWorkout === undefined
+}
+
+/**
+ * Issue #170: отметка боли в этом движении. Обе памяти помечают болью
+ * последнюю сессию с упражнением — пока пользователь не сделает его без боли,
+ * вес не обязан возвращаться к рабочему.
+ */
+function hasActivePainFlag(exerciseId: string, coachState: CoachState | null, coachMemory: CoachMemoryForGenerator | null): boolean {
+  return coachMemory?.exerciseProfiles?.[exerciseId]?.pain === true
+    || coachState?.exercises?.[exerciseId]?.status === 'pain'
 }
 
 function isReturningAfterBreak(profile: ProfileForGenerator = {}): boolean {
