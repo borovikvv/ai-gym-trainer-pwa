@@ -35,6 +35,13 @@ export interface PlannedExercisePrescription {
   /** Запомненный рабочий вес (MAX топ-подхода за 3 сессии, #99) — нижняя
    * граница веса вне разгрузки (инвариант #136). */
   currentWorkingWeight?: number | null
+  /**
+   * Issue #170: генератор приостановил инвариант #136 для этого упражнения
+   * (длинный перерыв, отметка боли в движении или разгрузочная сессия).
+   * Тогда нижнюю границу не держим и рабочий вес не показываем LLM — иначе
+   * советник вернёт вес обратно вверх ровно там, где его снизили намеренно.
+   */
+  workingFloorSuspended?: boolean
   /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
   weightDirection?: string | null
   /**
@@ -194,8 +201,10 @@ export function clampRefinedPlannedExercises(
       // «тяжелее» = МЕНЬШЕ помощи, а инвариант #136 инвертируется: вне
       // разгрузки не назначаем ЛЕГЧЕ рабочего веса (помощь не выше рабочей).
       // В разгрузку допускаем облегчение до 2 шагов.
+      // Issue #170: там же, где генератор приостановил инвариант (перерыв,
+      // боль), нижнюю границу не держим — послабление такое же, как в разгрузку.
       const direction = resolveWeightDirection({ name: base.exerciseName, weightDirection: base.weightDirection })
-      const easiestAllowed = options.isDeload
+      const easiestAllowed = options.isDeload || base.workingFloorSuspended === true
         ? easierWeight(base.targetWeight, 2 * step, direction)
         : easierOf(base.targetWeight, workingFloor, direction)
       const hardestAllowed = harderWeight(base.targetWeight, maxJumpSteps * step, direction)
@@ -281,7 +290,7 @@ function buildPrompt(input: RefinePlannedWorkoutInput): string {
     : ''
   const exercises = input.baseline
     .map((e) => {
-      const working = Number.isFinite(Number(e.currentWorkingWeight)) && Number(e.currentWorkingWeight) > 0
+      const working = !e.workingFloorSuspended && Number.isFinite(Number(e.currentWorkingWeight)) && Number(e.currentWorkingWeight) > 0
         ? `, рабочий вес ${e.currentWorkingWeight}кг`
         : ''
       const weight = e.targetWeight > 0 ? `${e.targetWeight}кг` : 'вес тела/на время'

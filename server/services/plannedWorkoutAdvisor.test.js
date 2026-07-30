@@ -54,6 +54,18 @@ describe('clampRefinedPlannedExercises', () => {
     expect(exercises[0].targetWeight).toBe(60) // floored at working weight
   })
 
+  // Issue #170: там, где генератор приостановил инвариант (перерыв, боль,
+  // разгрузка), советник не обязан держать вес снизу — иначе LLM вернёт его
+  // вверх ровно там, где его снизили намеренно.
+  it('снимает нижнюю границу, когда генератор приостановил инвариант (#170)', () => {
+    const { exercises } = clampRefinedPlannedExercises(
+      [{ ...bench, workingFloorSuspended: true }],
+      [{ exerciseId: 'bench-press', targetWeight: 45 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    expect(exercises[0].targetWeight).toBe(55) // 60 − 2*2.5, как в разгрузку
+  })
+
   it('allows a bounded reduction during a deload week', () => {
     const { exercises } = clampRefinedPlannedExercises(
       [bench],

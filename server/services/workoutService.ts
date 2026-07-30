@@ -230,13 +230,15 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     console.error('planAndApplyNextWorkout after save (non-fatal):', err instanceof Error ? err.message : err)
   }
 
-  // Issue #76 → Фаза 2Б.3: after saving, regenerate ALL future planned
-  // workouts (not just the next one) — the mesocycle phase may have changed
-  // and today's actual load shifts what every following session should be.
-  // The cascade goes date-by-date so each workout sees the fresh history and
-  // the already-regenerated previous ones.
+  // Issue #76 → Фаза 2Б.3 → #169: после сохранения пересобираем только
+  // БЛИЖАЙШУЮ запланированную тренировку. Она следующая для пользователя,
+  // поэтому свежие данные ей нужны немедленно (ради этого каскад и делался:
+  // #137 — устаревшие планы, #136 — вес ниже фактического рабочего). Дальние
+  // сессии живут неделю с предпосылками начала недели и пересобираются при
+  // недельном планировании: иначе между двумя тренировками меняется десяток
+  // переменных сразу и отклик не к чему привязать.
   try {
-    await cascadeRegenerateFutureWorkouts(client, { userId: sanitizedEntry.userId! })
+    await cascadeRegenerateFutureWorkouts(client, { userId: sanitizedEntry.userId!, limit: 1 })
   } catch (err) {
     // Non-fatal — the workout is already saved, planned workout regen
     // can happen on next app open or manual "Обновить".

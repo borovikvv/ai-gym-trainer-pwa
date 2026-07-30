@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sanitizeWorkoutHistoryEntry, saveWorkoutHistoryEntry } from './services/workoutService.js'
+import { cascadeRegenerateFutureWorkouts } from './services/plannedWorkoutService.js'
 
 // Mock the dependencies that saveWorkoutHistoryEntry calls — we only care
 // about verifying the cache-invalidation DELETE is issued (#94).
@@ -8,6 +9,7 @@ vi.mock('./services/coachPlanningService.js', () => ({
 }))
 vi.mock('./services/plannedWorkoutService.js', () => ({
   regeneratePlannedWorkout: vi.fn().mockResolvedValue(undefined),
+  cascadeRegenerateFutureWorkouts: vi.fn().mockResolvedValue(1),
 }))
 vi.mock('./coachDebrief.js', () => ({
   buildWorkoutDebrief: vi.fn().mockReturnValue({ qualityScore: 75, summary: '', wentWell: [], overload: [], progressed: [], nextFocus: '' }),
@@ -897,5 +899,40 @@ describe('Issue #167: training record captures rep deviation', () => {
     expect(entryArg.repDeviation.avgDeviation).toBe(-2)
     expect(entryArg.repDeviation.setsWithExpectation).toBe(1)
     expect(entryArg.repDeviation.exercises[0].exerciseId).toBe('bench-press')
+  })
+})
+
+// Issue #169: сохранение тренировки перестраивает только ближайшую
+// запланированную. Раньше пересобирались все на две недели вперёд: между
+// двумя тренировками менялись веса, состав и группы во всех будущих сессиях
+// сразу, и отклик нельзя было привязать к одной переменной.
+describe('saveWorkoutHistoryEntry — сужение каскада до ближайшей (#169)', () => {
+  it('перестраивает ровно одну ближайшую запланированную тренировку', async () => {
+    const cascade = vi.mocked(cascadeRegenerateFutureWorkouts)
+    cascade.mockClear()
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-cascade-1',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-03T10:00:00Z',
+      totalVolume: 1000,
+      exercises: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 42.5,
+          progressionType: 'increase',
+          progressionReason: 'ok',
+          sets: [{ weight: 40, reps: 8, rpe: 7, completed: true }],
+        },
+      ],
+    })
+
+    expect(cascade).toHaveBeenCalledTimes(1)
+    expect(cascade).toHaveBeenCalledWith(client, { userId: 'vyacheslav', limit: 1 })
   })
 })

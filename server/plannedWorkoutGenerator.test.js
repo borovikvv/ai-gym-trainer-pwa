@@ -1866,8 +1866,11 @@ describe('Issue #173: weight direction for assisted exercises (gravitron)', () =
       history: gravitronHistory(30),
     })
 
-    // Разгрузка = легче = БОЛЬШЕ помощи: 30 + 2.5 = 32.5
-    expect(findGravitron(plan)?.targetWeight).toBe(32.5)
+    // Issue #170: на разгрузке инвариант #136 приостановлен, поэтому из
+    // кандидатов (рекомендация 30, программа 32.5) берётся самый лёгкий —
+    // для гравитрона это МАКСИМУМ помощи, 32.5. Разгрузка добавляет ещё шаг:
+    // 32.5 + 2.5 = 35 (легче = больше помощи).
+    expect(findGravitron(plan)?.targetWeight).toBe(35)
   })
 
   it('низкая готовность без истории для assisted увеличивает помощь на шаг', async () => {
@@ -1956,5 +1959,119 @@ describe('Issue #166: планирование под остаток недел�
 
     const legs = plan.exercises.find((exercise) => exercise.muscleGroup === 'Ноги')
     expect(legs.reason).toContain('недельный объём 3/16')
+  })
+})
+
+// Issue #170: инвариант #136 («план не ниже фактического рабочего веса») не
+// отменяется, а ограничивается по области действия. Он разрешает
+// неопределённость вверх, что внутри нормального цикла верно, но после
+// перерыва, при боли и на разгрузке даёт вес, который поднимать нельзя.
+describe('Issue #170: область действия инварианта рабочего веса', () => {
+  const chestProfile = { ...profile, preferences: { focusAreas: ['грудь'], sessionStyle: 'moderate_stable' } }
+  const readyState = (overrides = {}) => ({
+    recoveryStatus: 'ready',
+    readinessScore: 85,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' }, back: { fatigue: 'low' }, legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' }, arms: { fatigue: 'low' }, core: { fatigue: 'low' },
+    },
+    exercises: {},
+    ...overrides,
+  })
+  // Рекомендация после последней сессии занижена (45), фактический рабочий
+  // вес — 60, вес программы — 50. Инвариант поднимает план до 60.
+  const benchHistory = (completedAt) => [{
+    completedAt,
+    exercises: [
+      { exerciseId: 'bench-press', nextRecommendedWeight: 45, sets: [{ completed: true, weight: 60, reps: 10, rpe: 7 }] },
+    ],
+  }]
+  const benchMemory = (overrides = {}) => ({
+    exerciseProfiles: {
+      'bench-press': { id: 'bench-press', currentWorkingWeight: 60, ...overrides },
+    },
+  })
+  const benchOf = (plan) => plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+
+  it('внутри нормального цикла инвариант действует: план не ниже рабочего веса (регрессия #136)', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: chestProfile,
+      scheduledDate: '2026-06-08',
+      coachState: readyState({ daysSinceLastWorkout: 3 }),
+      coachMemory: benchMemory(),
+      exerciseLibrary,
+      history: benchHistory('2026-06-05T20:00:00.000Z'),
+    })
+
+    expect(benchOf(plan)?.targetWeight).toBe(60)
+    expect(benchOf(plan)?.workingFloorSuspended).toBe(false)
+  })
+
+  it('после перерыва дольше двух недель вес опускается: инвариант не мешает', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: chestProfile,
+      scheduledDate: '2026-07-20',
+      coachState: readyState({ daysSinceLastWorkout: 45 }),
+      coachMemory: benchMemory(),
+      exerciseLibrary,
+      // Тренировка была 45 дней назад — в календаре перед этой датой пусто.
+      history: benchHistory('2026-06-05T20:00:00.000Z'),
+    })
+
+    expect(benchOf(plan)?.workingFloorSuspended).toBe(true)
+    // Самый лёгкий из кандидатов (45), а не рабочий вес 60.
+    expect(benchOf(plan)?.targetWeight).toBe(45)
+  })
+
+  it('тренировка, запланированная далеко вперёд при регулярных занятиях, перерывом не считается', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: chestProfile,
+      scheduledDate: '2026-06-25',
+      // daysSinceLastWorkout считается от даты сессии и вырастает сам собой,
+      // если план стоит далеко вперёд — но в календаре перед ним есть тренировка.
+      coachState: readyState({ daysSinceLastWorkout: 20 }),
+      coachMemory: benchMemory(),
+      exerciseLibrary,
+      history: benchHistory('2026-06-05T20:00:00.000Z'),
+      previousGeneratedWorkouts: [{ scheduledDate: '2026-06-22', exercises: [] }],
+    })
+
+    expect(benchOf(plan)?.workingFloorSuspended).toBe(false)
+    expect(benchOf(plan)?.targetWeight).toBe(60)
+  })
+
+  it('активная отметка боли в движении снимает нижнюю границу веса', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: chestProfile,
+      scheduledDate: '2026-06-08',
+      coachState: readyState({ daysSinceLastWorkout: 3 }),
+      coachMemory: benchMemory({ pain: true }),
+      exerciseLibrary,
+      history: benchHistory('2026-06-05T20:00:00.000Z'),
+    })
+
+    expect(benchOf(plan)?.workingFloorSuspended).toBe(true)
+    expect(benchOf(plan)?.targetWeight).toBe(45)
+  })
+
+  it('разгрузочная сессия не тянет вес обратно вверх', async () => {
+    const deloadMesocycle = {
+      phase: 'deload', phaseDescription: 'deload', weekInCycle: 5, cycleLength: 5,
+      loadingWeeks: 4, deloadWeeks: 1, isDeload: true, deloadScheduled: true,
+      triggerReason: null, completionRatio: 1, workoutsThisCycle: 3, plannedWorkoutsThisCycle: 3,
+    }
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: chestProfile,
+      scheduledDate: '2026-06-08',
+      coachState: readyState({ daysSinceLastWorkout: 3, mesocycle: deloadMesocycle }),
+      coachMemory: benchMemory(),
+      exerciseLibrary,
+      history: benchHistory('2026-06-05T20:00:00.000Z'),
+    })
+
+    expect(benchOf(plan)?.workingFloorSuspended).toBe(true)
+    // База — самый лёгкий кандидат (45), разгрузка снимает ещё шаг: 42.5.
+    expect(benchOf(plan)?.targetWeight).toBe(42.5)
   })
 })
