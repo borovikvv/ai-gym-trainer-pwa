@@ -14,10 +14,29 @@
 // Величина считается и показывается, но на решения не влияет (#167): сначала
 // смотрим на данные — в частности на то, сколько сессий нужно, чтобы ожидание
 // стало надёжным.
+//
+// #190: требование ТОЧНОГО совпадения веса давало покрытие 8 % на боевых
+// данных (5 подходов из 65). Причина структурная, а не в объёме истории: у
+// прогрессирующего человека вес меняется, и совпадение «тот же вес × тот же
+// номер подхода × две сессии» выпадает тем реже, чем лучше идёт прогрессия.
+// Поэтому при нехватке точных совпадений берётся УЗКАЯ окрестность веса.
+//
+// Повторы при этом переносятся КАК ЕСТЬ, без приведения к целевому весу.
+// Приведение через e1RM было написано и отвергнуто замером на боевых данных
+// (30.07.2026, 173 пары подходов на одном упражнении и номере подхода в
+// пределах окрестности): средняя ошибка приведения +3.97 повтора против +0.38
+// у простого переноса. Инвертированная линейная оценка теряет примерно повтор
+// на 2 % веса, реальность — на 2.5–3 %, и на высоких повторах расхождение
+// растёт. На разрывах порядка 2 кг эффект веса меньше разброса между
+// сессиями, поэтому поправка добавляет смещение, а не точность.
+//
+// Отсюда же ограничение на ширину: без поправки окрестность обязана быть
+// узкой. Замер верен для окна ±5 %; шире — нужна поправка, а её сначала надо
+// откалибровать на данных, а не взять из формулы для одноповторного максимума.
 
 import { getCanonicalExerciseId } from './exerciseIdentity'
 
-export type RepExpectationBasis = 'history_at_weight' | 'insufficient_data'
+export type RepExpectationBasis = 'history_at_weight' | 'history_near_weight' | 'insufficient_data'
 
 export interface RepExpectation {
   /** Ожидаемые повторы; null — истории на этом весе не хватает. */
@@ -64,6 +83,20 @@ const MAX_SLOPE_PER_SESSION = 1
 /** Допуск сравнения весов (кг): 60 и 60.0 — один и тот же вес. */
 const WEIGHT_EPSILON = 0.01
 
+/**
+ * Окрестность веса (#190). Доля от целевого веса, но не уже
+ * NEAR_WEIGHT_MIN_KG: на лёгких упражнениях 5 % — это меньше блина, и
+ * окрестность не добавила бы ни одного наблюдения.
+ *
+ * Отступление от текста #190: там предлагалось «±1 шаг веса упражнения или
+ * ±5 %, что меньше». Шаг веса на этот вход не приходит (`buildRepExpectation`
+ * знает только упражнение и вес), а взять меньшее из двух означало бы на
+ * лёгких весах окрестность уже блина. Поэтому floor снизу, а не выбор
+ * меньшего.
+ */
+const NEAR_WEIGHT_RATIO = 0.05
+const NEAR_WEIGHT_MIN_KG = 2.5
+
 interface SetLike {
   weight: number
   reps: number
@@ -103,11 +136,20 @@ export function buildRepExpectation(
   history: SessionLike[],
   { exerciseId, weight, setIndex, before }: ExpectationInput,
 ): RepExpectation {
-  const series = repsSeriesAtWeight(history, { exerciseId, weight, setIndex, before })
-  if (series.length < MIN_SESSIONS_FOR_EXPECTATION) {
-    return { expectedReps: null, basis: 'insufficient_data', sessionsUsed: series.length, slopePerSession: 0 }
-  }
+  const observations = repsSeriesNearWeight(history, { exerciseId, weight, setIndex, before })
 
+  // Точные совпадения — первый выбор: они не требуют допущения о том, что
+  // соседний вес даёт те же повторы.
+  const exact = observations.filter((point) => sameWeight(point.weight, weight)).map((point) => point.reps)
+  if (exact.length >= MIN_SESSIONS_FOR_EXPECTATION) return fromSeries(exact, 'history_at_weight')
+
+  const near = observations.map((point) => point.reps)
+  if (near.length >= MIN_SESSIONS_FOR_EXPECTATION) return fromSeries(near, 'history_near_weight')
+
+  return { expectedReps: null, basis: 'insufficient_data', sessionsUsed: near.length, slopePerSession: 0 }
+}
+
+function fromSeries(series: number[], basis: Exclude<RepExpectationBasis, 'insufficient_data'>): RepExpectation {
   const first = series[0]
   const last = series[series.length - 1]
   const rawSlope = (last - first) / (series.length - 1)
@@ -115,33 +157,44 @@ export function buildRepExpectation(
   // Отсчёт от последней сессии, а не от среднего: свежий результат ближе к
   // текущей форме, а наклон добавляет то, куда движется прогрессия.
   const expectedReps = Math.max(1, Math.round(last + slopePerSession))
-  return { expectedReps, basis: 'history_at_weight', sessionsUsed: series.length, slopePerSession }
+  return { expectedReps, basis, sessionsUsed: series.length, slopePerSession }
+}
+
+/** Половина ширины окрестности вокруг целевого веса, кг. */
+function nearWeightTolerance(weight: number): number {
+  return Math.max(NEAR_WEIGHT_MIN_KG, Math.abs(Number(weight) || 0) * NEAR_WEIGHT_RATIO)
 }
 
 /**
- * Повторы на этом весе и номере подхода по сессиям, от старых к новым.
- * Сессии, где такого подхода не было, в ряд не попадают.
+ * Повторы на этом номере подхода по сессиям, от старых к новым, вместе с
+ * весом, на котором они сделаны. В ряд попадают веса в узкой окрестности
+ * целевого; сессии, где такого подхода не было, не попадают.
  */
-function repsSeriesAtWeight(
+function repsSeriesNearWeight(
   history: SessionLike[],
   { exerciseId, weight, setIndex, before }: ExpectationInput,
-): number[] {
+): Array<{ reps: number; weight: number }> {
   const canonicalId = getCanonicalExerciseId({ exerciseId })
-  const series: Array<{ completedAt: string; reps: number }> = []
+  const tolerance = nearWeightTolerance(weight)
+  const series: Array<{ completedAt: string; reps: number; weight: number }> = []
   for (const session of history ?? []) {
     if (!session?.completedAt) continue
     if (before && session.completedAt >= before) continue
     for (const exercise of session.exercises ?? []) {
       if (getCanonicalExerciseId(exercise) !== canonicalId) continue
-      const setsAtWeight = workingSets(exercise).filter((set) => sameWeight(set.weight, weight))
-      const set = setsAtWeight[setIndex - 1]
-      if (set) series.push({ completedAt: session.completedAt, reps: set.reps })
+      // Номер подхода считается среди подходов В ОКРЕСТНОСТИ, а не среди всех:
+      // иначе разминочный или добивочный подход на другом весе сдвинул бы
+      // нумерацию и третий подход сравнивался бы со вторым.
+      const setsNearWeight = workingSets(exercise).filter((set) => Math.abs(set.weight - weight) <= tolerance)
+      const set = setsNearWeight[setIndex - 1]
+      if (set) series.push({ completedAt: session.completedAt, reps: set.reps, weight: set.weight })
     }
   }
   return series
     .sort((a, b) => a.completedAt.localeCompare(b.completedAt))
-    .map((point) => point.reps)
+    .map(({ reps, weight: setWeight }) => ({ reps, weight: setWeight }))
 }
+
 
 // ---------------------------------------------------------------------------
 // Отклонение
