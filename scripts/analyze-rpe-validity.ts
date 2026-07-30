@@ -220,22 +220,37 @@ async function main(): Promise<void> {
     console.log(`RPE      ${values.map((rpe) => String(rpe).padStart(6)).join('')}`)
     console.log(`до       ${values.map((rpe) => String(pre.counts.get(rpe) ?? 0).padStart(6)).join('')}`)
     console.log(`после    ${values.map((rpe) => String(postDist.counts.get(rpe) ?? 0).padStart(6)).join('')}`)
-    console.log(`Мода после фикса: ${postDist.mode} — ${percent(postDist.modalShare)} (порог вырожденности ${percent(MAX_MODAL_SHARE)})\n`)
+    console.log(`Мода после фикса: ${postDist.mode} — ${percent(postDist.modalShare)} (порог вырожденности ${percent(MAX_MODAL_SHARE)})`)
+    // Пользователей в базе больше одного, а шкалу каждый использует по-своему:
+    // общая мода может быть суммой двух разных привычек. Личный сдвиг — пункт 3 issue.
+    const users = [...new Set(postSets.map((set) => set.userId))].sort()
+    for (const userId of users) {
+      const userDist = rpeDistribution(postSets.filter((set) => set.userId === userId))
+      console.log(`  ${userId}: мода ${userDist.mode} — ${percent(userDist.modalShare)}`)
+    }
+    console.log('')
 
     // B. Дискриминантность
     const conc = concordance(postSets)
     console.log('--- B. Различает ли шкала разные ситуации ---')
     console.log(`Пар (тот же вес, разные повторы): ${conc.pairs}`)
     console.log(`Согласных: ${conc.concordant}, несогласных: ${conc.discordant}, ничьих: ${conc.tied}`)
-    console.log(`Согласованность: ${percent(conc.rate)} (порог ${percent(MIN_CONCORDANCE)}), ничьих: ${percent(conc.tieRate)} (порог ${percent(MAX_TIE_RATE)})\n`)
+    console.log(`Согласованность: ${percent(conc.rate)} (порог ${percent(MIN_CONCORDANCE)}), ничьих: ${percent(conc.tieRate)} (порог ${percent(MAX_TIE_RATE)})`)
+    for (const userId of users) {
+      const userConc = concordance(postSets.filter((set) => set.userId === userId))
+      console.log(`  ${userId}: пар ${userConc.pairs}, согласованность ${percent(userConc.rate)}, ничьих ${percent(userConc.tieRate)}`)
+    }
+    console.log('')
 
     // C. Сверка с отклонением повторов (#167)
     const rpes: number[] = []
     const deviations: number[] = []
     const byUser = new Map<string, { rpe: number[]; deviation: number[] }>()
+    let noExpectation = 0
     for (const session of post) {
       const history = sessions.filter((item) => item.userId === session.userId)
       const result = computeSessionRepDeviation(session, history)
+      noExpectation += result.setsWithoutExpectation
       for (const exercise of result.exercises) {
         const source = session.exercises.find((item) => item.exerciseId === exercise.exerciseId)
         for (const set of exercise.sets) {
@@ -252,8 +267,9 @@ async function main(): Promise<void> {
       }
     }
     const r = pearson(rpes, deviations)
+    const covered = rpes.length + noExpectation
     console.log('--- C. RPE против отклонения повторов (#167) ---')
-    console.log(`Подходов с ожиданием: ${rpes.length}`)
+    console.log(`Подходов с ожиданием: ${rpes.length} из ${covered} (покрытие ${percent(covered > 0 ? rpes.length / covered : 0)})`)
     console.log(`Корреляция RPE ↔ отклонение: ${r.toFixed(2)}`)
     console.log('  r ≤ -0.3  RPE ловит усталость: недобрал повторов — оценил тяжелее. Оставить ведущим.')
     console.log('  |r| < 0.15 RPE несёт что-то своё, не сводимое к повторам. Оставить, но не как меру недобора.')
@@ -265,18 +281,23 @@ async function main(): Promise<void> {
     }
     console.log('')
 
-    // Гейт по объёму — последним, чтобы цифры выше были видны и на неполных данных
+    // Гейт по объёму — последним, чтобы цифры выше были видны и на неполных данных.
+    // Решение опирается на A и B; C — подпорка, и её нехватка вердикт не блокирует:
+    // ожидание повторов требует двух прошлых сессий на том же весе, а под
+    // прогрессией вес не повторяется, так что покрытие C растёт медленно.
     const gaps: string[] = []
     if (postSets.length < MIN_SETS) gaps.push(`подходов ${postSets.length} < ${MIN_SETS}`)
     if (post.length < MIN_SESSIONS) gaps.push(`сессий ${post.length} < ${MIN_SESSIONS}`)
     if (conc.pairs < MIN_PAIRS) gaps.push(`пар ${conc.pairs} < ${MIN_PAIRS}`)
-    if (rpes.length < MIN_SETS_WITH_EXPECTATION) gaps.push(`подходов с ожиданием ${rpes.length} < ${MIN_SETS_WITH_EXPECTATION}`)
 
     console.log('--- Вердикт ---')
     if (gaps.length > 0) {
       console.log(`ДАННЫХ НЕ ХВАТАЕТ: ${gaps.join('; ')}`)
       console.log('Цифры выше — предварительные, решение по роли RPE не фиксируем.')
       return
+    }
+    if (rpes.length < MIN_SETS_WITH_EXPECTATION) {
+      console.log(`Оговорка: подходов с ожиданием ${rpes.length} < ${MIN_SETS_WITH_EXPECTATION} — пункт C ниже порога, вердикт только по A и B.`)
     }
     if (postDist.modalShare >= MAX_MODAL_SHARE) {
       console.log('Шкала вырождена и после фикса → RPE не может быть ведущим сигналом.')
