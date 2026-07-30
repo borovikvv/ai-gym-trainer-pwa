@@ -1,6 +1,6 @@
 // Issue #67 (#36 decomposition): all `any` replaced with concrete types.
 import type { CoachState, WorkoutHistoryEntry } from '../../shared/types.js'
-import type { DbClient } from '../dbClient.js'
+import { nonFatal, type DbClient } from '../dbClient.js'
 import type { SafeCoachPlan, CoachPlanChange } from '../coachPlanner.js'
 import { COACH_PERSONA, buildCoachPrompt, buildSafeCoachPlan, clampCoachPlanToNextWorkout, chooseNextWorkoutDay, daysUntilNextTrainingDay } from '../coachPlanner.js'
 import { computeCoachState } from '../coachState.js'
@@ -133,7 +133,9 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
   }
 
   // Фаза 2: долгосрочная память (травмы, реакции, цели) — в промпт планировщика.
-  const longTermMemory = await loadLongTermMemoryBlock(client, completedEntry.userId)
+  // Через nonFatal: планирование идёт внутри транзакции сохранения тренировки,
+  // и проглоченная внутри ошибка чтения убила бы её целиком (см. dbClient).
+  const longTermMemory = await nonFatal(client, 'longTermMemory', () => loadLongTermMemoryBlock(client, completedEntry.userId), '')
 
   const llmPlan = await requestLlmCoachPlan({ profile, workoutDays, completedWorkout: completedEntry, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult, longTermMemory })
 
