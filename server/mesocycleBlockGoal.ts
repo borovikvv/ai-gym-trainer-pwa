@@ -16,9 +16,19 @@
 // Арифметика — правилами (надёжно и проверяемо), LLM только пересказывает:
 // цель блока попадает в промпты через coachLongTermMemory.
 
-import type { AgeRecoveryPhase, MesocycleState } from '../shared/types.js'
+import type { AgeRecoveryPhase, MesocycleState, WorkoutHistoryEntry } from '../shared/types.js'
+import type { BodyWeightMeasurement } from '../shared/bodyWeight.js'
 import type { DbClient } from './dbClient.js'
+import { bodyWeightTrend } from '../shared/bodyWeight.js'
+import { computeSessionRepDeviation } from '../src/domain/repExpectation.js'
+import {
+  diagnoseStagnation,
+  type StagnationDiagnosis,
+  type StagnationSignals,
+  type StagnationVerdict,
+} from '../shared/stagnationDiagnosis.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+import { dateToDateOnly } from './utils.js'
 
 export type BlockGoalStatus = 'active' | 'achieved' | 'missed'
 
@@ -50,6 +60,13 @@ export interface BlockGoal {
   progressNote: string | null
   progressVerdict: BlockGoalVerdict | null
   outcomeNote: string | null
+  // Этап 2 (#175): диагноз стагнации живёт на цели блока, а не в своей таблице —
+  // без ожидаемого темпа блока стагнации не от чего отсчитывать, поэтому строка
+  // цели и есть область жизни диагноза.
+  diagnosis: StagnationDiagnosis | null
+  diagnosisNote: string | null
+  /** Срок проверки гипотезы; до него диагноз о стимуле не переставляется. */
+  hypothesisReviewOn: string | null
 }
 
 export interface BlockGoalProgress {
@@ -93,16 +110,27 @@ interface ProfileForBlockGoal {
   level?: string | null
 }
 
+// Уровень приходит и по-английски (анкета), и по-русски (свободный текст),
+// поэтому разбирается по подстрокам. Отсюда же его берёт диагностика
+// стагнации (#175): «нормальное замедление» — про стаж.
+function isBeginnerLevel(level?: string | null): boolean {
+  const value = String(level ?? '').toLowerCase()
+  return ['beginner', 'нович', 'перерыв', 'возвращ', 'return'].some((key) => value.includes(key))
+}
+
+export function isAdvancedLevel(level?: string | null): boolean {
+  const value = String(level ?? '').toLowerCase()
+  return ['advanced', 'опыт', 'продвин'].some((key) => value.includes(key))
+}
+
 /**
  * Ожидаемый недельный прирост e1RM — из стажа (уровня) и возраста.
  * Наблюдаемый наклон тренда сюда сознательно не входит (см. шапку файла).
  */
 export function expectedE1rmRatePerWeek(profile: ProfileForBlockGoal = {}): number {
-  const level = String(profile.level ?? '').toLowerCase()
-  // Уровень приходит и по-английски (анкета), и по-русски (свободный текст).
-  const isBeginner = ['beginner', 'нович', 'перерыв', 'возвращ', 'return'].some((key) => level.includes(key))
-  const isAdvanced = ['advanced', 'опыт', 'продвин'].some((key) => level.includes(key))
-  const baseRate = isBeginner ? BEGINNER_RATE : isAdvanced ? ADVANCED_RATE : INTERMEDIATE_RATE
+  const baseRate = isBeginnerLevel(profile.level)
+    ? BEGINNER_RATE
+    : isAdvancedLevel(profile.level) ? ADVANCED_RATE : INTERMEDIATE_RATE
   const phase: AgeRecoveryPhase =
     getUserTrainingPolicy({ age: profile.age ?? undefined })?.ageRecoveryProfile?.phase ?? 'adult'
   return roundTo(baseRate * (AGE_FACTOR[phase] ?? 1), 0.05)
@@ -122,6 +150,8 @@ export interface E1rmHistoryLike {
   exerciseName: string
   currentBest: number
   dataPoints: E1rmPointLike[]
+  /** Нужен диагностике (#175), чтобы отличить локальный лимит от общего. */
+  trend?: { direction: 'up' | 'down' | 'flat' | 'insufficient_data'; dataPointCount: number }
 }
 
 export interface BlockE1rmSummary {
@@ -364,6 +394,139 @@ function buildProgressNote({ goal, actual, expectedValue, deviation, weeksElapse
 }
 
 // ---------------------------------------------------------------------------
+// Сигналы диагностики стагнации (#175)
+// ---------------------------------------------------------------------------
+
+/** Окно приверженности. Короче блока: 16 последних сессий его всегда покрывают. */
+const ADHERENCE_WINDOW_DAYS = 14
+
+/** Сессий, по которым смотрим усилие и самочувствие. */
+const RECENT_SESSIONS = 3
+
+/**
+ * Ниже этого среднего отклонения повторов (#167) считаем, что усилие выросло:
+ * на том же весе человек стабильно недобирает повтор к ожиданию.
+ */
+const EFFORT_RISE_DEVIATION = -1
+
+/** Средняя энергия по чек-инам (1–5), ниже которой готовность считается сниженной. */
+const LOW_ENERGY_LEVEL = 2.5
+
+/** Прирост e1RM меньше этого — шум округления, а не прогресс. */
+const GAIN_EPSILON = 0.05
+
+/**
+ * Индекс стагнации: недель с последнего прироста e1RM. Прирост — новый максимум
+ * ряда, а не любая точка выше предыдущей: одна удачная тренировка после
+ * провальной не отменяет стагнацию. Отсчёт от старта блока, если приростов в
+ * нём не было вовсе.
+ */
+export function weeksWithoutGain(dataPoints: E1rmPointLike[], blockStartedOn: string, today: string): number {
+  const sorted = [...(dataPoints ?? [])]
+    .map((point) => ({ day: String(point?.date ?? '').slice(0, 10), e1rm: Number(point?.e1rm) }))
+    .filter((point) => point.day.length === 10 && Number.isFinite(point.e1rm) && point.e1rm > 0)
+    .sort((a, b) => a.day.localeCompare(b.day))
+
+  let best = 0
+  let lastGainDay = blockStartedOn
+  for (const point of sorted) {
+    if (point.e1rm > best + GAIN_EPSILON) {
+      best = point.e1rm
+      if (point.day >= blockStartedOn) lastGainDay = point.day
+    }
+  }
+  return Math.max(0, Math.floor(daysBetween(lastGainDay, today) / 7))
+}
+
+interface BuildSignalsInput {
+  goal: BlockGoal | BlockGoalDraft
+  progress: BlockGoalProgress
+  profile: ProfileForBlockGoal & { goal?: string | null; workoutsPerWeek?: number | null }
+  e1rmHistories: E1rmHistoryLike[]
+  history: WorkoutHistoryEntry[]
+  bodyWeightLog: BodyWeightMeasurement[]
+  today: string
+}
+
+/**
+ * Собрать входы диагностики из того, что уже посчитано для цели блока.
+ * Отсутствующий сигнал остаётся null: диагностика на этом строит гипотезу
+ * вместо вывода, а догадка на месте null сделала бы обратное.
+ */
+export function buildStagnationSignals({
+  goal, progress, profile, e1rmHistories, history, bodyWeightLog, today,
+}: BuildSignalsInput): StagnationSignals {
+  const goalHistory = findHistory(e1rmHistories, goal.exerciseId)
+  const inBlock = (history ?? [])
+    .filter((session) => String(session?.completedAt ?? '').slice(0, 10) >= goal.blockStartedOn)
+    .sort((a, b) => String(a.completedAt).localeCompare(String(b.completedAt)))
+  const recent = inBlock.slice(-RECENT_SESSIONS)
+
+  return {
+    behindExpectedPace: progress.verdict === 'stalled' || progress.verdict === 'behind',
+    weeksStalled: weeksWithoutGain(goalHistory?.dataPoints ?? [], goal.blockStartedOn, today),
+    adherence: adherenceRatio(history, today, profile.workoutsPerWeek),
+    effortRising: effortRising(recent, history),
+    energyLow: energyLow(recent),
+    painSessions: countPainSessions(history, goal.blockStartedOn),
+    bodyWeightFalling: bodyWeightTrend(bodyWeightLog)?.direction === 'down',
+    goalIsMass: /масс|набор|mass|hypertroph/i.test(String(profile.goal ?? '')),
+    localLimit: isLocalLimit(goalHistory, e1rmHistories),
+    advanced: isAdvancedLevel(profile.level),
+  }
+}
+
+/** Факт против плана за последние две недели; null — плана нет. */
+function adherenceRatio(history: WorkoutHistoryEntry[], today: string, workoutsPerWeek?: number | null): number | null {
+  const perWeek = Number(workoutsPerWeek)
+  if (!Number.isFinite(perWeek) || perWeek <= 0) return null
+  const from = shiftDays(today, -ADHERENCE_WINDOW_DAYS)
+  const done = (history ?? []).filter((session) => {
+    const day = String(session?.completedAt ?? '').slice(0, 10)
+    return day >= from && day <= today
+  }).length
+  return done / (perWeek * (ADHERENCE_WINDOW_DAYS / 7))
+}
+
+/**
+ * Усилие на тех же весах — через отклонение повторов от ожидания (#167), а не
+ * через RPE: достоверность самоотчёта ещё не подтверждена (#168).
+ * null — ожиданий по истории пока не хватает.
+ */
+function effortRising(recent: WorkoutHistoryEntry[], history: WorkoutHistoryEntry[]): boolean | null {
+  const deviations = recent
+    .map((session) => computeSessionRepDeviation(session, history).avgDeviation)
+    .filter((value): value is number => value !== null)
+  if (deviations.length === 0) return null
+  const average = deviations.reduce((sum, value) => sum + value, 0) / deviations.length
+  return average <= EFFORT_RISE_DEVIATION
+}
+
+/** Самочувствие по чек-инам готовности; null — чек-инов не было. */
+function energyLow(recent: WorkoutHistoryEntry[]): boolean | null {
+  const levels = recent
+    .map((session) => Number(session?.readinessCheckIn?.energy))
+    .filter((value) => Number.isFinite(value) && value > 0)
+  if (levels.length === 0) return null
+  return levels.reduce((sum, value) => sum + value, 0) / levels.length <= LOW_ENERGY_LEVEL
+}
+
+/** Целевое движение стоит, а хотя бы одно другое растёт. */
+function isLocalLimit(goalHistory: E1rmHistoryLike | undefined, e1rmHistories: E1rmHistoryLike[]): boolean {
+  const goalTrend = goalHistory?.trend
+  if (!goalTrend || (goalTrend.direction !== 'flat' && goalTrend.direction !== 'down')) return false
+  return (e1rmHistories ?? []).some((history) => {
+    if (String(history.exerciseId) === String(goalHistory?.exerciseId)) return false
+    return history.trend?.direction === 'up'
+  })
+}
+
+function daysBetween(from: string, to: string): number {
+  const diff = Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)
+  return Number.isFinite(diff) ? Math.round(diff / 86_400_000) : 0
+}
+
+// ---------------------------------------------------------------------------
 // Оценка блока по завершении
 // ---------------------------------------------------------------------------
 
@@ -411,6 +574,14 @@ export function formatBlockGoalForPrompt(goal: BlockGoal | null): string {
     `- ${goal.title} (ожидаемый темп +${goal.expectedRatePerWeek} кг/нед)`,
   ]
   if (goal.progressNote) lines.push(`- сверка: ${goal.progressNote}`)
+  // Этап 2 (#175): диагноз стоит перед реакцией. Действие названо в самой
+  // заметке, поэтому планировщик получает не факт «прогресса нет», а причину.
+  // ponytail: действие доходит до плана через промпт, а не как детерминированная
+  // правка недельных целей объёма (#166). Правило объёма и так добавляет подходы
+  // при отсутствии признаков потолка и снимает при двух — жёсткая связка
+  // дублировала бы его на уровне блока. Если планировщик начнёт игнорировать
+  // диагноз — заводить action в decideWeeklyVolumeTarget как явный вход.
+  if (goal.diagnosisNote) lines.push(`- ДИАГНОЗ СТАГНАЦИИ: ${goal.diagnosisNote}`)
   if (goal.failureDropValue !== null || goal.failurePainSessions !== null) {
     const criteria = [
       goal.failureDropValue !== null ? `e1RM ниже ${goal.failureDropValue} кг` : null,
@@ -427,7 +598,8 @@ export function formatBlockGoalForPrompt(goal: BlockGoal | null): string {
 
 const SELECT_COLUMNS = `id, user_id, block_started_on, exercise_id, exercise_name, title,
   baseline_value, target_value, expected_rate_per_week, regain_to_value, horizon_weeks,
-  failure_drop_value, failure_pain_sessions, status, progress_note, progress_verdict, outcome_note`
+  failure_drop_value, failure_pain_sessions, status, progress_note, progress_verdict, outcome_note,
+  diagnosis, diagnosis_note, hypothesis_review_on`
 
 /**
  * Цель текущего блока — последняя незакрытая. Достигнутая досрочно (status
@@ -478,12 +650,15 @@ async function insertBlockGoal(client: DbClient, userId: string, draft: BlockGoa
 // ---------------------------------------------------------------------------
 
 interface SyncInput {
-  profile: ProfileForBlockGoal
+  profile: ProfileForBlockGoal & { goal?: string | null; workoutsPerWeek?: number | null }
   mesocycle: MesocycleState | null
   e1rmHistories: E1rmHistoryLike[]
-  /** История тренировок — для подсчёта тренировок с болью внутри блока. */
-  history: Array<{ completedAt: string; exercises?: Array<{ pain?: boolean }> }>
+  /** История тренировок — боль в блоке, приверженность, усилие, самочувствие. */
+  history: WorkoutHistoryEntry[]
   preferredExerciseId?: string | null
+  /** Ряд замеров веса (#176) — вход диагноза энергетического дефицита. */
+  bodyWeightLog?: BodyWeightMeasurement[]
+  now?: Date
 }
 
 export interface SyncBlockGoalResult {
@@ -491,6 +666,8 @@ export interface SyncBlockGoalResult {
   progress: BlockGoalProgress | null
   /** Оценки завершённых блоков — пишутся в долгосрочную память вызывающим. */
   closedOutcomes: string[]
+  /** Диагноз стагнации (#175); null — стагнации нет. */
+  stagnation: StagnationVerdict | null
 }
 
 /**
@@ -498,7 +675,7 @@ export interface SyncBlockGoalResult {
  * оценкой, ставит цель текущему блоку, сверяет факт с ожиданием.
  */
 export async function syncBlockGoal(client: DbClient, userId: string, input: SyncInput): Promise<SyncBlockGoalResult> {
-  const empty: SyncBlockGoalResult = { goal: null, progress: null, closedOutcomes: [] }
+  const empty: SyncBlockGoalResult = { goal: null, progress: null, closedOutcomes: [], stagnation: null }
   const blockStartedOn = input.mesocycle?.cycleStartedOn
   if (!input.mesocycle || !blockStartedOn) return empty
 
@@ -557,7 +734,45 @@ export async function syncBlockGoal(client: DbClient, userId: string, input: Syn
     goal = { ...goal, progressNote: progress.note, progressVerdict: progress.verdict, status }
   }
 
-  return { goal, progress, closedOutcomes }
+  // 4. Диагноз стагнации (#175): почему прогресса нет и что с этим делать.
+  const today = dateToDateOnly(input.now ?? new Date())
+  const stagnation = resolveStagnation(goal, buildStagnationSignals({
+    goal, progress, profile: input.profile, e1rmHistories: input.e1rmHistories,
+    history: input.history, bodyWeightLog: input.bodyWeightLog ?? [], today,
+  }), today)
+  if ((stagnation?.note ?? null) !== goal.diagnosisNote) {
+    await client.query(
+      `update public.mesocycle_block_goals
+       set diagnosis = $3, diagnosis_note = $4, hypothesis_review_on = $5
+       where id = $1 and user_id = $2`,
+      [goal.id, userId, stagnation?.diagnosis ?? null, stagnation?.note ?? null, stagnation?.reviewOn ?? null],
+    )
+    goal = {
+      ...goal,
+      diagnosis: stagnation?.diagnosis ?? null,
+      diagnosisNote: stagnation?.note ?? null,
+      hypothesisReviewOn: stagnation?.reviewOn ?? null,
+    }
+  }
+
+  return { goal, progress, closedOutcomes, stagnation }
+}
+
+/**
+ * Гипотеза проверяется НЕДЕЛЕЙ, а не до следующего пересчёта: пока срок не
+ * вышел, диагноз о стимуле держится с прежней датой, иначе проверка каждый
+ * день начиналась бы заново и никогда не заканчивалась. Любой другой диагноз
+ * (перегрузка, боль, срыв приверженности) важнее незакрытой гипотезы и
+ * применяется сразу.
+ */
+function resolveStagnation(goal: BlockGoal, signals: StagnationSignals, today: string): StagnationVerdict | null {
+  const fresh = diagnoseStagnation(signals, today)
+  const held = goal.hypothesisReviewOn !== null
+    && today < goal.hypothesisReviewOn
+    && goal.diagnosis === 'insufficient_stimulus'
+    && fresh?.diagnosis === 'insufficient_stimulus'
+  if (!held || !fresh || !goal.diagnosisNote) return fresh
+  return { ...fresh, hypothesis: true, reviewOn: goal.hypothesisReviewOn, note: goal.diagnosisNote }
 }
 
 function findHistory(histories: E1rmHistoryLike[], exerciseId: string): E1rmHistoryLike | undefined {
@@ -602,5 +817,10 @@ function normalizeBlockGoalRow(row: Record<string, unknown>): BlockGoal {
     progressNote: row.progress_note === null || row.progress_note === undefined ? null : String(row.progress_note),
     progressVerdict: row.progress_verdict === null || row.progress_verdict === undefined ? null : (row.progress_verdict as BlockGoalVerdict),
     outcomeNote: row.outcome_note === null || row.outcome_note === undefined ? null : String(row.outcome_note),
+    diagnosis: row.diagnosis === null || row.diagnosis === undefined ? null : (row.diagnosis as StagnationDiagnosis),
+    diagnosisNote: row.diagnosis_note === null || row.diagnosis_note === undefined ? null : String(row.diagnosis_note),
+    hypothesisReviewOn: row.hypothesis_review_on === null || row.hypothesis_review_on === undefined
+      ? null
+      : String((row.hypothesis_review_on as Date)?.toISOString?.()?.slice(0, 10) ?? row.hypothesis_review_on).slice(0, 10),
   }
 }

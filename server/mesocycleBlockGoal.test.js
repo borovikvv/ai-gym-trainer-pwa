@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   assessBlockOutcome,
   buildBlockGoalDraft,
+  buildStagnationSignals,
   countPainSessions,
   evaluateBlockGoalProgress,
   expectedE1rmRatePerWeek,
   formatBlockGoalForPrompt,
   summarizeE1rmForBlock,
   syncBlockGoal,
+  weeksWithoutGain,
 } from './mesocycleBlockGoal.js'
 
 // ---------------------------------------------------------------------------
@@ -451,7 +453,7 @@ describe('syncBlockGoal', () => {
       e1rmHistories: HISTORIES,
       history: [],
     })
-    expect(result).toEqual({ goal: null, progress: null, closedOutcomes: [] })
+    expect(result).toEqual({ goal: null, progress: null, closedOutcomes: [], stagnation: null })
     expect(queries).toHaveLength(0)
   })
 })
@@ -467,5 +469,194 @@ describe('formatBlockGoalForPrompt', () => {
 
   it('без цели — пустая строка, промпт не мусорится', () => {
     expect(formatBlockGoalForPrompt(null)).toBe('')
+  })
+
+  it('диагноз стагнации попадает в промпт вместе с целью (#175)', () => {
+    const text = formatBlockGoalForPrompt(goal({
+      diagnosis: 'overload',
+      diagnosisNote: 'перегрузка: прироста нет 3 нед — разгрузка.',
+    }))
+    expect(text).toContain('ДИАГНОЗ СТАГНАЦИИ')
+    expect(text).toContain('разгрузка')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Сигналы диагностики стагнации (#175)
+// ---------------------------------------------------------------------------
+
+describe('weeksWithoutGain', () => {
+  it('считает недели от последнего НОВОГО максимума, а не от любой точки вверх', () => {
+    // 08.07 — новый максимум; 15.07 выше предыдущей точки, но ниже максимума.
+    const points = [point('2026-07-08', 60.5), point('2026-07-12', 58), point('2026-07-15', 59)]
+    expect(weeksWithoutGain(points, BLOCK_START, '2026-07-29')).toBe(3)
+  })
+
+  it('без приростов внутри блока отсчёт идёт от старта блока', () => {
+    expect(weeksWithoutGain([point('2026-06-25', 59)], BLOCK_START, '2026-07-20')).toBe(2)
+  })
+})
+
+describe('buildStagnationSignals', () => {
+  const progress = { weeksElapsed: 3, expectedValue: 61, actualValue: 60, deviation: -1, verdict: 'stalled', note: '' }
+
+  function session(day, overrides = {}) {
+    return {
+      completedAt: `${day}T10:00:00.000Z`,
+      exercises: [{ exerciseId: 'bench-press', exerciseName: 'Жим лёжа', pain: false, sets: [{ weight: 60, reps: 8, completed: true }] }],
+      ...overrides,
+    }
+  }
+
+  it('собирает приверженность, самочувствие и боль из истории', () => {
+    const signals = buildStagnationSignals({
+      goal: goal(),
+      progress,
+      profile: { level: 'intermediate', goal: 'масса', workoutsPerWeek: 3 },
+      e1rmHistories: HISTORIES,
+      history: [
+        session('2026-07-20', { readinessCheckIn: { energy: 2 } }),
+        session('2026-07-24', { readinessCheckIn: { energy: 2 } }),
+        session('2026-07-27', { exercises: [{ exerciseId: 'squat', exerciseName: 'Присед', pain: true, sets: [] }] }),
+      ],
+      bodyWeightLog: [],
+      today: '2026-07-30',
+    })
+
+    expect(signals.behindExpectedPace).toBe(true)
+    // Две недели плана по 3 тренировки — 6, сделано 3.
+    expect(signals.adherence).toBeCloseTo(0.5)
+    expect(signals.energyLow).toBe(true)
+    expect(signals.painSessions).toBe(1)
+    expect(signals.goalIsMass).toBe(true)
+  })
+
+  it('отсутствующие сигналы остаются null, а не подменяются догадкой', () => {
+    const signals = buildStagnationSignals({
+      goal: goal(),
+      progress,
+      profile: {},
+      e1rmHistories: HISTORIES,
+      history: [session('2026-07-27')],
+      bodyWeightLog: [],
+      today: '2026-07-30',
+    })
+    expect(signals.adherence).toBeNull()
+    expect(signals.energyLow).toBeNull()
+    expect(signals.effortRising).toBeNull()
+  })
+
+  it('падение веса берётся из ряда замеров (#176)', () => {
+    const log = [
+      { measuredOn: '2026-06-25', weightKg: 82 },
+      { measuredOn: '2026-07-02', weightKg: 81 },
+      { measuredOn: '2026-07-28', weightKg: 79 },
+    ]
+    const signals = buildStagnationSignals({
+      goal: goal(), progress, profile: {}, e1rmHistories: HISTORIES,
+      history: [], bodyWeightLog: log, today: '2026-07-30',
+    })
+    expect(signals.bodyWeightFalling).toBe(true)
+  })
+
+  it('локальный лимит: целевое движение стоит, другое растёт', () => {
+    const histories = [
+      { ...HISTORIES[0], trend: { direction: 'flat', dataPointCount: 3 } },
+      { exerciseId: 'squat', exerciseName: 'Присед', currentBest: 90, dataPoints: [], trend: { direction: 'up', dataPointCount: 3 } },
+    ]
+    const signals = buildStagnationSignals({
+      goal: goal(), progress, profile: {}, e1rmHistories: histories,
+      history: [], bodyWeightLog: [], today: '2026-07-30',
+    })
+    expect(signals.localLimit).toBe(true)
+  })
+})
+
+describe('syncBlockGoal: диагноз стагнации', () => {
+  const STALLED = [{
+    exerciseId: 'bench-press',
+    exerciseName: 'Жим лёжа',
+    currentBest: 60,
+    // Максимум взят до блока — внутри блока прироста нет.
+    dataPoints: [point('2026-06-25', 60), point('2026-07-08', 58), point('2026-07-20', 59)],
+    trend: { direction: 'flat', dataPointCount: 3 },
+  }]
+
+  const NOW = new Date('2026-07-30T10:00:00.000Z')
+
+  /** Тренировался как договаривались, чувствует себя нормально, боли нет. */
+  function sessions({ energy = 4, painOn = null } = {}) {
+    return ['2026-07-20', '2026-07-24', '2026-07-28'].map((day) => ({
+      completedAt: `${day}T10:00:00.000Z`,
+      readinessCheckIn: { energy },
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: day === painOn,
+        sets: [{ weight: 60, reps: 8, completed: true }],
+      }],
+    }))
+  }
+
+  const PROFILE = { level: 'intermediate', age: 43, workoutsPerWeek: 2 }
+
+  it('ставит диагноз и сохраняет его вместе с целью', async () => {
+    const { client, queries } = mockClient([
+      { match: 'insert into public.mesocycle_block_goals', rows: [goalRow({ target_value: 61.5 })] },
+    ])
+    const result = await syncBlockGoal(client, 'u1', {
+      profile: PROFILE,
+      mesocycle: mesocycle({ weekInCycle: 4 }),
+      e1rmHistories: STALLED,
+      history: sessions(),
+      now: NOW,
+    })
+
+    expect(result.stagnation.diagnosis).toBe('insufficient_stimulus')
+    const saved = queries.find((q) => q.text.includes('set diagnosis = $3'))
+    expect(saved.params[3]).toBe(result.stagnation.note)
+    expect(result.goal.diagnosisNote).toBe(result.stagnation.note)
+  })
+
+  it('гипотеза держится до своего срока, а не переставляется каждый пересчёт', async () => {
+    const stored = goalRow({
+      target_value: 61.5,
+      diagnosis: 'insufficient_stimulus',
+      diagnosis_note: 'недостаточный стимул: прежняя формулировка — добавить объём.',
+      hypothesis_review_on: '2026-08-05',
+    })
+    const { client, queries } = mockClient([{ match: 'where user_id = $1 and block_started_on = $2', rows: [stored] }])
+    const result = await syncBlockGoal(client, 'u1', {
+      profile: PROFILE,
+      mesocycle: mesocycle({ weekInCycle: 4 }),
+      e1rmHistories: STALLED,
+      history: sessions(),
+      now: NOW,
+    })
+
+    expect(result.stagnation.note).toBe(stored.diagnosis_note)
+    expect(result.stagnation.reviewOn).toBe('2026-08-05')
+    expect(queries.some((q) => q.text.includes('set diagnosis = $3'))).toBe(false)
+  })
+
+  it('перегрузка перебивает незакрытую гипотезу — признаки потолка важнее срока проверки', async () => {
+    const stored = goalRow({
+      target_value: 61.5,
+      diagnosis: 'insufficient_stimulus',
+      diagnosis_note: 'недостаточный стимул: добавить объём.',
+      hypothesis_review_on: '2026-08-05',
+    })
+    const { client } = mockClient([{ match: 'where user_id = $1 and block_started_on = $2', rows: [stored] }])
+    const result = await syncBlockGoal(client, 'u1', {
+      profile: PROFILE,
+      mesocycle: mesocycle({ weekInCycle: 4 }),
+      e1rmHistories: STALLED,
+      // Готовность снижена и одна тренировка с болью — два признака потолка.
+      history: sessions({ energy: 2, painOn: '2026-07-28' }),
+      now: NOW,
+    })
+
+    expect(result.stagnation.diagnosis).toBe('overload')
+    expect(result.stagnation.action).toBe('deload')
   })
 })
