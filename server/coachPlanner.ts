@@ -213,7 +213,9 @@ export function buildSafeCoachPlan({
       : ''
 
     let muscleGroupSetsLast7Days = 0
-    const ageProfile: UserTrainingPolicy | null = getUserTrainingPolicy(profile?.userId ?? (profile as unknown as string))
+    // Issue #171: передаём профиль целиком — из него берётся возраст. Раньше
+    // сюда уходил один userId, и возрастная фаза всегда выходила 'adult'.
+    const ageProfile: UserTrainingPolicy | null = getUserTrainingPolicy(profile ?? null)
     const phase = ageProfile?.ageRecoveryProfile?.phase ?? 'adult'
     const volumeMuscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
     const baseLandmarks = getVolumeLandmarks(volumeMuscleKey, phase)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { recommendNextSet } from './coachEngine.js'
+import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 
 const bench = {
   id: 'bench-press',
@@ -99,7 +100,8 @@ describe('Coach Engine v1 next-set recommendations', () => {
 
   it('raises the weight by two steps for an aggressive user on a big rep surplus (repMax+4)', () => {
     const result = recommendNextSet({
-      userId: 'vyacheslav', // maxWeightJumpSteps 2
+      // Issue #171: политика берётся из возраста профиля, а не из имени.
+      userTrainingPolicy: getUserTrainingPolicy({ userId: 'vyacheslav', age: 43 }), // maxWeightJumpSteps 2
       exercise: bench,
       completedSets: [{ weight: 40, reps: 13, rpe: 5, completed: true }],
       remainingSets: 2,
@@ -149,9 +151,9 @@ describe('Coach Engine v1 next-set recommendations', () => {
     expect(result.reason).toContain('восстановление')
   })
 
-  it('does not prescribe another hard set for Oleg after a very heavy set', () => {
+  it('does not prescribe another hard set for an under-18 profile after a very heavy set', () => {
     const result = recommendNextSet({
-      userId: 'oleg',
+      userTrainingPolicy: getUserTrainingPolicy({ userId: 'oleg', age: 15 }),
       exercise: bench,
       completedSets: [{ weight: 40, reps: 6, rpe: 9, completed: true }],
       remainingSets: 2,
@@ -163,7 +165,8 @@ describe('Coach Engine v1 next-set recommendations', () => {
       recommendedReps: 6,
       recommendedRestSeconds: 180,
     })
-    expect(result.reason).toContain('Олег')
+    // Issue #171: причина называется явно и не привязана к имени пользователя.
+    expect(result.reason).not.toContain('Олег')
     expect(result.reason).toContain('без отказа')
   })
 

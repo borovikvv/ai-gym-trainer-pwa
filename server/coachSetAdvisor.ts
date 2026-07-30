@@ -16,7 +16,9 @@ import {
   getUserTrainingPolicy,
   type ClampedNextSetDecision,
   type NextSetProposal,
+  type UserTrainingPolicy,
 } from './userTrainingPolicies.js'
+import { isAxialFreeWeight } from '../shared/teenLimits.js'
 import {
   buildLiveContextPrompt,
   loadLiveCoachUserData,
@@ -47,6 +49,11 @@ interface ExerciseInputLike {
   lastKnownWeight?: number
   /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
   weightDirection?: string | null
+  // Issue #171: метаданные справочника — по ним определяется, осевое ли это
+  // свободновесное движение. Роут дополняет ими payload от клиента.
+  equipment?: string | null
+  exerciseType?: string | null
+  movementPattern?: string | null
 }
 
 export interface NextSetDecision extends RulesBaseline {
@@ -66,6 +73,12 @@ export interface NextSetDecision extends RulesBaseline {
 export interface BuildNextSetDecisionInput {
   client: DbClient
   userId: string
+  /**
+   * Issue #171: политика, выведенная из возраста профиля. Роут строит её один
+   * раз и передаёт сюда; без неё пришлось бы выводить из одного userId, а по
+   * нему возраст неизвестен и взрослый получал бы подростковые ограничения.
+   */
+  policy?: UserTrainingPolicy | null
   exercise: ExerciseInputLike
   completedSets: SetLike[]
   remainingSets: number
@@ -150,7 +163,9 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
   const lastSet = completedOnly.at(-1) ?? null
   const clamped = clampNextSetDecision(proposal, {
     userId: input.userId,
-    policy: getUserTrainingPolicy(input.userId),
+    policy: input.policy ?? getUserTrainingPolicy(input.userId),
+    // Issue #171: осевое свободновесное движение — по метаданным справочника.
+    axialFreeWeight: isAxialFreeWeight(input.exercise),
     // Anchor weight bounds to the last real set; on the first set anchor to
     // the rules baseline so the LLM cannot invent a wild starting weight.
     lastSet: lastSet ?? (input.rulesDecision.recommendedWeight > 0 ? { weight: input.rulesDecision.recommendedWeight } : null),

@@ -8,7 +8,7 @@ import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from '../coachDecis
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 // Issue #107: LLM prompt includes analysis flags so it can reason about plateaus/overtraining
 import { analyzeProgress } from '../coachProgressAnalysis.js'
-import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import type { ProgressAnalysis } from '../coachProgressAnalysis.js'
 import { requestLlmJson } from '../lib/llmClient.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
@@ -111,7 +111,7 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
   let analysisResult: ProgressAnalysis | null = null
   try {
     // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
-    const e1rmHistories = buildAllExerciseE1RMHistories([completedEntry as unknown as WorkoutHistoryEntry, ...history], { bodyWeightKg: profile?.weightKg })
+    const e1rmHistories = buildAllExerciseE1RMHistories([completedEntry as unknown as WorkoutHistoryEntry, ...history], e1rmOptionsForProfile(profile))
     analysisResult = await analyzeProgress({
       userId: completedEntry.userId,
       history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],

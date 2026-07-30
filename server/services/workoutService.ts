@@ -17,7 +17,7 @@ import { invalidateLiveCoachCache } from './liveCoachContext.js'
 import { loadCoachStateForUser, loadUserProfile, loadExerciseLibrary, loadRecentHistory } from './programService.js'
 // Issue #108: run analysis + compute changes for training records
 import { analyzeProgress } from '../coachProgressAnalysis.js'
-import { buildAllExerciseE1RMHistories } from '../../src/domain/estimatedOneRepMax.js'
+import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 // Issue #167: повторы против ожидания на том же весе — считаем и записываем
 import { computeSessionRepDeviation } from '../../src/domain/repExpectation.js'
 import type { TrainingRecordChange } from '../coachTrainingRecord.js'
@@ -282,7 +282,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
     try {
       const fullHistory = [sanitizedEntry as unknown as WorkoutHistoryEntry, ...recentHistory]
       // Issue #173: bodyWeightKg для e1RM упражнений с помощью (гравитрон).
-      const e1rmHistories = buildAllExerciseE1RMHistories(fullHistory, { bodyWeightKg: userProfileForRecord?.weightKg })
+      const e1rmHistories = buildAllExerciseE1RMHistories(fullHistory, e1rmOptionsForProfile(userProfileForRecord))
       analysisResult = await analyzeProgress({
         userId: sanitizedEntry.userId!,
         history: fullHistory,

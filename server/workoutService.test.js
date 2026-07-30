@@ -51,6 +51,8 @@ vi.mock('./coachProgressAnalysis.js', () => ({
 // Issue #108: mock e1RM histories (used by analyzeProgress input)
 vi.mock('../src/domain/estimatedOneRepMax.js', () => ({
   buildAllExerciseE1RMHistories: vi.fn().mockReturnValue([]),
+  // Issue #171: опции e1RM выводятся из профиля (возраст → минимум повторов).
+  e1rmOptionsForProfile: vi.fn().mockReturnValue({ bodyWeightKg: null, minReps: 1 }),
 }))
 
 afterEach(() => {

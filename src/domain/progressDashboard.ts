@@ -1,7 +1,7 @@
 import type { WorkoutDay  } from '../../shared/types'
 import type { CompletedExerciseHistory, WorkoutHistoryEntry } from './workoutHistory'
 import { getCanonicalExerciseId } from './exerciseIdentity'
-import { buildAllExerciseE1RMHistories, sparklineData, trendDescription, type ExerciseE1RMHistory } from './estimatedOneRepMax'
+import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile, sparklineData, trendDescription, type ExerciseE1RMHistory } from './estimatedOneRepMax'
 import { isAssistedExercise } from '../lib/muscleGroups'
 // Issue #109: use isTimedExercise to distinguish timed (plank) from bodyweight (push-up)
 import { isTimedExercise } from './exerciseMetrics'
@@ -62,6 +62,9 @@ export function buildProgressDashboard(input: {
   now?: Date
   /** Issue #173: вес тела — для e1RM упражнений с помощью (гравитрон). */
   bodyWeightKg?: number | null
+  /** Issue #171: возраст — по нему e1RM отбрасывает подходы короче пяти
+   *  повторов, чтобы экран прогресса и тренер считали силу одинаково. */
+  age?: number | null
 }): ProgressDashboard {
   const now = input.now ?? new Date()
   const recentCutoffMs = now.getTime() - 14 * 24 * 60 * 60 * 1000
@@ -119,7 +122,10 @@ export function buildProgressDashboard(input: {
       source: 'правила прогрессии',
     }))
 
-  const e1RMHistories = buildAllExerciseE1RMHistories(input.history, { bodyWeightKg: input.bodyWeightKg })
+  const e1RMHistories = buildAllExerciseE1RMHistories(
+    input.history,
+    e1rmOptionsForProfile({ age: input.age, weightKg: input.bodyWeightKg }),
+  )
     .slice(0, 8)
     .map((h: ExerciseE1RMHistory) => ({
       exerciseId: h.exerciseId,

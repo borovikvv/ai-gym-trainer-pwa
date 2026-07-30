@@ -111,8 +111,8 @@ export function useActiveWorkoutContext({
   const nextExercise = activeWorkoutDay.exercises[activeExerciseIndex + 1]
   const nextPlannedWorkout = nextActionablePlannedWorkout(plannedWorkouts, userHistory)
   const progressDashboard = useMemo(
-    () => buildProgressDashboard({ history: userHistory, workoutDays, bodyWeightKg: activeProfile?.weightKg }),
-    [userHistory, workoutDays, activeProfile?.weightKg],
+    () => buildProgressDashboard({ history: userHistory, workoutDays, bodyWeightKg: activeProfile?.weightKg, age: activeProfile?.age }),
+    [userHistory, workoutDays, activeProfile?.weightKg, activeProfile?.age],
   )
 
   const previousExerciseHistory = userHistory

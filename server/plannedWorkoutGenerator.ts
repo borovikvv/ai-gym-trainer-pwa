@@ -22,6 +22,7 @@ import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
 import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, harderWeight, easierWeight, strongerOf } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
+import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, teenLimitsApply } from '../shared/teenLimits.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
 import { applyPeriodization } from './periodization.js'
 import { russianWeekdayName } from './utils.js'
@@ -133,6 +134,13 @@ interface LibraryExerciseInput {
   /** Issue #173: 'load' | 'assistance' из справочника (weight_direction). */
   weightDirection?: string | null
   weight_direction?: string | null
+  // Issue #171: метаданные движения из справочника — по ним определяется
+  // осевое свободновесное движение (см. isAxialFreeWeight).
+  equipment?: string | null
+  exerciseType?: string | null
+  exercise_type?: string | null
+  movementPattern?: string | null
+  movement_pattern?: string | null
 }
 
 interface NormalizedLibraryExercise {
@@ -148,6 +156,10 @@ interface NormalizedLibraryExercise {
   restSeconds: number
   /** Issue #173: направление веса из справочника; null = определить по имени. */
   weightDirection: string | null
+  /** Issue #171: метаданные движения для подростковых ограничений. */
+  equipment: string | null
+  exerciseType: string | null
+  movementPattern: string | null
 }
 
 interface PreviousGeneratedWorkout {
@@ -197,6 +209,8 @@ interface GeneratedExercise {
   intensityTarget: string
   coachFocus: string
   reason: string
+  /** Issue #171: применены подростковые ограничения (см. teenLimitsApply). */
+  teenLimited?: boolean
   sortOrder?: number
   /** Issue #173: направление веса — доезжает до LLM-клампа предписаний. */
   weightDirection?: string | null
@@ -309,7 +323,9 @@ export async function buildGeneratedPlannedWorkout({
 }: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const preferences = normalizePreferences(profile)
-  const userTrainingPolicy = getUserTrainingPolicy(profile?.userId)
+  // Issue #171: политика выводится из возраста профиля — передаём профиль,
+  // а не один userId.
+  const userTrainingPolicy = getUserTrainingPolicy(profile ?? null)
   const weeklyContext = buildWeeklyContext(
     [...buildCompletedWorkoutContext(history, scheduledDate), ...previousGeneratedWorkouts],
     { scheduledDate, profile, weeklyVolume },
@@ -502,6 +518,7 @@ async function refineBaselinePrescriptions({
     coachFocus: exercise.coachFocus,
     currentWorkingWeight: Number(coachMemory?.exerciseProfiles?.[exercise.exerciseId]?.currentWorkingWeight ?? NaN) || null,
     weightDirection: exercise.weightDirection ?? null,
+    teenLimited: exercise.teenLimited === true,
   }))
   const alternativesById = new Map(allowedAlternatives.map((exercise) => [exercise.id, exercise]))
 
@@ -970,6 +987,19 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     focusText = 'разгрузочная неделя мезоцикла — снижаем объём и интенсивность'
   }
 
+  // Issue #171: подростковые ограничения — последнее слово в предписании.
+  // Стоят ПОСЛЕ периодизации и разгрузки, потому что обе переписывают диапазон
+  // повторов: у становой в справочнике он и так 4–6, а интенсификация уводит
+  // его ещё ниже. Подход на 1–4 повтора — это проходка, а не рабочий подход.
+  const teenLimited = teenLimitsApply(profile?.age, exercise)
+  const teenNotes: string[] = []
+  if (teenLimited) {
+    teenNotes.push(TEEN_LIMIT_REASONS.no_failure)
+    if (repMin < TEEN_MIN_REPS) teenNotes.push(TEEN_LIMIT_REASONS.min_reps)
+    repMin = Math.max(TEEN_MIN_REPS, repMin)
+    repMax = Math.max(repMin, repMax)
+  }
+
   return {
     exerciseId: exercise.id,
     exerciseName: exercise.name,
@@ -982,7 +1012,10 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     restSeconds,
     intensityTarget,
     weightDirection: direction,
-    coachFocus: `${exercise.name}: ${shouldConsolidate && !deloadNote ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}${deloadNote ? `. ${deloadNote}` : ''}.`,
+    teenLimited,
+    // Причина ограничения идёт вместе с предписанием: необъяснённое ограничение
+    // читается как недоверие (см. #171, правило 5).
+    coachFocus: `${exercise.name}: ${shouldConsolidate && !deloadNote ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}${deloadNote ? `. ${deloadNote}` : ''}.${teenNotes.length ? ` ${teenNotes.join('; ')}.` : ''}`,
     reason: reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext, policy }),
   }
 }
@@ -1205,6 +1238,10 @@ function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): Norm
     weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
     restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
     weightDirection: (exercise.weightDirection ?? exercise.weight_direction ?? null) as string | null,
+    // Issue #171: метаданные движения — вход для isAxialFreeWeight.
+    equipment: (exercise.equipment ?? null) as string | null,
+    exerciseType: (exercise.exerciseType ?? exercise.exercise_type ?? null) as string | null,
+    movementPattern: (exercise.movementPattern ?? exercise.movement_pattern ?? null) as string | null,
   })).filter((exercise) => exercise.id && exercise.name)
 }
 

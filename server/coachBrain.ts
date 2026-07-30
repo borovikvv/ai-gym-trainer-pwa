@@ -39,6 +39,9 @@ interface RequestLlmLiveStrategyArgs {
 
 interface BuildLiveStrategyDecisionInput {
   userId: string
+  /** Issue #171: возраст из профиля — по нему выводится политика (без него
+   *  политика собиралась из одного userId и возраст в неё не попадал). */
+  age?: number | null
   exercise: ExerciseRef
   completedSets?: SetInput[]
   coachState?: CoachState | Partial<CoachState>
@@ -70,6 +73,7 @@ interface LiveStrategyDecision {
 
 interface ClampLiveStrategyInput {
   userId: string
+  age?: number | null
 }
 
 interface RawLlmDecision {
@@ -86,13 +90,14 @@ interface RawLlmDecision {
 
 export async function buildLiveStrategyDecision({
   userId,
+  age = null,
   exercise,
   completedSets = [],
   coachState = {},
   session = {},
   requestLlm = null,
 }: BuildLiveStrategyDecisionInput): Promise<LiveStrategyDecision> {
-  const rulesDecision = buildRulesLiveStrategy({ userId, exercise, completedSets, coachState })
+  const rulesDecision = buildRulesLiveStrategy({ userId, age, exercise, completedSets, coachState })
   if (!requestLlm) return rulesDecision
 
   try {
@@ -104,7 +109,7 @@ export async function buildLiveStrategyDecision({
       session,
       rulesDecision,
     })
-    return clampLiveStrategyDecision(llmDecision ?? rulesDecision, { userId })
+    return clampLiveStrategyDecision(llmDecision ?? rulesDecision, { userId, age })
   } catch {
     return rulesDecision
   }
@@ -139,9 +144,9 @@ export async function requestLlmLiveStrategy({
 
 export function clampLiveStrategyDecision(
   rawDecision: LiveStrategyDecision | RawLlmDecision,
-  { userId }: ClampLiveStrategyInput,
+  { userId, age = null }: ClampLiveStrategyInput,
 ): LiveStrategyDecision {
-  const policy: UserTrainingPolicy | null = getUserTrainingPolicy(userId)
+  const policy: UserTrainingPolicy | null = getUserTrainingPolicy({ userId, age })
   const rawActions = Array.isArray(rawDecision?.actions) ? rawDecision.actions : []
   const actions: LiveStrategyAction[] = rawActions
     .filter((action): action is { type: string; reason?: string; exerciseId?: string; programExerciseId?: string } =>
@@ -206,15 +211,17 @@ Coach State: ${JSON.stringify(coachState)}
 
 function buildRulesLiveStrategy({
   userId,
+  age = null,
   completedSets,
   coachState,
 }: {
   userId: string
+  age?: number | null
   exercise: ExerciseRef
   completedSets: SetInput[]
   coachState: CoachState | Partial<CoachState>
 }): LiveStrategyDecision {
-  const policy: UserTrainingPolicy | null = getUserTrainingPolicy(userId)
+  const policy: UserTrainingPolicy | null = getUserTrainingPolicy({ userId, age })
   const hardSets = completedSets.filter((set) => Number(set.rpe) >= 9).length
   const lowRecovery = coachState.recoveryStatus === 'low' || Number(coachState.readinessScore ?? 70) < 55
 
