@@ -39,8 +39,10 @@ git pull origin main
 # 2. Install dependencies
 npm install
 
-# 3. Apply any new DB migrations
-# Check supabase/ for new .sql files since last deploy
+# 3a. Sync the DB schema — ALWAYS, every deploy (idempotent, see below)
+node supabase/apply-migration.mjs supabase/schema.sql
+
+# 3b. Apply data migrations — only new supabase/2026-*.sql files since last deploy
 node supabase/apply-migration.mjs supabase/2026-XX-XX_new_migration.sql
 
 # 4. Build frontend + type-check backend
@@ -52,6 +54,19 @@ pm2 restart ai-gym-trainer   # or: systemctl restart ai-gym-trainer
 # 6. Regenerate planned workouts (if mesocycle/pattern logic changed)
 node server/regeneratePlannedWorkouts.mjs --all-users
 ```
+
+## Database schema
+
+`supabase/schema.sql` is idempotent (`create table if not exists`,
+`add column if not exists`, `drop trigger if exists` + recreate), so step 3a can
+run on every deploy and is the mechanism that keeps prod columns in sync. It
+carries DDL only — data migrations (exercise library seeds, backfills) live in
+`supabase/2026-*.sql` and still have to be applied by hand, once each.
+
+Issue #194: three columns (`user_rating`, `pain_log`, `performed_at`) were added
+to `schema.sql` without a delta file, prod never got them, and every workout
+failed to save for two days. Running `schema.sql` on deploy is what prevents the
+repeat — a delta file is a courtesy for review, not the sync mechanism.
 
 ## When to regenerate planned workouts
 
