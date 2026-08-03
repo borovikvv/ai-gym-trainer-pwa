@@ -774,4 +774,16 @@ describe('прогрессия без веса', () => {
 
     expect(safePlank.changes[0]).toMatchObject({ repMin: 45, repMax: 65 })
   })
+
+  it('пол клэмпа не раздувает упражнение, у которого диапазон ниже пола', () => {
+    // «Дед баг» считается упражнением на время, но в справочнике у него 8–12,
+    // а не секунды планки. Кламп обязан ограничивать, а не назначать.
+    const deadBugDay = bodyweightDay({ exerciseId: 'dead-bug', name: 'Dead bug', repMin: 8, repMax: 12 })
+    const safe = clampCoachPlanToNextWorkout({
+      plan: { source: 'llm', changes: [{ programExerciseId: 'pe-bw', targetWeight: 0, setsCount: 2, repMin: 10, repMax: 12, restSeconds: 60, coachFocus: '' }] },
+      nextWorkoutDay: deadBugDay,
+    })
+
+    expect(safe.changes[0]).toMatchObject({ repMin: 10, repMax: 12 })
+  })
 })
