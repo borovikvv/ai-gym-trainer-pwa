@@ -1,6 +1,8 @@
 import type { WorkoutHistoryEntry } from './workoutHistory'
 import { formatWeight, pluralRu } from '../lib/format'
 import { isAssistedExercise } from '../lib/muscleGroups'
+// Issue #192: та же проверка «прогрессия не про вес», что в progression.ts.
+import { isWeightlessProgression } from '../../shared/weightDirection'
 import { computeWorkoutQualityScore as computeQualityScore } from '../../shared/workoutQuality'
 
 // Issue #98 PR3: WorkoutDebrief moved to shared/types.ts. Re-export for
@@ -20,7 +22,15 @@ export function buildWorkoutDebrief(entry: WorkoutHistoryEntry, serverQualitySco
   const progressed = exercises
     .filter((exercise) => exercise.progressionType === 'increase')
     .map((exercise) => {
+      // Issue #192: рекомендация в ноль килограммов — это не цель. У помощи
+      // ноль означает «помощь больше не нужна», у веса тела прогрессия идёт по
+      // повторам, и её формулировка уже собрана в progressionReason.
       const assisted = isAssistedExercise(exercise.exerciseName)
+      if (isWeightlessProgression(exercise.nextRecommendedWeight)) {
+        return assisted
+          ? `${exercise.exerciseName}: помощь больше не нужна — работаем своим весом.`
+          : exercise.progressionReason
+      }
       return assisted
         ? `${exercise.exerciseName}: можно уменьшить помощь до ${formatWeight(exercise.nextRecommendedWeight)} кг.`
         : `${exercise.exerciseName}: можно осторожно повысить до ${formatWeight(exercise.nextRecommendedWeight)} кг.`
@@ -34,7 +44,9 @@ export function buildWorkoutDebrief(entry: WorkoutHistoryEntry, serverQualitySco
     .map((exercise) => `${exercise.exerciseName}: рабочие подходы прошли под контролем.`)
   const nextChanges = exercises
     .filter((exercise) => ['deload', 'pain', 'skip'].includes(exercise.progressionType))
-    .map((exercise) => `${exercise.exerciseName}: следующая цель ${formatWeight(exercise.nextRecommendedWeight)} кг без добивания отказа.`)
+    .map((exercise) => isWeightlessProgression(exercise.nextRecommendedWeight)
+      ? exercise.progressionReason
+      : `${exercise.exerciseName}: следующая цель ${formatWeight(exercise.nextRecommendedWeight)} кг без добивания отказа.`)
 
   return {
     summary: `${completedExercises.length} ${pluralRu(completedExercises.length, 'упражнение', 'упражнения', 'упражнений')} · объём ${Math.round(entry.totalVolume).toLocaleString('ru-RU')}.`,

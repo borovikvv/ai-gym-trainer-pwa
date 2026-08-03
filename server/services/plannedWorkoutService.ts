@@ -7,6 +7,7 @@ import { buildGeneratedPlannedWorkout } from '../plannedWorkoutGenerator.js'
 import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramExercise, type NormalizedProgramExercise } from '../utils.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 import { formatWeight } from '../../shared/format.js'
+import { isTimedExerciseName } from '../../shared/muscleGroups.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 import { formatWeeklyVolumeForPrompt, loadWeeklyVolumeStatus, type WeeklyVolumeStatus } from '../weeklyVolumeTargets.js'
 
@@ -225,8 +226,8 @@ export function formatPlannedExerciseGoal(exercise: PlannedExerciseRow): string 
 }
 
 function isTimedExercise(exercise: { exercise_id?: string; id?: string; name?: string; muscle_group?: string; muscleGroup?: string }): boolean {
-  const text = `${exercise.exercise_id ?? exercise.id ?? ''} ${exercise.name ?? ''} ${exercise.muscle_group ?? exercise.muscleGroup ?? ''}`.toLowerCase()
-  return text.includes('планк') || text.includes('plank') || text.includes('dead bug') || text.includes('дед баг')
+  // Issue #192: правило одно на сервер и клиент — shared/muscleGroups.
+  return isTimedExerciseName(`${exercise.exercise_id ?? exercise.id ?? ''} ${exercise.name ?? ''} ${exercise.muscle_group ?? exercise.muscleGroup ?? ''}`)
 }
 
 export async function replacePlannedTrainingRange(client: DbClient, { userId, dates, rangeStart, rangeEnd }: ReplacePlannedTrainingRangeParams): Promise<void> {

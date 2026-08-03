@@ -234,4 +234,60 @@ describe('Issue #173: deload for assisted exercises', () => {
     expect(result.type).toBe('deload')
     expect(result.recommendedWeight).toBe(57.5)
   })
+
+  // Issue #192: без веса и шага «+0 кг» был советом сделать уже сделанное.
+  describe('прогрессия без веса', () => {
+    const pushUpAtTop = {
+      exerciseName: 'Отжимания',
+      currentWeight: 0,
+      repMin: 8,
+      repMax: 15,
+      weightStep: 0,
+      sets: [
+        { weight: 0, reps: 15, rpe: 7, completed: true },
+        { weight: 0, reps: 15, rpe: 8, completed: true },
+        { weight: 0, reps: 15, rpe: 8, completed: true },
+      ],
+      pain: false,
+    }
+
+    it('на верхней границе обещает повторы, а не нулевые килограммы', () => {
+      const result = calculateProgression(pushUpAtTop)
+
+      expect(result.type).toBe('increase')
+      expect(result.reason).not.toMatch(/кг/)
+      expect(result.reason).toContain('9–16 повторов')
+    })
+
+    it('у потолка диапазона зовёт на вариант посложнее', () => {
+      const result = calculateProgression({ ...pushUpAtTop, repMin: 18, repMax: 20, sets: pushUpAtTop.sets.map((set) => ({ ...set, reps: 20 })) })
+
+      expect(result.type).toBe('increase')
+      expect(result.reason).toContain('вариант посложнее')
+      expect(result.reason).not.toMatch(/кг/)
+    })
+
+    it('у планки считает секунды своим шагом', () => {
+      const result = calculateProgression({
+        ...pushUpAtTop,
+        exerciseName: 'Планка',
+        repMin: 40,
+        repMax: 60,
+        sets: pushUpAtTop.sets.map((set) => ({ ...set, reps: 60 })),
+      })
+
+      expect(result.reason).toContain('45–65 сек')
+    })
+
+    it('провал подряд не обещает снижения веса, которого нет', () => {
+      const result = calculateProgression({
+        ...pushUpAtTop,
+        sets: pushUpAtTop.sets.map((set) => ({ ...set, reps: 5, rpe: 9 })),
+        previousFailureCount: 1,
+      })
+
+      expect(result.type).toBe('deload')
+      expect(result.reason).not.toMatch(/кг/)
+    })
+  })
 })

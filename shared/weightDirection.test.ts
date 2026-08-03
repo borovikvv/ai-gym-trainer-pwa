@@ -5,6 +5,10 @@ import {
   easierWeight,
   strongerOf,
   easierOf,
+  isWeightlessProgression,
+  nextRepRange,
+  BODYWEIGHT_REP_CEILING,
+  TIMED_SECONDS_CEILING,
 } from './weightDirection.js'
 
 // ---------------------------------------------------------------------------
@@ -89,5 +93,51 @@ describe('easierOf', () => {
 
   it('assistance: легче = больше помощи', () => {
     expect(easierOf(30, 16.5, 'assistance')).toBe(30)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #192: прогрессия, когда веса нет
+// ---------------------------------------------------------------------------
+
+describe('isWeightlessProgression', () => {
+  it('ни веса, ни шага — двигать нечего', () => {
+    expect(isWeightlessProgression(0, 0)).toBe(true)
+  })
+
+  it('вес ноль при живом шаге — обычная прогрессия по весу', () => {
+    expect(isWeightlessProgression(0, 2.5)).toBe(false)
+  })
+
+  it('вес есть — прогрессия про вес', () => {
+    expect(isWeightlessProgression(40, 0)).toBe(false)
+  })
+
+  it('без шага (дебрифы) считает по одному весу', () => {
+    expect(isWeightlessProgression(0)).toBe(true)
+    expect(isWeightlessProgression(47.5)).toBe(false)
+  })
+})
+
+describe('nextRepRange', () => {
+  it('повторы растут на один с обеих границ', () => {
+    expect(nextRepRange({ repMin: 8, repMax: 15 })).toEqual({ repMin: 9, repMax: 16, atCeiling: false })
+  })
+
+  it('у потолка диапазон не двигается и просит вариант посложнее', () => {
+    expect(nextRepRange({ repMin: 18, repMax: BODYWEIGHT_REP_CEILING })).toEqual({
+      repMin: 18,
+      repMax: BODYWEIGHT_REP_CEILING,
+      atCeiling: true,
+    })
+  })
+
+  it('верхняя граница не перескакивает потолок', () => {
+    expect(nextRepRange({ repMin: 18, repMax: BODYWEIGHT_REP_CEILING - 1 }).repMax).toBe(BODYWEIGHT_REP_CEILING)
+  })
+
+  it('на время шаг пять секунд и свой потолок', () => {
+    expect(nextRepRange({ repMin: 40, repMax: 60, timed: true })).toEqual({ repMin: 45, repMax: 65, atCeiling: false })
+    expect(nextRepRange({ repMin: 60, repMax: TIMED_SECONDS_CEILING, timed: true }).atCeiling).toBe(true)
   })
 })

@@ -663,3 +663,115 @@ describe('buildSafeCoachPlan — adaptive volume landmark overrides', () => {
     expect(plan.changes[0].setsCount).toBe(4)
   })
 })
+
+// Issue #192: у упражнений с весом тела рычаг прогрессии — диапазон повторов.
+// Проверяем цель в числах, а не формулировку тренера.
+describe('прогрессия без веса', () => {
+  const bodyweightDay = ({ exerciseId = 'push-up', name = 'Отжимания', repMin, repMax }) => ({
+    id: 'day-bw',
+    name: 'День C',
+    label: 'Свой вес',
+    sortOrder: 1,
+    exercises: [{
+      programExerciseId: 'pe-bw',
+      exerciseId,
+      name,
+      muscleGroup: exerciseId === 'plank' ? 'Кор' : 'Грудь',
+      setsCount: 3,
+      repMin,
+      repMax,
+      targetWeight: 0,
+      weightStep: 0,
+      restSeconds: 60,
+      alternatives: [{ name: 'Жим лёжа', reason: 'если нужен прогресс по весу' }],
+    }],
+  })
+
+  const bodyweightSession = ({ exerciseId = 'push-up', name = 'Отжимания', reps }) => ({
+    id: `session-${exerciseId}-${reps}`,
+    userId: 'vyacheslav',
+    workoutDayId: 'day-bw',
+    workoutDayName: 'День C',
+    completedAt: '2026-06-05T20:00:00.000Z',
+    totalVolume: 0,
+    exercises: [{
+      exerciseId,
+      exerciseName: name,
+      muscleGroup: exerciseId === 'plank' ? 'Кор' : 'Грудь',
+      pain: false,
+      volume: 0,
+      nextRecommendedWeight: 0,
+      progressionType: 'increase',
+      progressionReason: 'все подходы на верхней границе',
+      sets: Array.from({ length: 3 }, () => ({ weight: 0, reps, rpe: 7, completed: true })),
+    }],
+  })
+
+  const planFor = (day, session) => buildSafeCoachPlan({
+    profile,
+    workoutDays: [day],
+    completedWorkout: null,
+    history: [session],
+    exerciseLibrary,
+    now: new Date('2026-06-05T21:00:00.000Z'),
+  })
+
+  it('верхняя граница взята — диапазон повторов растёт, вес остаётся нулевым', () => {
+    const plan = planFor(bodyweightDay({ repMin: 8, repMax: 15 }), bodyweightSession({ reps: 15 }))
+
+    expect(plan.changes[0]).toMatchObject({ repMin: 9, repMax: 16, targetWeight: 0 })
+  })
+
+  it('два таких сценария подряд — диапазон вырос дважды', () => {
+    const first = planFor(bodyweightDay({ repMin: 8, repMax: 15 }), bodyweightSession({ reps: 15 }))
+    // Между сессиями план записывается в программу (applyPlanAndLog), поэтому
+    // вторая сессия стартует уже с нового диапазона.
+    const second = planFor(
+      bodyweightDay({ repMin: first.changes[0].repMin, repMax: first.changes[0].repMax }),
+      bodyweightSession({ reps: first.changes[0].repMax }),
+    )
+
+    expect(second.changes[0]).toMatchObject({ repMin: 10, repMax: 17 })
+  })
+
+  it('без новой сессии на верхней границе цель не двигается второй раз', () => {
+    // Та же история, но программа уже сдвинута: 15 повторов не достают до 16.
+    const plan = planFor(bodyweightDay({ repMin: 9, repMax: 16 }), bodyweightSession({ reps: 15 }))
+
+    expect(plan.changes[0]).toMatchObject({ repMin: 9, repMax: 16 })
+  })
+
+  it('у потолка диапазон стоит, а тренер зовёт на вариант из справочника', () => {
+    const plan = planFor(bodyweightDay({ repMin: 18, repMax: 20 }), bodyweightSession({ reps: 20 }))
+
+    expect(plan.changes[0]).toMatchObject({ repMin: 18, repMax: 20 })
+    expect(plan.changes[0].coachFocus).toContain('Жим лёжа')
+  })
+
+  it('планка растёт секундами и своим шагом', () => {
+    const plan = planFor(
+      bodyweightDay({ exerciseId: 'plank', name: 'Планка', repMin: 40, repMax: 60 }),
+      bodyweightSession({ exerciseId: 'plank', name: 'Планка', reps: 60 }),
+    )
+
+    expect(plan.changes[0]).toMatchObject({ repMin: 45, repMax: 65 })
+  })
+
+  it('клэмп LLM-плана не срезает выросший диапазон и секунды планки', () => {
+    const day = bodyweightDay({ repMin: 9, repMax: 16 })
+    const safe = clampCoachPlanToNextWorkout({
+      plan: { source: 'llm', changes: [{ programExerciseId: 'pe-bw', targetWeight: 0, setsCount: 3, repMin: 10, repMax: 17, restSeconds: 60, coachFocus: '' }] },
+      nextWorkoutDay: day,
+    })
+
+    expect(safe.changes[0]).toMatchObject({ repMin: 10, repMax: 17 })
+
+    const plankDay = bodyweightDay({ exerciseId: 'plank', name: 'Планка', repMin: 40, repMax: 60 })
+    const safePlank = clampCoachPlanToNextWorkout({
+      plan: { source: 'llm', changes: [{ programExerciseId: 'pe-bw', targetWeight: 0, setsCount: 3, repMin: 45, repMax: 65, restSeconds: 60, coachFocus: '' }] },
+      nextWorkoutDay: plankDay,
+    })
+
+    expect(safePlank.changes[0]).toMatchObject({ repMin: 45, repMax: 65 })
+  })
+})
