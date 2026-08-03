@@ -75,3 +75,65 @@ export function strongerOf(a: number, b: number, direction: WeightDirection): nu
 export function easierOf(a: number, b: number, direction: WeightDirection): number {
   return direction === 'assistance' ? Math.max(a, b) : Math.min(a, b)
 }
+
+// ---------------------------------------------------------------------------
+// Issue #192: прогрессия, когда веса нет
+// ---------------------------------------------------------------------------
+
+/**
+ * Упражнение, у которого прогрессия НЕ про вес: ни веса, ни шага (отжимания,
+ * планка, подтягивания без утяжеления). harderWeight(0, 0) честно возвращает
+ * ноль, и дальше по всем текстам тренера расходится «+0 кг» / «вес тела» как
+ * цель. Проверка живёт здесь одна — её читают и прогрессия, и планировщик, и
+ * оба дебрифа.
+ *
+ * Оба нуля обязательны: вес 0 при ненулевом шаге — это штанга, с которой
+ * прогрессия по весу возможна (0 → 2.5 кг), и она работает как раньше.
+ *
+ * Шаг необязателен: в дебрифах известен только рекомендованный вес, и там
+ * «шага нет» — честное значение по умолчанию, а не подстановка ради вызова.
+ */
+export function isWeightlessProgression(weight: number, step = 0): boolean {
+  return (Number(weight) || 0) <= 0 && (Number(step) || 0) <= 0
+}
+
+/**
+ * Потолок диапазона повторов для упражнений с весом тела.
+ * Выше него подход тренирует выносливость, а не силу, — вместо роста повторов
+ * нужен более сложный вариант движения.
+ */
+export const BODYWEIGHT_REP_CEILING = 20
+
+/** Потолок для упражнений на время (планка) — в секундах. */
+export const TIMED_SECONDS_CEILING = 90
+
+/** Шаг прогрессии на время: секунда к планке не измеряется, пять — да. */
+export const TIMED_SECONDS_STEP = 5
+
+export interface RepRange {
+  repMin: number
+  repMax: number
+}
+
+export interface NextRepRange extends RepRange {
+  /** Диапазон упёрся в потолок — расти дальше некуда, нужен другой вариант. */
+  atCeiling: boolean
+}
+
+/**
+ * Следующий диапазон повторов, когда прогрессия не про вес (#192).
+ * Сдвигает границы на шаг вверх; у потолка возвращает диапазон без изменений
+ * и atCeiling — вызывающий предлагает более сложный вариант упражнения.
+ */
+export function nextRepRange({ repMin, repMax, timed = false }: RepRange & { timed?: boolean }): NextRepRange {
+  const ceiling = timed ? TIMED_SECONDS_CEILING : BODYWEIGHT_REP_CEILING
+  const step = timed ? TIMED_SECONDS_STEP : 1
+  const min = Number(repMin) || 0
+  const max = Math.max(min, Number(repMax) || 0)
+  if (max >= ceiling) return { repMin: min, repMax: max, atCeiling: true }
+  return {
+    repMin: Math.min(min + step, ceiling),
+    repMax: Math.min(max + step, ceiling),
+    atCeiling: false,
+  }
+}

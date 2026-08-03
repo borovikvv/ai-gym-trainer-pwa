@@ -1,6 +1,7 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 import type { CompletedExerciseHistory, ReadinessCheckIn } from '../shared/types.js'
 import { formatWeight, pluralRu } from '../shared/format.js'
+import { isWeightlessProgression } from '../shared/weightDirection.js'
 // Issue #162: единая нормированная шкала качества (была продублирована здесь
 // и в src/domain/workoutDebrief.ts, обе упирались в кламп 100).
 import { computeWorkoutQualityScore, type QualityPrescription } from '../shared/workoutQuality.js'
@@ -45,14 +46,20 @@ export function buildWorkoutDebrief(entry: WorkoutEntry = {}): WorkoutDebrief {
     .map((exercise) => `${exercise.exerciseName}: ${exercise.pain ? 'была боль, прогрессию блокируем.' : exercise.progressionReason ?? 'был тяжёлый подход.'}`)
   const progressed = exercises
     .filter((exercise) => exercise.progressionType === 'increase')
-    .map((exercise) => `${exercise.exerciseName}: можно осторожно повысить до ${formatWeight(exercise.nextRecommendedWeight)} кг.`)
+    // Issue #192: «повысить до 0 кг» — совет сделать то, что уже сделано.
+    // Без веса прогрессия про повторы, и её текст уже собран в progressionReason.
+    .map((exercise) => isWeightlessProgression(exercise.nextRecommendedWeight)
+      ? exercise.progressionReason ?? `${exercise.exerciseName}: добавляем повтор к верхней границе.`
+      : `${exercise.exerciseName}: можно осторожно повысить до ${formatWeight(exercise.nextRecommendedWeight)} кг.`)
   const wentWell = exercises
     .filter((exercise) => !exercise.pain && (exercise.sets ?? []).some((set) => set?.completed !== false && Number(set?.rpe) <= 8) && !overload.some((line) => line.startsWith(`${exercise.exerciseName}:`)))
     .slice(0, 3)
     .map((exercise) => `${exercise.exerciseName}: рабочие подходы прошли под контролем.`)
   const nextChanges = exercises
     .filter((exercise) => ['deload', 'pain', 'skip'].includes(exercise.progressionType))
-    .map((exercise) => `${exercise.exerciseName}: следующая цель ${formatWeight(exercise.nextRecommendedWeight)} кг без добивания отказа.`)
+    .map((exercise) => isWeightlessProgression(exercise.nextRecommendedWeight)
+      ? exercise.progressionReason ?? `${exercise.exerciseName}: держим текущую цель без добивания отказа.`
+      : `${exercise.exerciseName}: следующая цель ${formatWeight(exercise.nextRecommendedWeight)} кг без добивания отказа.`)
 
   return {
     summary: `${completedExercises.length} ${pluralRu(completedExercises.length, 'упражнение', 'упражнения', 'упражнений')} · объём ${Math.round(Number(entry.totalVolume ?? 0)).toLocaleString('ru-RU')}.`,

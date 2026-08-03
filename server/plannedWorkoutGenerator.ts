@@ -926,6 +926,10 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     switch (exerciseFlag.recommendation) {
       case 'increase_weight':
         // e1RM trending up — один шаг ТЯЖЕЛЕЕ базы (для гравитрона = меньше помощи, #173)
+        // Issue #192: у веса тела повышать нечего, и диапазон повторов здесь
+        // тоже НЕ трогаем: генератор прогоняется заново на каждой
+        // перегенерации и каскаде, счёт был бы кратным. Рост повторов живёт в
+        // buildSafeCoachPlan — один раз на завершённую тренировку.
         if (targetWeight > 0) targetWeight = roundWeight(harderWeight(targetWeight, step, direction))
         break
       case 'decrease_weight':

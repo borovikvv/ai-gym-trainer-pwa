@@ -1,16 +1,10 @@
 import type { ExercisePlan  } from '../../shared/types'
-
-const timedExercisePatterns = [
-  /plank/i,
-  /планк/i,
-  /планка/i,
-  /dead\s*bug/i,
-  /дед\s*баг/i,
-]
+// Issue #192: разбор названия переехал в shared/muscleGroups — сервер считает
+// упражнение «на время» по тому же правилу, что и клиент.
+import { isTimedExerciseName } from '../../shared/muscleGroups'
 
 export function isTimedExercise(exercise: Pick<ExercisePlan, 'id' | 'name' | 'muscleGroup'>) {
-  const text = `${exercise.id} ${exercise.name} ${exercise.muscleGroup}`
-  return timedExercisePatterns.some((pattern) => pattern.test(text))
+  return isTimedExerciseName(`${exercise.id} ${exercise.name} ${exercise.muscleGroup}`)
 }
 
 export function effortUnitLabel(exercise: Pick<ExercisePlan, 'id' | 'name' | 'muscleGroup'>) {

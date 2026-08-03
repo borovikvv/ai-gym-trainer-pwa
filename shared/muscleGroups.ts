@@ -78,6 +78,21 @@ export function isAssistedExercise(name: string | null | undefined): boolean {
  */
 export const isAssistedExerciseName = isAssistedExercise
 
+/**
+ * Detect exercises measured in SECONDS, not repetitions (plank, dead bug).
+ * Their `reps` field holds seconds, so any rep-based arithmetic — including
+ * the bodyweight rep progression of #192 — has to use its own step and
+ * ceiling for them.
+ *
+ * Issue #192: одна реализация вместо трёх копий регулярок (была в
+ * src/domain/exerciseMetrics.ts и приватно в plannedWorkoutService.ts).
+ * Принимает свободный текст: имя, id, группу мышц или их склейку.
+ */
+export function isTimedExerciseName(text: string | null | undefined): boolean {
+  const normalized = String(text ?? '').toLowerCase().replace(/\s+/g, ' ')
+  return ['планк', 'plank', 'дед баг', 'дедбаг', 'dead bug', 'deadbug'].some((part) => normalized.includes(part))
+}
+
 export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey {
   const normalized = String(text ?? '').toLowerCase()
   for (const alias of MUSCLE_ALIASES) {

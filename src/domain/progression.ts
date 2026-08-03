@@ -1,4 +1,5 @@
-import { resolveWeightDirection, harderWeight, easierWeight } from '../../shared/weightDirection'
+import { resolveWeightDirection, harderWeight, easierWeight, isWeightlessProgression, nextRepRange } from '../../shared/weightDirection'
+import { isTimedExerciseName } from '../../shared/muscleGroups'
 // Issue #98 PR2: ProgressionType unified in shared/types.ts
 export type { ProgressionType } from '../../shared/types'
 import type { ProgressionType } from '../../shared/types'
@@ -35,6 +36,11 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
   // здесь — фолбэк по названию, т.к. вход содержит только exerciseName).
   const direction = resolveWeightDirection(input.exerciseName)
   const assisted = direction === 'assistance'
+  // Issue #192: ни веса, ни шага — прогрессия идёт по повторам (у планки — по
+  // секундам), и все тексты ниже говорят о них, а не о нулевых килограммах.
+  const weightless = isWeightlessProgression(input.currentWeight, input.weightStep)
+  const timed = isTimedExerciseName(input.exerciseName)
+  const unit = timed ? 'сек' : 'повторов'
 
   if (input.pain) {
     return {
@@ -59,12 +65,22 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
 
   if (allAtTop && allControlled) {
     const nextWeight = harderWeight(input.currentWeight, input.weightStep, direction)
+    // Issue #192: у отжиманий и планки шага веса нет — «+0 кг» было советом
+    // сделать ровно то, что уже сделано. Растёт диапазон повторов (планировщик
+    // выписывает его в следующий план), у потолка — вариант посложнее.
+    const next = weightless
+      ? nextRepRange({ repMin: input.repMin, repMax: input.repMax, timed })
+      : null
     return {
       recommendedWeight: nextWeight,
       type: 'increase',
-      reason: assisted
-        ? `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — следующий раз уменьшаем помощь на ${input.weightStep} кг.`
-        : `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — следующий раз +${input.weightStep} кг.`,
+      reason: next
+        ? next.atCeiling
+          ? `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — по ${unit} расти дальше некуда, следующий шаг — вариант посложнее.`
+          : `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — следующий раз ${next.repMin}–${next.repMax} ${unit}.`
+        : assisted
+          ? `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — следующий раз уменьшаем помощь на ${input.weightStep} кг.`
+          : `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — следующий раз +${input.weightStep} кг.`,
     }
   }
 
@@ -72,9 +88,14 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
     return {
       recommendedWeight: easierWeight(input.currentWeight, input.weightStep, direction),
       type: 'deload',
-      reason: assisted
-        ? `${input.exerciseName}: второй провал подряд ниже диапазона — увеличиваем помощь на ${input.weightStep} кг.`
-        : `${input.exerciseName}: второй провал подряд ниже диапазона — снижаем вес на ${input.weightStep} кг.`,
+      // Issue #192: «снижаем вес на 0 кг» — та же слепота к нулю, что и в
+      // ветке роста. Снижать нечего, поэтому обещаем то, что действительно
+      // произойдёт: цель по повторам не растёт.
+      reason: weightless
+        ? `${input.exerciseName}: второй провал подряд ниже диапазона — цель по ${unit} не повышаем, добираем качество.`
+        : assisted
+          ? `${input.exerciseName}: второй провал подряд ниже диапазона — увеличиваем помощь на ${input.weightStep} кг.`
+          : `${input.exerciseName}: второй провал подряд ниже диапазона — снижаем вес на ${input.weightStep} кг.`,
     }
   }
 

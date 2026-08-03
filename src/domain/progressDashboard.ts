@@ -5,6 +5,8 @@ import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile, sparklineData, tr
 import { isAssistedExercise } from '../lib/muscleGroups'
 // Issue #109: use isTimedExercise to distinguish timed (plank) from bodyweight (push-up)
 import { isTimedExercise } from './exerciseMetrics'
+// Issue #192: одна проверка «прогрессия не про вес» на все тексты тренера.
+import { isWeightlessProgression, nextRepRange, TIMED_SECONDS_STEP } from '../../shared/weightDirection'
 
 export type ExerciseProgressStatus = 'растёт' | 'можно повысить' | 'закрепляем' | 'застой' | 'перегрузка' | 'была боль' | 'нет данных'
 
@@ -72,16 +74,22 @@ export function buildProgressDashboard(input: {
   const recentHistory = sortedHistory.filter((workout) => new Date(workout.completedAt).getTime() >= recentCutoffMs)
   const programExercises = uniqueProgramExercises(input.workoutDays)
   const latestByExercise = latestExercisesById(sortedHistory)
+  // Issue #192: у упражнений без веса и шага цель — повторы (у планки секунды),
+  // а не килограммы. Считаем это один раз на упражнение: и подпись цели, и
+  // текст фокуса читают отсюда, а не пересобирают условие каждый по-своему.
+  const nextTargetById = new Map<string, NextTarget>()
   const exerciseStatuses = programExercises.map((exercise) => {
     const latest = latestByExercise.get(getCanonicalExerciseId(exercise))
     const status = exerciseStatus(latest)
+    const nextTarget = resolveNextTarget(exercise, latest)
+    nextTargetById.set(exercise.id, nextTarget)
     return {
       exerciseId: exercise.id,
       exerciseName: exercise.name,
       muscleGroup: exercise.muscleGroup,
       status,
       lastResult: latest ? completedSetsSummary(latest) : 'нет данных',
-      nextTarget: latest ? weightLabel(latest.nextRecommendedWeight) : weightLabel(exercise.targetWeight),
+      nextTarget: nextTarget.label,
       note: latest?.progressionReason ?? `Стартовая цель: ${exercise.todayGoal || exercise.prescription}`,
     }
   })
@@ -102,7 +110,7 @@ export function buildProgressDashboard(input: {
       exerciseId: item.exerciseId,
       exerciseName: item.exerciseName,
       status: item.status,
-      text: focusText(item),
+      text: focusText(item, nextTargetById.get(item.exerciseId)),
     }))
 
   const recentWorkouts = sortedHistory.slice(0, 5).map((workout) => ({
@@ -201,6 +209,35 @@ function weightLabel(weight: number) {
   return weight > 0 ? `${String(weight)} кг` : 'вес тела'
 }
 
+/** Issue #192: цель следующей сессии — либо вес, либо диапазон повторов. */
+type NextTarget = {
+  /** Прогрессия не про вес: отжимания, планка, подтягивания. */
+  weightless: boolean
+  /** Диапазон измеряется в секундах, а не в повторах. */
+  timed: boolean
+  /** Диапазон упёрся в потолок — расти дальше некуда. */
+  atCeiling: boolean
+  label: string
+}
+
+function resolveNextTarget(exercise: WorkoutDay['exercises'][number], latest: CompletedExerciseHistory | undefined): NextTarget {
+  const weight = latest ? latest.nextRecommendedWeight : exercise.targetWeight
+  const timed = isTimedExercise(exercise)
+  if (!isWeightlessProgression(weight, exercise.weightStep)) {
+    return { weightless: false, timed, atCeiling: false, label: weightLabel(weight) }
+  }
+  // Диапазон берём из программы: планировщик уже вписал туда цель прошлой
+  // сессии, поэтому здесь видно ровно то, что будет выписано в тренировку.
+  const unit = timed ? 'сек' : 'повт.'
+  const range = exercise.repMin === exercise.repMax ? String(exercise.repMax) : `${exercise.repMin}–${exercise.repMax}`
+  return {
+    weightless: true,
+    timed,
+    atCeiling: nextRepRange({ repMin: exercise.repMin, repMax: exercise.repMax, timed }).atCeiling,
+    label: `${range} ${unit}`,
+  }
+}
+
 function formatShortDate(isoDate: string) {
   return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(new Date(isoDate))
 }
@@ -215,8 +252,17 @@ function workoutNote(workout: WorkoutHistoryEntry) {
   return 'тренировка сохранена, ждём динамику'
 }
 
-function focusText(item: ProgressDashboard['exerciseStatuses'][number]) {
+function focusText(item: ProgressDashboard['exerciseStatuses'][number], nextTarget?: NextTarget) {
   if (item.status === 'можно повысить') {
+    // Issue #192: «можно пробовать вес тела» предлагало сделать ровно то, что
+    // уже сделано. Без веса прогрессия идёт по повторам, а у потолка диапазона
+    // — сменой упражнения на более сложный вариант.
+    if (nextTarget?.weightless) {
+      if (nextTarget.atCeiling) return `${item.exerciseName}: предел по ${nextTarget.timed ? 'времени' : 'повторам'} — пора на более сложный вариант`
+      return nextTarget.timed
+        ? `${item.exerciseName}: можно добавить ${TIMED_SECONDS_STEP} секунд — цель ${item.nextTarget}`
+        : `${item.exerciseName}: можно добавить повтор — цель ${item.nextTarget}`
+    }
     // For assisted exercises (gravitron, assisted dips) "progression" means
     // DECREASING the counterweight, not increasing weight. Phrase accordingly
     // to avoid confusing the user with "можно пробовать 47.5 кг" when the

@@ -2,8 +2,16 @@
 // Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
 import type { CoachState, MesocycleState, VolumeLandmark, WorkoutHistoryEntry } from '../shared/types.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { normalizeMuscleGroup, labelForLower } from '../shared/muscleGroups.js'
+import { normalizeMuscleGroup, labelForLower, isTimedExerciseName } from '../shared/muscleGroups.js'
 import { formatWeight, roundWeight } from '../shared/format.js'
+// Issue #192: прогрессия по повторам, когда веса нет — правило одно на тренера,
+// планировщик и оба дебрифа.
+import {
+  isWeightlessProgression,
+  nextRepRange,
+  BODYWEIGHT_REP_CEILING,
+  TIMED_SECONDS_CEILING,
+} from '../shared/weightDirection.js'
 import { getVolumeLandmarks, classifyVolumeStatus, getVolumeRecommendation } from './volumeLandmarks.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
@@ -52,6 +60,8 @@ interface ExerciseInput {
   difficulty_level?: string | null
   weightDirection?: string | null
   weight_direction?: string | null
+  /** Issue #192: варианты замены из справочника — опора для шага после потолка. */
+  alternatives?: Array<{ name?: string; reason?: string }> | null
 }
 
 interface NormalizedLibraryExercise {
@@ -245,21 +255,50 @@ export function buildSafeCoachPlan({
     const volumeRec = landmarks ? getVolumeRecommendation(volumeMuscleKey, muscleGroupSetsLast7Days, phase) : null
     let volumeNote = volumeRec && volumeRec.priority >= 3 ? `Объём на ${volumeMuscleKey} высокий — снижаем подходы. ` : ''
 
-    let deloadRepMin = Number(exercise.repMin ?? 0)
-    let deloadRepMax = Number(exercise.repMax ?? 0)
+    // Issue #192: у упражнений с весом тела рычаг прогрессии — диапазон
+    // повторов, а не вес: harderWeight(0, 0) вернёт тот же ноль, и совет
+    // повысить нагрузку упирался в пустоту. Новый диапазон пишется в
+    // program_exercises (applyPlanAndLog), откуда генератор плана его и читает
+    // (enrichExerciseLibraryWithWorkoutDays) — цель доживает до следующей
+    // сессии без отдельной колонки в БД.
+    let repMin = Number(exercise.repMin ?? 0)
+    let repMax = Number(exercise.repMax ?? 0)
+    let repProgressNote = ''
+    const weightless = isWeightlessProgression(targetWeight, Number(exercise.weightStep ?? exercise.weight_step ?? 0))
+    // Условие идемпотентно: сдвигаем диапазон только если прошлая сессия
+    // дотянула до ТЕКУЩЕЙ верхней границы. После сдвига (15 → 16) та же
+    // история её уже не достаёт, и повторный прогон плана не двигает цель
+    // второй раз без новых данных.
+    const topReps = Math.max(0, ...(recent?.sets ?? []).filter((set) => set.completed !== false).map((set) => Number(set.reps) || 0))
+    if (weightless && !hadPain && recent?.progressionType === 'increase' && repMax > 0 && topReps >= repMax) {
+      const timed = isTimedExerciseName(`${exercise.exerciseId ?? exercise.id ?? ''} ${exercise.name ?? ''}`)
+      const unit = timed ? 'времени' : 'повторам'
+      const next = nextRepRange({ repMin, repMax, timed })
+      if (next.atCeiling) {
+        const harder = harderAlternative(exercise.alternatives, library)
+        repProgressNote = harder
+          ? `${exercise.name}: потолок по ${unit} — дальше растём не объёмом, а сложностью: ${harder.name}. `
+          : `${exercise.name}: потолок по ${unit} — дальше нужен более сложный вариант движения. `
+      } else {
+        repMin = next.repMin
+        repMax = next.repMax
+        repProgressNote = `${exercise.name}: вес добавить некуда, растём по ${unit} — ${repMin}–${repMax}. `
+      }
+    }
+
     let deloadIntensityTarget: string | undefined
     if (mesocycleDeload) {
       const deload = applyDeloadReduction({
         setsCount,
         targetWeight,
-        repMin: Number(exercise.repMin ?? 0),
-        repMax: Number(exercise.repMax ?? 0),
+        repMin,
+        repMax,
         weightStep: Number(exercise.weightStep ?? 2.5),
       })
       setsCount = deload.setsCount
       targetWeight = deload.targetWeight
-      deloadRepMin = deload.repMin
-      deloadRepMax = deload.repMax
+      repMin = deload.repMin
+      repMax = deload.repMax
       deloadIntensityTarget = deload.intensityTarget
       if (!volumeNote.includes('Разгрузка')) {
         volumeNote = deload.deloadNote + ' ' + volumeNote
@@ -270,16 +309,16 @@ export function buildSafeCoachPlan({
       programExerciseId: exercise.programExerciseId,
       targetWeight: roundWeight(targetWeight),
       setsCount,
-      repMin: deloadRepMin,
-      repMax: deloadRepMax,
+      repMin,
+      repMax,
       intensityTarget: deloadIntensityTarget,
       restSeconds: Number(exercise.restSeconds ?? 0),
-      todayGoal: formatTodayGoal(targetWeight, setsCount, deloadRepMin),
+      todayGoal: formatTodayGoal(targetWeight, setsCount, repMin),
       coachFocus: hadPain
         ? `${exercise.name}: была боль в истории — вес не повышаем, техника и амплитуда важнее.`
         : hardRecent
           ? `${exercise.name}: после тяжёлой прошлой работы держим качество, без отказа.`
-          : `${qualityNote}${volumeNote}${exercise.name}: ${recoveryNote}.`,
+          : `${qualityNote}${volumeNote}${repProgressNote}${exercise.name}: ${recoveryNote}.`,
     }
 
     const replacement = findReplacementForFatigue(
@@ -349,13 +388,23 @@ export function clampCoachPlanToNextWorkout({
       Number(base.targetWeight ?? 0),
     )
     const clampedSetsCount = Math.round(clampNumber(Number(rawChange?.setsCount), 1, 4, Number(base.setsCount ?? 0)))
-    const clampedRepMin = Math.round(clampNumber(Number(rawChange?.repMin), 6, 15, Number(base.repMin ?? 0)))
+    // Issue #192: границы диапазона зависят от единицы измерения. Жёсткие 6–15
+    // срезали и выросшую цель по отжиманиям (16 → 15, прогрессия откатывалась
+    // на следующем же плане), и планку, у которой это вообще секунды.
+    const timed = isTimedExerciseName(`${base.exerciseId ?? base.id ?? ''} ${base.name ?? ''}`)
+    const repFloor = timed ? 15 : 6
+    const repCeiling = timed
+      ? TIMED_SECONDS_CEILING
+      : isWeightlessProgression(Number(base.targetWeight ?? 0), Number(base.weightStep ?? 0))
+        ? BODYWEIGHT_REP_CEILING
+        : 15
+    const clampedRepMin = Math.round(clampNumber(Number(rawChange?.repMin), repFloor, repCeiling, Number(base.repMin ?? 0)))
     const change: CoachPlanChange = {
       programExerciseId: base.programExerciseId,
       targetWeight: clampedTargetWeight,
       setsCount: clampedSetsCount,
       repMin: clampedRepMin,
-      repMax: Math.round(clampNumber(Number(rawChange?.repMax), 6, 15, Number(base.repMax ?? 0))),
+      repMax: Math.round(clampNumber(Number(rawChange?.repMax), repFloor, repCeiling, Number(base.repMax ?? 0))),
       restSeconds: Math.round(clampNumber(Number(rawChange?.restSeconds), 45, 240, Number(base.restSeconds ?? 0))),
       todayGoal: formatTodayGoal(clampedTargetWeight, clampedSetsCount, clampedRepMin).slice(0, 140),
       coachFocus: String(rawChange?.coachFocus || `${base.name}: держим технику и не работаем в отказ.`).slice(0, 500),
@@ -460,7 +509,28 @@ export function daysUntilNextTrainingDay(
 }
 
 function formatTodayGoal(weight: number, setsCount: number, reps: number): string {
-  return Array.from({ length: setsCount }, () => `${formatWeight(weight)}×${reps}`).join('/')
+  // Issue #192: без веса цель — это повторы, а не «0×15» (то же правило, что в
+  // formatPlannedExerciseGoal на стороне плана).
+  const goal = weight > 0 ? `${formatWeight(weight)}×${reps}` : String(reps)
+  return Array.from({ length: setsCount }, () => goal).join('/')
+}
+
+/**
+ * Issue #192: на потолке диапазона рост даёт не ещё один повтор, а более
+ * сложный вариант движения. Берём первый вариант из справочника упражнения,
+ * у которого есть рычаг веса — с ним прогрессия снова измерима.
+ */
+function harderAlternative(
+  alternatives: ExerciseInput['alternatives'],
+  library: NormalizedLibraryExercise[],
+): NormalizedLibraryExercise | null {
+  for (const alternative of alternatives ?? []) {
+    const name = String(alternative?.name ?? '').trim().toLowerCase()
+    if (!name) continue
+    const match = library.find((item) => item.name.trim().toLowerCase() === name)
+    if (match && !isWeightlessProgression(match.targetWeight, match.weightStep)) return match
+  }
+  return null
 }
 
 function clampNumber(value: number, min: number, max: number, fallback: number): number {
