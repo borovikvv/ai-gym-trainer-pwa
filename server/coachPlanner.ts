@@ -392,7 +392,10 @@ export function clampCoachPlanToNextWorkout({
     // срезали и выросшую цель по отжиманиям (16 → 15, прогрессия откатывалась
     // на следующем же плане), и планку, у которой это вообще секунды.
     const timed = isTimedExerciseName(`${base.exerciseId ?? base.id ?? ''} ${base.name ?? ''}`)
-    const repFloor = timed ? 15 : 6
+    // Пол не поднимает цель выше того, что уже стоит в программе: у «дед бага»
+    // в справочнике 8–12, и жёсткие 15 секунд раздували бы его при любом ответе
+    // LLM — кламп обязан ограничивать, а не назначать.
+    const repFloor = timed ? Math.min(15, Number(base.repMin) || 15) : 6
     const repCeiling = timed
       ? TIMED_SECONDS_CEILING
       : isWeightlessProgression(Number(base.targetWeight ?? 0), Number(base.weightStep ?? 0))
