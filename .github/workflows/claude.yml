@@ -26,6 +26,9 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      # Экшен обменивает OIDC-токен на токен GitHub App, чтобы отвечать от его
+      # имени. Без этого запуск падает на «Could not fetch an OIDC token».
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
