@@ -1,0 +1,37 @@
+name: Claude
+
+# Ревью по требованию: комментарий «@claude review» в PR.
+# Авторизация — OAuth-токен подписки (secrets.CLAUDE_CODE_OAUTH_TOKEN),
+# а не API-ключ: расходуется квота подписки, оплаты за токены нет.
+
+on:
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: claude-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    # Репозиторий публичный: комментарий может оставить кто угодно.
+    # Без гейта по автору посторонний запускает агента за счёт владельца.
+    if: >-
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '@claude') &&
+      github.event.comment.author_association == 'OWNER'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--max-turns 5"
