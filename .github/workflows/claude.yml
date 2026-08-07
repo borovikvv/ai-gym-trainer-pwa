@@ -42,9 +42,11 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         env:
-          # Без этого `gh` в песочнице не авторизован и ревьюер не может
-          # прочитать план из issue — проверять соответствие ему нечем.
-          GH_TOKEN: ${{ github.token }}
+          # Токен владельца, а не github.token: метку, поставленную ботом,
+          # исполнитель не примет — экшен opencode проверяет права актора
+          # события, а у GitHub App их нет. Заодно даёт `gh` доступ к issue,
+          # без которого ревью не с чем сверять дифф.
+          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # 20 ходов хватало на дифф в одну строку, но не на PR с тестами.
@@ -74,7 +76,9 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ github.token }}
+          # См. комментарий в джобе review: метка ready-for-code должна
+          # исходить от владельца, иначе исполнитель откажется работать.
+          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # На событие issues задачу брать неоткуда — комментария с обращением
