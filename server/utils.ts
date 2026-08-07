@@ -327,7 +327,7 @@ export function nextPlannedDatesFromProfile(profile: ProfileWithTrainingDays, co
   const trainingDays: string[] = Array.isArray(profile.trainingDays) ? profile.trainingDays.filter(Boolean) : []
   const dates: string[] = []
   const now = new Date()
-  for (let dayOffset = 0; dates.length < count && dayOffset < 28; dayOffset += 1) {
+  for (let dayOffset = 1; dates.length < count && dayOffset < 28; dayOffset += 1) {
     const date = new Date(now)
     date.setDate(now.getDate() + dayOffset)
     const weekday = russianWeekdayName(date)
