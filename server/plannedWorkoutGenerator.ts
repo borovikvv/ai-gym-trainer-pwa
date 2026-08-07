@@ -746,8 +746,16 @@ function chooseTargetPattern(
   // go first, groups that WERE in the previous workout go later.
   const recentMuscleKeys = extractRecentMuscleKeys(previousGeneratedWorkouts, scheduledDate)
   const recentSet = new Set(recentMuscleKeys)
-  const priorityNotRecent = (coachDecision?.priorityMuscleGroups ?? []).filter((p) => !recentSet.has(p))
-  const priorityWasRecent = (coachDecision?.priorityMuscleGroups ?? []).filter((p) => recentSet.has(p))
+  // Issue #219: одного бита «было / не было в прошлый раз» мало — одна сессия
+  // накрывает почти все канонические группы, поэтому при равном бите порядок
+  // оставался фиксированным (DEFAULT_PRIORITY), и подряд идущие дни собирались
+  // одинаково. Внутри каждого разряда сортируем по тому, сколько дней группу не
+  // трогали: сначала самые застоявшиеся. Кор из сортировки выведен — он
+  // финишер и не должен всплывать в начало сессии.
+  const muscleRecencyDays = buildMuscleRecencyDays(previousGeneratedWorkouts, scheduledDate)
+  const staleFirst = (keys: string[]): string[] => sortByStalenessKeepingCore(keys, muscleRecencyDays)
+  const priorityNotRecent = staleFirst((coachDecision?.priorityMuscleGroups ?? []).filter((p) => !recentSet.has(p)))
+  const priorityWasRecent = staleFirst((coachDecision?.priorityMuscleGroups ?? []).filter((p) => recentSet.has(p)))
   for (const priority of [...priorityNotRecent, ...priorityWasRecent]) {
     if (hasFresh(priority) && !pattern.includes(priority)) pattern.push(priority)
   }
@@ -767,8 +775,8 @@ function chooseTargetPattern(
   // Build the full candidate list in a rotation-aware order.
   // Muscle groups NOT in the previous workout go first (for variety),
   // then muscle groups that WERE in the previous workout (lower priority).
-  const notRecent = all.filter((key) => hasFresh(key) && !recentSet.has(key) && !pattern.includes(key))
-  const wasRecent = all.filter((key) => hasFresh(key) && recentSet.has(key) && !pattern.includes(key))
+  const notRecent = staleFirst(all.filter((key) => hasFresh(key) && !recentSet.has(key) && !pattern.includes(key)))
+  const wasRecent = staleFirst(all.filter((key) => hasFresh(key) && recentSet.has(key) && !pattern.includes(key)))
 
   // Rotation: if previous workout was push-heavy (chest+shoulders+arms),
   // prioritize pull (back+legs) this time, and vice versa.
@@ -805,7 +813,9 @@ function chooseTargetPattern(
   for (const key of wasRecent) pattern.push(key)
   // Also append groups that were already in pattern from priorities/focus
   // (they were skipped by notRecent/wasRecent due to !pattern.includes).
-  for (const key of fresh) {
+  // Issue #219: второе упражнение в дне достаётся застоявшейся группе, а не
+  // просто первой по каноническому списку.
+  for (const key of staleFirst(fresh)) {
     if (!notRecent.includes(key) && !wasRecent.includes(key)) pattern.push(key)
   }
 
@@ -1253,6 +1263,45 @@ function daysBetweenDates(fromDate: unknown, toDate: unknown): number {
   const to = new Date(`${String(toDate).slice(0, 10)}T00:00:00.000Z`)
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return Number.NaN
   return Math.round((to.getTime() - from.getTime()) / 86_400_000)
+}
+
+/** Issue #219: группе, которую ещё не тренировали, даём максимальную «застоялость». */
+const UNTRAINED_RECENCY_DAYS = 999
+
+/**
+ * Issue #219: порядок групп внутри одного разряда ротации — сначала те, что
+ * дольше всех не тренировались. Кор остаётся ровно на своём месте: он финишер,
+ * и вытеснять им базовые движения в начало дня нельзя.
+ */
+function sortByStalenessKeepingCore(muscleKeys: string[], muscleRecencyDays: Map<string, number>): string[] {
+  const coreIndex = muscleKeys.indexOf('core')
+  const staleness = (muscleKey: string): number => muscleRecencyDays.get(muscleKey) ?? UNTRAINED_RECENCY_DAYS
+  const sorted = muscleKeys.filter((muscleKey) => muscleKey !== 'core').sort((a, b) => staleness(b) - staleness(a))
+  if (coreIndex >= 0) sorted.splice(coreIndex, 0, 'core')
+  return sorted
+}
+
+/**
+ * Issue #219: сколько дней назад группа тренировалась последний раз — по всем
+ * предыдущим сессиям окна, а не по одной последней. Группы, которых в окне нет,
+ * в карте отсутствуют (считаются максимально застоявшимися).
+ */
+function buildMuscleRecencyDays(
+  previousGeneratedWorkouts: PreviousGeneratedWorkout[],
+  scheduledDate: string,
+): Map<string, number> {
+  const recencyDays = new Map<string, number>()
+  for (const workout of previousGeneratedWorkouts ?? []) {
+    const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
+    if (!Number.isFinite(daysSinceWorkout) || daysSinceWorkout <= 0) continue
+    for (const exercise of workout?.exercises ?? []) {
+      const key = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.exerciseName ?? exercise.name ?? ''}`)
+      if (key === 'other') continue
+      const current = recencyDays.get(key)
+      if (current === undefined || daysSinceWorkout < current) recencyDays.set(key, daysSinceWorkout)
+    }
+  }
+  return recencyDays
 }
 
 /**

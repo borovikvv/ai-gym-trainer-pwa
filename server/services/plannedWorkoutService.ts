@@ -113,7 +113,18 @@ interface GeneratedWorkoutShape {
 
 interface LoadPlannedWorkoutsOptions {
   includePast?: boolean
+  /**
+   * Issue #219: окно дат для точечных выборок. Без него `limit` отрезает
+   * выборку по возрастанию даты, то есть при длинной истории отдаёт САМЫЕ
+   * СТАРЫЕ строки — свежие в результат не попадают вовсе.
+   */
+  from?: string
+  to?: string
+  limit?: number
 }
+
+/** Issue #219: окно ротации вокруг даты сессии (дни в обе стороны). */
+const ROTATION_CONTEXT_DAYS = 7
 
 export async function ensureDefaultPlannedWorkouts(client: DbClient, userId: string): Promise<void> {
   const existing = await client.query(
@@ -146,9 +157,11 @@ export async function loadPlannedWorkouts(client: DbClient, userId: string, opti
      where user_id = $1
        and status <> 'cancelled'
        and ($2::boolean or scheduled_date >= current_date - interval '7 days')
+       and ($3::date is null or scheduled_date >= $3::date)
+       and ($4::date is null or scheduled_date <= $4::date)
      order by scheduled_date asc, created_at asc
-     limit 20`,
-    [userId, includePast],
+     limit $5::int`,
+    [userId, includePast, options.from ?? null, options.to ?? null, Math.max(1, Math.floor(options.limit ?? 20))],
   )
   const ids = workouts.rows.map((row) => String(row.id))
   if (ids.length === 0) return []
@@ -260,18 +273,32 @@ export async function createGeneratedPlannedWorkoutForDate(client: DbClient, { u
   // nonFatal, иначе их сбой роняет сам insert (см. комментарий в dbClient).
   const weeklyVolume = await nonFatal(client, 'weeklyVolume', () => loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) }), {} as Record<string, WeeklyVolumeStatus>)
   const longTermMemory = await nonFatal(client, 'longTermMemory', () => loadLongTermMemoryBlock(client, userId), '')
-  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [longTermMemory, formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), weeklyVolume })
+  // Issue #219: генерация отдельного дня (тап по календарю) шла с пустым
+  // контекстом ротации — детерминированный генератор с одинаковыми входами
+  // выдавал двум соседним дням один и тот же состав. Контекст читаем из БД и
+  // дополняем уже сгенерированными в этом же прогоне (недельный план): они
+  // свежее строк в БД, поэтому идут первыми.
+  const storedContext = await nonFatal(client, 'rotationContext', () => loadPreviousGeneratedWorkoutContext(client, { userId, scheduledDate }), [] as Array<{ scheduledDate: string; exercises: unknown[] }>)
+  const rotationContext = [...previousGeneratedWorkouts, ...storedContext]
+  const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: rotationContext as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [longTermMemory, formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), weeklyVolume })
   const id = `planned-${userId}-${scheduledDate}-${Date.now()}`
   await insertGeneratedPlannedWorkout(client, { id, userId, generated, source })
-  return (await loadPlannedWorkouts(client, userId, { includePast: true })).find((workout) => workout.id === id)
+  // Issue #219: выборка сужена до самого дня — общий список обрезан по limit и
+  // при длинной истории только что созданной тренировки в нём может не быть.
+  return (await loadPlannedWorkouts(client, userId, { includePast: true, from: scheduledDate, to: scheduledDate })).find((workout) => workout.id === id)
 }
 
 // Фаза 2Б.3 (план развития): каскадная перегенерация будущих тренировок.
 // После сохранения тренировки, обнаружения пропуска или переноса даты все
 // будущие сгенерированные тренировки пересобираются по порядку дат — каждая
 // видит фактическую историю и уже перегенерированные предыдущие (тот же
-// принцип цепочки, что в replaceCalendarWeek). Тренировки, составленные
-// пользователем вручную (source='user'), не трогаем.
+// принцип цепочки, что в replaceCalendarWeek).
+//
+// Issue #219: раньше каскад пропускал строки с source='user'. Ручного
+// составления тренировки в приложении нет: 'user' означает лишь «сгенерирована
+// по действию пользователя» (тап по дню, недельный план), состав всё равно
+// собран генератором. Из-за фильтра такой день не пересобирался после переноса
+// соседней тренировки и оставался с прежним составом.
 //
 // Issue #169: `limit` сужает каскад до N ближайших. После сохранения
 // тренировки вызывающий передаёт limit=1: если между двумя тренировками
@@ -296,8 +323,7 @@ export async function cascadeRegenerateFutureWorkouts(
   // тренировки — она следующая для пользователя. Остальные остаются
   // детерминированными, чтобы не делать N синхронных LLM-вызовов после save.
   let llmSlotUsed = false
-  const targets = (future.rows as Array<{ id: unknown; scheduled_date: unknown; source: unknown }>)
-    .filter((row) => String(row.source) !== 'user')
+  const targets = (future.rows as Array<{ id: unknown; scheduled_date: unknown }>)
     .slice(0, Math.max(0, limit))
   for (const row of targets) {
     const scheduledDate = dateToDateOnly(row.scheduled_date as Date)
@@ -386,17 +412,38 @@ async function insertGeneratedPlannedExercises(client: DbClient, plannedWorkoutI
   }
 }
 
-async function loadPreviousGeneratedWorkoutContext(client: DbClient, { userId, scheduledDate, excludeId }: { userId: string; scheduledDate: string; excludeId: string }): Promise<Array<{ scheduledDate: string; exercises: unknown[] }>> {
-  const plannedWorkouts = await loadPlannedWorkouts(client, userId, { includePast: true })
+/**
+ * Issue #219: контекст ротации для даты сессии. Раньше читался общим
+ * `loadPlannedWorkouts({ includePast: true })`: сортировка по возрастанию даты
+ * с `limit 20` при истории длиннее 20 строк отдавала самые старые тренировки,
+ * а свежие обрезала — ротация «застревала» на тренировке месячной давности, и
+ * все дни получали один и тот же состав. Окно ±7 дней вокруг даты само
+ * ограничивает выборку, поэтому обрезать по лимиту больше нечего.
+ */
+async function loadPreviousGeneratedWorkoutContext(client: DbClient, { userId, scheduledDate, excludeId = null }: { userId: string; scheduledDate: string; excludeId?: string | null }): Promise<Array<{ scheduledDate: string; exercises: unknown[] }>> {
+  const plannedWorkouts = await loadPlannedWorkouts(client, userId, {
+    includePast: true,
+    from: shiftDateOnly(scheduledDate, -ROTATION_CONTEXT_DAYS),
+    to: shiftDateOnly(scheduledDate, ROTATION_CONTEXT_DAYS),
+    limit: 40,
+  })
   return plannedWorkouts
     .filter((workout) => workout.id !== excludeId)
     .filter((workout) => ['planned', 'generated', 'moved', 'completed'].includes(workout.status))
-    .filter((workout) => Math.abs(daysBetweenDateOnly(workout.scheduledDate, scheduledDate)) <= 7)
+    .filter((workout) => Math.abs(daysBetweenDateOnly(workout.scheduledDate, scheduledDate)) <= ROTATION_CONTEXT_DAYS)
     .sort((a, b) => String(a.scheduledDate).localeCompare(String(b.scheduledDate)))
     .map((workout) => ({
       scheduledDate: workout.scheduledDate,
       exercises: workout.workoutDay?.exercises ?? [],
     }))
+}
+
+/** Issue #219: сдвиг даты YYYY-MM-DD на N дней — границы окна ротации. */
+function shiftDateOnly(dateOnly: string, days: number): string {
+  const base = new Date(`${String(dateOnly).slice(0, 10)}T00:00:00.000Z`)
+  if (Number.isNaN(base.getTime())) return String(dateOnly).slice(0, 10)
+  base.setUTCDate(base.getUTCDate() + days)
+  return base.toISOString().slice(0, 10)
 }
 
 function daysBetweenDateOnly(fromDate: unknown, toDate: unknown): number {
