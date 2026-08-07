@@ -249,6 +249,26 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByLabelText('Вес')).toBeInTheDocument()
   })
 
+  it('returns to the pre-workout preview instead of resuming a session with zero completed sets (issue #211)', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+    expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
+
+    // Закрыли приложение, не выполнив ни одного подхода (draft уже
+    // сохранён — beginPreparedWorkout персистит его сразу при входе в session).
+    unmount()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+
+    expect(screen.getByText('Перед тренировкой')).toBeInTheDocument()
+    expect(screen.queryByText('Вкладка «Зал» · День A')).not.toBeInTheDocument()
+    expect(window.localStorage.getItem('ai-gym-trainer:v0.1:active-draft')).toBeNull()
+  })
+
   it('autosaves typed set values before the set is recorded', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
@@ -270,8 +290,10 @@ describe('Coach Timeline workout flow', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
-    expect(screen.getByLabelText('Вес')).toHaveValue('47.5')
-    expect(screen.getByLabelText('Повторы')).toHaveValue('7')
+    // Issue #211: введённые, но не подтверждённые ("Подход выполнен" не
+    // нажат) значения не считаются прогрессом — черновик не резюмится.
+    expect(screen.getByText('Перед тренировкой')).toBeInTheDocument()
+    expect(window.localStorage.getItem('ai-gym-trainer:v0.1:active-draft')).toBeNull()
   })
 
   it('supports decimal weights, editing a completed set via chip, and adding a set in the gym', async () => {

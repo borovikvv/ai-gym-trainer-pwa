@@ -311,6 +311,7 @@ function App() {
     persistWorkoutDraft,
     navigate,
     notify,
+    clearActiveWorkoutDraft,
   })
   const {
     selectedWeekDates,
