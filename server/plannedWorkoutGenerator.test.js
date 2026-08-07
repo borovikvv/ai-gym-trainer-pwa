@@ -1231,6 +1231,113 @@ describe('issue #75: pattern rotation', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Issue #219: подряд идущие тренировки не должны совпадать по составу.
+// Ротация смотрела только на ОДНУ предыдущую тренировку, поэтому порядок
+// «не тренированных вчера» групп оставался каноническим и не зависел от того,
+// когда группу тренировали в прошлый раз.
+// ---------------------------------------------------------------------------
+
+describe('issue #219: ротация учитывает несколько предыдущих тренировок', () => {
+  const readyCoachState = {
+    recoveryStatus: 'ready',
+    readinessScore: 85,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+
+  // Библиотека с двумя упражнениями на группу: когда в дне слотов больше, чем
+  // групп, лишний слот достаётся какой-то группе вторым упражнением — по нему и
+  // видно, чем на самом деле определяется состав.
+  const twoPerGroupLibrary = [
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150, instruction: 'жим' },
+    { id: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 22, weightStep: 2, restSeconds: 120, instruction: 'жим' },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90, instruction: 'тяга' },
+    { id: 'assisted-pull-up', name: 'Подтягивания в гравитроне', muscleGroup: 'Спина', setsCount: 3, repMin: 8, repMax: 12, targetWeight: 35, weightStep: 2.5, restSeconds: 90, instruction: 'подтягивания' },
+    { id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 60, weightStep: 2.5, restSeconds: 150, instruction: 'присед' },
+    { id: 'romanian-deadlift', name: 'Румынская тяга', muscleGroup: 'Ноги', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 45, weightStep: 2.5, restSeconds: 150, instruction: 'тяга' },
+    { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90, instruction: 'плечи' },
+    { id: 'lateral-raise', name: 'Махи гантелями в стороны', muscleGroup: 'Плечи', setsCount: 3, repMin: 12, repMax: 15, targetWeight: 8, weightStep: 1, restSeconds: 60, instruction: 'плечи' },
+    { id: 'hammer-curl', name: 'Молотковые сгибания', muscleGroup: 'Руки', setsCount: 2, repMin: 10, repMax: 12, targetWeight: 10, weightStep: 1, restSeconds: 75, instruction: 'руки' },
+    { id: 'triceps-pushdown', name: 'Разгибания на блоке', muscleGroup: 'Руки', setsCount: 3, repMin: 10, repMax: 12, targetWeight: 25, weightStep: 2.5, restSeconds: 60, instruction: 'руки' },
+    { id: 'plank', name: 'Планка', muscleGroup: 'Кор', setsCount: 2, repMin: 40, repMax: 60, targetWeight: 0, weightStep: 0, restSeconds: 60, instruction: 'кор' },
+  ]
+
+  it('лишний слот дня достаётся застоявшейся группе, а не первой по списку приоритетов', async () => {
+    // Плечи в окне не тренировались ни разу, спина — два дня назад. Порядок по
+    // одной предыдущей тренировке ставит спину впереди плеч (канонический
+    // приоритет), поэтому второе упражнение доставалось спине.
+    const previousGeneratedWorkouts = [
+      {
+        scheduledDate: '2026-08-01',
+        exercises: [
+          { exerciseName: 'Жим лёжа', muscleGroup: 'Грудь' },
+          { exerciseName: 'Молотковые сгибания', muscleGroup: 'Руки' },
+        ],
+      },
+      {
+        scheduledDate: '2026-08-05',
+        exercises: [
+          { exerciseName: 'Тяга верхнего блока', muscleGroup: 'Спина' },
+          { exerciseName: 'Присед со штангой', muscleGroup: 'Ноги' },
+        ],
+      },
+    ]
+
+    const plan = await buildGeneratedPlannedWorkout({
+      // 85 минут → 7 слотов на 6 групп: один слот уходит вторым упражнением.
+      profile: { ...profile, targetWorkoutMinutes: 85 },
+      scheduledDate: '2026-08-07',
+      coachState: readyCoachState,
+      exerciseLibrary: twoPerGroupLibrary,
+      history: [],
+      previousGeneratedWorkouts,
+    })
+
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+    expect(exerciseIds).toContain('lateral-raise')
+    expect(exerciseIds).not.toContain('assisted-pull-up')
+  })
+
+  it('соседние дни с общим прошлым различаются, когда второй видит первый', async () => {
+    const shared = {
+      profile,
+      coachState: readyCoachState,
+      exerciseLibrary,
+      history: [],
+    }
+    const past = [{
+      scheduledDate: '2026-08-04',
+      exercises: [{ exerciseName: 'Присед со штангой', muscleGroup: 'Ноги' }],
+    }]
+
+    const friday = await buildGeneratedPlannedWorkout({ ...shared, scheduledDate: '2026-08-07', previousGeneratedWorkouts: past })
+    const sundayBlind = await buildGeneratedPlannedWorkout({ ...shared, scheduledDate: '2026-08-09', previousGeneratedWorkouts: past })
+    const sundayWithFriday = await buildGeneratedPlannedWorkout({
+      ...shared,
+      scheduledDate: '2026-08-09',
+      previousGeneratedWorkouts: [
+        ...past,
+        { scheduledDate: '2026-08-07', exercises: friday.exercises },
+      ],
+    })
+
+    const ids = (plan) => plan.exercises.map((exercise) => exercise.exerciseId).join(',')
+    // Из одной точки отсчёта генератор детерминирован — это и давало двум
+    // соседним дням одинаковый состав, пока второй не видел первого.
+    expect(ids(sundayBlind)).toBe(ids(friday))
+    expect(ids(sundayWithFriday)).not.toBe(ids(friday))
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Issue #78: light days — avoid large muscle groups on specific weekdays
 // ---------------------------------------------------------------------------
 

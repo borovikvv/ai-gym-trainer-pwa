@@ -86,11 +86,16 @@ describe('cascadeRegenerateFutureWorkouts — сужение до ближайш
     expect(client.regeneratedIds).toEqual(['planned-1', 'planned-2', 'planned-3'])
   })
 
-  it('ближайшей считается ближайшая тренерская: составленную вручную не трогаем', async () => {
+  // Issue #219: source='user' — это «сгенерирована по действию пользователя»
+  // (тап по дню, недельный план), а не ручной состав: ручного составления в
+  // приложении нет. Пока каскад её пропускал, день, добавленный тапом, не
+  // пересобирался после переноса соседней тренировки и оставался с прежним
+  // составом — из-за этого пятница и воскресенье совпадали по упражнениям.
+  it('пересобирает и созданную по тапу (source=user)', async () => {
     const client = fakeClient([{ ...futureRows[0], source: 'user' }, futureRows[1], futureRows[2]])
     const regenerated = await cascadeRegenerateFutureWorkouts(client, { userId: 'vyacheslav', limit: 1 })
 
     expect(regenerated).toBe(1)
-    expect(client.regeneratedIds).toEqual(['planned-2'])
+    expect(client.regeneratedIds).toEqual(['planned-1'])
   })
 })
