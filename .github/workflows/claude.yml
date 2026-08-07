@@ -35,10 +35,15 @@ jobs:
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
+        env:
+          # Без этого `gh` в песочнице не авторизован и ревьюер не может
+          # прочитать план из issue — проверять соответствие ему нечем.
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # 20 ходов хватало на дифф в одну строку, но не на PR с тестами.
           # Потолок против зацикливания держит timeout-minutes выше.
           claude_args: |
             --max-turns 40
+            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
             --append-system-prompt "Ты ревьюишь PR. Начни с диффа целиком (gh pr diff), а не с чтения файлов по одному. Проверь по порядку: (1) дифф соответствует плану из связанного issue, лишнего нет; (2) корректность — граничные случаи, а не только счастливый путь; (3) тесты: упал бы каждый новый тест, если откатить фикс? Если нет — он подогнан под текущее поведение, это changes-requested; (4) тесты не зависят от текста UI-элементов и хардкода дат — только data-testid, aria-label или роль; (5) уложился ли автор в потолок диффа из плана. Замечания давай конкретные, со ссылкой на файл и строку. В конце отдельной строкой вывод: ready-to-merge или changes-requested."
