@@ -1,12 +1,17 @@
 name: Claude
 
-# Ревью по требованию: комментарий «@claude review» в PR.
+# Сторона Claude в конвейере: план по метке needs-plan и ревью по «@claude review».
 # Авторизация — OAuth-токен подписки (secrets.CLAUDE_CODE_OAUTH_TOKEN),
 # а не API-ключ: расходуется квота подписки, оплаты за токены нет.
+#
+# Метки, которые ставят эти джобы, порождают события от имени GitHub App,
+# а не от GITHUB_TOKEN, — поэтому следующее звено конвейера ими запускается.
 
 on:
   issue_comment:
     types: [created]
+  issues:
+    types: [labeled]
 
 concurrency:
   group: claude-${{ github.event.issue.number }}
@@ -17,6 +22,7 @@ jobs:
     # Репозиторий публичный: комментарий может оставить кто угодно.
     # Без гейта по автору посторонний запускает агента за счёт владельца.
     if: >-
+      github.event_name == 'issue_comment' &&
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '@claude') &&
       github.event.comment.author_association == 'OWNER'
@@ -45,5 +51,33 @@ jobs:
           # Потолок против зацикливания держит timeout-minutes выше.
           claude_args: |
             --max-turns 40
-            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
-            --append-system-prompt "Ты ревьюишь PR. Начни с диффа целиком (gh pr diff), а не с чтения файлов по одному. Проверь по порядку: (1) дифф соответствует плану из связанного issue, лишнего нет; (2) корректность — граничные случаи, а не только счастливый путь; (3) тесты: упал бы каждый новый тест, если откатить фикс? Если нет — он подогнан под текущее поведение, это changes-requested; (4) тесты не зависят от текста UI-элементов и хардкода дат — только data-testid, aria-label или роль; (5) уложился ли автор в потолок диффа из плана. Замечания давай конкретные, со ссылкой на файл и строку. В конце отдельной строкой вывод: ready-to-merge или changes-requested."
+            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),Bash(gh pr edit:*)"
+            --append-system-prompt "Ты ревьюишь PR. Начни с диффа целиком (gh pr diff), а не с чтения файлов по одному. Проверь по порядку: (1) дифф соответствует плану из связанного issue, лишнего нет; (2) корректность — граничные случаи, а не только счастливый путь; (3) тесты: упал бы каждый новый тест, если откатить фикс? Если нет — он подогнан под текущее поведение, это changes-requested; (4) тесты не зависят от текста UI-элементов и хардкода дат — только data-testid, aria-label или роль; (5) уложился ли автор в потолок диффа из плана. Замечания давай конкретные, со ссылкой на файл и строку. В конце отдельной строкой вывод: ready-to-merge или changes-requested. Затем обязательно поставь этот вердикт меткой на PR: gh pr edit <номер> --add-label ready-to-merge (или --add-label changes-requested), и сними противоположную метку, если она висит. Метка запускает следующее звено конвейера — без неё вердикт остаётся текстом, который никто не подхватит."
+
+  plan:
+    # План пишет Claude — это первое звено конвейера. Метку ставит владелец,
+    # он же автор issue: чужой issue не должен запускать агента.
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.label.name == 'needs-plan' &&
+      github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*)"
+            --append-system-prompt "Ты пишешь план для issue #${{ github.event.issue.number }}. Формат и правила — в разделе «Конвейер задач» файла CLAUDE.md, следуй им. Сначала прочитай issue (gh issue view) и изучи код, которого задача касается. План должен содержать: список файлов, которые исполнителю можно трогать; шаги; чем проверяется — конкретный сценарий и файл теста; потолок диффа в строках; чего делать не надо. Решения принимаешь ты: если у фикса есть побочный эффект или развилка — выбери вариант и назови последствие прямо в плане, не оставляй выбор исполнителю. Код не пиши — план исполняет дешёвая модель. Опубликуй план: gh issue comment ${{ github.event.issue.number }} --body '...'. Затем переставь метки: gh issue edit ${{ github.event.issue.number }} --remove-label needs-plan --add-label ready-for-code. Метка ready-for-code запускает исполнителя, поэтому ставь её последней и только когда план опубликован."
