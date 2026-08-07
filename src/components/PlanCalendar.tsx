@@ -239,7 +239,10 @@ export function PlanCalendar({
         <div className="plan-week-strip" role="group" aria-label="Дни недели для тренировок">
           {weekStrip.map((d) => {
             const selected = selectedWeekDates.includes(d.date)
-            const toggleable = d.isFuture && (d.state === 'rest' || d.state === 'plan')
+            const todayToggleable = d.state === 'today' && plannedWorkouts.some(
+              (w) => w.scheduledDate === d.date && w.status !== 'cancelled' && w.status !== 'completed',
+            )
+            const toggleable = d.isFuture && (d.state === 'rest' || d.state === 'plan' || todayToggleable)
             const noteFor = toggleable
               ? (selected
                   ? `Тренировка на ${d.formatted} отменена`

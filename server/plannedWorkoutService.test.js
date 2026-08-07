@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { cascadeRegenerateFutureWorkouts, formatPlannedExerciseGoal } from './services/plannedWorkoutService.js'
+import { nextPlannedDatesFromProfile } from './utils.js'
 
 describe('planned workout service formatting', () => {
   it('keeps planned exercise goal compact instead of showing internal reason text', () => {
@@ -30,6 +31,22 @@ describe('planned workout service formatting', () => {
 // Issue #169: после сохранения тренировки перестраивается только ближайшая
 // запланированная. Каскад «все на две недели вперёд» менял между двумя
 // тренировками десяток переменных сразу, и отклик было не к чему привязать.
+describe('nextPlannedDatesFromProfile — не возвращает сегодня (#204)', () => {
+  it('не включает сегодняшнюю дату когда сегодня тренировочный день', () => {
+    const today = new Date()
+    const weekday = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][today.getDay()]
+    const todayIso = today.toISOString().slice(0, 10)
+    const profile = {
+      trainingDays: [weekday],
+      workoutsPerWeek: 3,
+    }
+    const dates = nextPlannedDatesFromProfile(profile, 3)
+
+    expect(dates).not.toContain(todayIso)
+    expect(dates).toHaveLength(3)
+  })
+})
+
 describe('cascadeRegenerateFutureWorkouts — сужение до ближайшей (#169)', () => {
   const futureRows = [
     { id: 'planned-1', scheduled_date: new Date('2026-08-03T00:00:00Z'), source: 'coach' },

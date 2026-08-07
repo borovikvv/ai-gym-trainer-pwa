@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { WorkoutDay  } from '../../shared/types'
 import type { PlannedWorkout, UserQuestionnaire } from '../data/programApi'
@@ -159,6 +159,48 @@ describe('PlanCalendar', () => {
     expect(screen.queryByText(/Профиль тренера/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Coach State/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/readiness/i)).not.toBeInTheDocument()
+  })
+
+  it('today with a planned workout is toggleable and calls onToggleWeekDate', () => {
+    const onToggleWeekDate = vi.fn()
+    const today = '2026-06-08'
+    const activeDay = workoutDay('active', 'Сегодняшняя')
+
+    render(
+      <PlanCalendar
+        activeProfile={profile}
+        selectedWeekDates={[]}
+        weekDateOptions={[
+          { label: 'Пн', date: '2026-06-08', formatted: 'пн, 08.06' },
+        ]}
+        plannedWorkouts={[planned('planned-today', today)]}
+        userHistory={[]}
+        trainingCalendar={[]}
+        activeUserId="vyacheslav"
+        activeWorkoutDay={activeDay}
+        editingPlannedWorkoutId={null}
+        editingPlannedDate=""
+        coachState={null}
+        onToggleWeekDate={onToggleWeekDate}
+        onSelectWorkoutDay={vi.fn()}
+        onStartWorkout={vi.fn()}
+        onBeginEditPlannedDate={vi.fn()}
+        onSetEditingPlannedDate={vi.fn()}
+        onCancelEditPlannedDate={vi.fn()}
+        onSavePlannedWorkoutDate={vi.fn()}
+        onRegeneratePlannedWorkout={vi.fn()}
+        onCancelPlannedWorkout={vi.fn()}
+        onStartEditExercise={vi.fn()}
+        formatDateOnly={(date) => date}
+        formatWeight={String}
+        todayDateInputValue={() => today}
+      />,
+    )
+
+    const todayButton = screen.getByRole('button', { name: /08\.06.*тренировка/i })
+    expect(todayButton).toBeInTheDocument()
+    fireEvent.click(todayButton)
+    expect(onToggleWeekDate).toHaveBeenCalledWith(today)
   })
 
   it('shows planned dates as toggleable calendar dots', () => {
