@@ -7,9 +7,11 @@ name: OpenCode
 on:
   issues:
     types: [labeled]
+  pull_request:
+    types: [labeled]
 
 concurrency:
-  group: opencode-${{ github.event.issue.number }}
+  group: opencode-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
@@ -18,6 +20,7 @@ jobs:
     # становится инструкцией для агента. Поэтому и метка, и автор issue
     # должны быть свои.
     if: >-
+      github.event_name == 'issues' &&
       github.event.label.name == 'ready-for-code' &&
       github.event.issue.user.login == github.repository_owner
     runs-on: ubuntu-latest
@@ -55,3 +58,48 @@ jobs:
             - Секреты и содержимое `.env` в код, коммиты и комментарии не попадают.
             - Открой PR с описанием на русском: что меняется, зачем, что может
               сломаться, как проверено. В описании укажи `Fixes #${{ github.event.issue.number }}`.
+
+  address-review:
+    # Метку changes-requested ставит ревьюер. Чиним только свои же PR —
+    # ветки, которые завёл исполнитель, и только из этого репозитория.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.label.name == 'changes-requested' &&
+      startsWith(github.event.pull_request.head.ref, 'opencode/') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode/deepseek-v4-flash
+          prompt: |
+            На PR #${{ github.event.pull_request.number }} ревью оставило замечания. Исправь их.
+
+            Правила:
+            - Замечания читай в комментариях PR: `gh pr view ${{ github.event.pull_request.number }} --comments`.
+              Работай по последнему разбору от ревьюера, а не по всей истории.
+            - Правь только то, о чём написано в замечаниях. Появилась идея сверх этого —
+              напиши комментарием в PR и не делай.
+            - Не согласен с замечанием — не молчи и не выполняй вслепую: ответь
+              комментарием, почему, и оставь как есть.
+            - Ветку не меняй, работай в текущей. Коммить в неё же.
+            - Перед тем как закончить, прогони локально: `npm run lint`, `npx tsc -b`,
+              `npm test`, `npm run build`. Красное не оставляй.
+            - Файлы в `.github/workflows/` не трогай никогда.
+            - Секреты и содержимое `.env` в код, коммиты и комментарии не попадают.
+            - Закончив, сними метку, чтобы владелец видел, что круг пройден:
+              `gh pr edit ${{ github.event.pull_request.number }} --remove-label changes-requested`.
+              Ревью запускается заново комментарием `@claude review` — его пишет владелец.
