@@ -75,12 +75,43 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      # Стоп-кран: три круга правок по одной задаче означают, что дело не в
+      # коде, а в плане. Дальше дошлифовывать дешевле не станет — задача
+      # возвращается на планирование, а владелец узнаёт об этом из issue.
+      - id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          rounds=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/timeline" --paginate \
+            -q '[.[] | select(.event == "labeled" and .label.name == "changes-requested")] | length')
+          echo "кругов правок: $rounds"
+          if [ "$rounds" -lt 3 ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "proceed=false" >> "$GITHUB_OUTPUT"
+          gh pr edit "$PR" --remove-label changes-requested
+          issue=$(gh pr view "$PR" --json closingIssuesReferences \
+            -q '.closingIssuesReferences[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --add-label needs-replan
+          fi
+          gh pr comment "$PR" --body "Третий круг правок по одной задаче — останавливаюсь.
+
+          Обычно это значит, что расходится не код, а план: исполнитель делает то, что написано, а ревью просит другого.${issue:+ Задача #$issue помечена \`needs-replan\` и возвращается на планирование.}
+
+          Дальше нужен человек: перечитать план и решить, что в нём было неверно."
+
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.proceed == 'true'
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - uses: anomalyco/opencode/github@latest
+        if: steps.guard.outputs.proceed == 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
