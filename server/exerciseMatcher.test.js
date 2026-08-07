@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { findReplacementForFatigue, findComplementaryExercises } from './exerciseMatcher.js'
-import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
 
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
 function makeExercise(id, name, muscleGroup, metadata = {}) {
-  const muscleKey = normalizeMuscleGroup(`${muscleGroup} ${name}`)
+  const muscleKey = normalizeExerciseMuscleGroup(muscleGroup, name)
   return {
     id,
     name,

@@ -15,7 +15,7 @@ import type { DbClient } from '../dbClient.js'
 import { loadCoachMemoryForUser } from './programService.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from '../userTrainingPolicies.js'
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
-import { normalizeMuscleGroup } from '../../shared/muscleGroups.js'
+import { normalizeExerciseMuscleGroup } from '../../shared/muscleGroups.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 import { isTimedExercise } from '../../src/domain/exerciseMetrics.js'
 
@@ -216,7 +216,7 @@ function describeRelevantFatigue(input: BuildLiveContextPromptInput): string {
 }
 
 function muscleKeyOf(exercise: { muscleGroup?: string; name?: string }): string {
-  return normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`)
+  return normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? '')
 }
 
 function describeExercise(exercise: BuildLiveContextPromptInput['exercise']): string {

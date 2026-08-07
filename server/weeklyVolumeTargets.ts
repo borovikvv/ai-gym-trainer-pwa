@@ -19,7 +19,7 @@
 
 import type { CoachState, VolumeLandmark, WorkoutHistoryEntry } from '../shared/types.js'
 import type { DbClient } from './dbClient.js'
-import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup, labelFor } from '../shared/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { countCompletedSets } from './buildVolumeSnapshot.js'
 import { dateToDateOnly, startOfWeek } from './utils.js'
 
@@ -79,7 +79,7 @@ export function buildWeeklyMuscleFacts(
 
     const touched = new Set<string>()
     for (const exercise of session.exercises ?? []) {
-      const key = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
+      const key = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '')
       if (!facts[key]) continue
       touched.add(key)
       facts[key].sets += countCompletedSets(exercise)

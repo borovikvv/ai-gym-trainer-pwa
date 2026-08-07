@@ -1,7 +1,7 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 // Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
 import type { CoachState, MesocycleState, MuscleGroupProfileExtended, ExerciseProfile } from '../shared/types.js'
-import { normalizeMuscleGroup, labelFor } from '../shared/muscleGroups.js'
+import { labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { isDeloadWeek } from './mesocycle.js'
 
 const DEFAULT_PRIORITY = ['back', 'chest', 'arms', 'shoulders', 'core', 'legs']
@@ -92,7 +92,7 @@ export function buildCoachDecision({
   for (const workout of previousGeneratedWorkouts ?? []) {
     const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
     if (!Number.isFinite(daysSinceWorkout) || daysSinceWorkout <= 0 || daysSinceWorkout > 2) continue
-    const previousMuscleKeys = new Set((workout?.exercises ?? []).map((exercise) => normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.exerciseName ?? exercise.name ?? ''}`)))
+    const previousMuscleKeys = new Set((workout?.exercises ?? []).map((exercise) => normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')))
     if (returningAfterBreak && previousMuscleKeys.has('legs')) {
       avoidMuscleGroups.add('legs')
       reasons.push('Ноги не повторяем через один день отдыха: профиль — возвращение после перерыва.')

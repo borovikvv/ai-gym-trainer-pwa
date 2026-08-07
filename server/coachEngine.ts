@@ -6,7 +6,7 @@ import type {
   ReadinessCheckIn,
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
-import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, harderWeight, easierWeight } from '../shared/weightDirection.js'
 import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, isAxialFreeWeight } from '../shared/teenLimits.js'
 import { roundWeight } from '../shared/format.js'
@@ -115,7 +115,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
 
   if (!lastSet) {
     const coachState = input.context?.coachState
-    const muscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`)
+    const muscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? '')
     const targetMuscleFatigue = coachState?.muscleGroups?.[muscleKey]?.fatigue
     if (coachState?.recoveryStatus === 'low' || targetMuscleFatigue === 'high' || readinessConstraint === 'sore') {
       return withRemainingSetUpdates({
@@ -167,7 +167,7 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
       }
     }
 
-    const nextExerciseSameMuscle = nextExercise && normalizeMuscleGroup(`${nextExercise.muscleGroup ?? ''} ${nextExercise.name ?? ''}`) === normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`)
+    const nextExerciseSameMuscle = nextExercise && normalizeExerciseMuscleGroup(nextExercise.muscleGroup ?? '', nextExercise.name ?? '') === normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? '')
     if ((lastRpe >= 10 || maxEffortSets > 0) && nextExerciseSameMuscle) {
       const suggestedExercises = findComplementaryExercises({
         currentExercise: exercise,
@@ -320,7 +320,7 @@ function resolveStartingWeight(exercise: ExerciseInput): number {
 }
 
 function isAccessoryExercise(exercise: ExerciseInput): boolean {
-  return ['arms', 'shoulders', 'core'].includes(normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`))
+  return ['arms', 'shoulders', 'core'].includes(normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? ''))
 }
 
 function withRemainingSetUpdates(decision: SetRecommendation, remainingSets: unknown): SetRecommendation {

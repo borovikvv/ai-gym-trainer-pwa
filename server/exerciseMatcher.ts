@@ -21,7 +21,7 @@
  *   - Not already used in this workout (+50, hard filter)
  */
 
-import { normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
 
 /** Library exercise with normalized metadata fields used by the matcher. */
 interface LibraryExercise {
@@ -98,7 +98,7 @@ export function findReplacementForFatigue(
   usedExerciseIds: Set<string>,
   coachState: CoachStateForMatcher | null,
 ): LibraryExercise | null {
-  const currentMuscle = normalizeMuscleGroup(`${currentExercise.muscleGroup ?? ''} ${currentExercise.name ?? ''}`)
+  const currentMuscle = normalizeExerciseMuscleGroup(currentExercise.muscleGroup ?? '', currentExercise.name ?? '')
   const currentGroup = coachState?.muscleGroups?.[currentMuscle]
   if (!currentGroup || currentGroup.fatigue !== 'high') return null
   if (!['low', 'partial'].includes(String(coachState?.recoveryStatus ?? ''))) return null
@@ -140,8 +140,8 @@ export function findComplementaryExercises({
   const usedIds = new Set(workoutExercises.map((e) => e.id).filter((id): id is string => Boolean(id)))
   const usedNames = new Set(workoutExercises.map((e) => e.name?.toLowerCase()).filter((n): n is string => Boolean(n)))
 
-  const currentMuscle = normalizeMuscleGroup(`${currentExercise.muscleGroup ?? ''} ${currentExercise.name ?? ''}`)
-  const nextMuscle = nextExercise ? normalizeMuscleGroup(`${nextExercise.muscleGroup ?? ''} ${nextExercise.name ?? ''}`) : null
+  const currentMuscle = normalizeExerciseMuscleGroup(currentExercise.muscleGroup ?? '', currentExercise.name ?? '')
+  const nextMuscle = nextExercise ? normalizeExerciseMuscleGroup(nextExercise.muscleGroup ?? '', nextExercise.name ?? '') : null
 
   // Collect all target muscles already trained in this session
   const trainedTargets = new Set<string>()

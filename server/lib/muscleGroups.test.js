@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  normalizeExerciseMuscleGroup,
   normalizeMuscleGroup,
   labelFor,
   labelForLower,
@@ -125,11 +126,48 @@ describe('normalizeMuscleGroup', () => {
     })
 
     it('uses combined text from muscleGroup + name (typical call site)', () => {
-      // Mirrors: normalizeMuscleGroup(`${exercise.muscleGroup} ${exercise.name}`)
+      // Mirrors: normalizeExerciseMuscleGroup(exercise.muscleGroup, exercise.name)
       expect(normalizeMuscleGroup('Грудь Жим лёжа')).toBe('chest')
       expect(normalizeMuscleGroup('Спина Тяга верхнего блока')).toBe('back')
       expect(normalizeMuscleGroup('Плечи Жим Арнольда')).toBe('shoulders')
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #221: группа из справочника важнее слова в названии.
+//
+// Алиасы проверяются по порядку, и общий глагол в названии перебивал точную
+// группу: у «Французского жима лёжа» muscle_group = 'Руки · трицепс', но в
+// склейке «руки · трицепс французский жим лёжа» алиас 'жим' (грудь) стоит
+// раньше 'трицеп' (руки) — упражнение занимало слот груди.
+// ---------------------------------------------------------------------------
+
+describe('normalizeExerciseMuscleGroup (#221)', () => {
+  it('французский жим — трицепс, а не грудь', () => {
+    expect(normalizeExerciseMuscleGroup('Руки · трицепс', 'Французский жим лёжа')).toBe('arms')
+  })
+
+  it('присед со штангой на плечах — ноги, а не плечи', () => {
+    expect(normalizeExerciseMuscleGroup('Ноги', 'Приседания со штангой на плечах')).toBe('legs')
+  })
+
+  it('обычные упражнения классифицируются как прежде', () => {
+    expect(normalizeExerciseMuscleGroup('Грудь', 'Жим лёжа')).toBe('chest')
+    expect(normalizeExerciseMuscleGroup('Спина', 'Тяга верхнего блока')).toBe('back')
+    expect(normalizeExerciseMuscleGroup('Плечи', 'Жим Арнольда')).toBe('shoulders')
+    expect(normalizeExerciseMuscleGroup('Ноги', 'Жим ногами')).toBe('legs')
+  })
+
+  it('без группы работает подбор по названию', () => {
+    expect(normalizeExerciseMuscleGroup('', 'Жим лёжа')).toBe('chest')
+    expect(normalizeExerciseMuscleGroup(null, 'Приседания со штангой')).toBe('legs')
+    expect(normalizeExerciseMuscleGroup(undefined, 'Планка')).toBe('core')
+  })
+
+  it('нераспознанная группа не мешает подбору по названию', () => {
+    expect(normalizeExerciseMuscleGroup('Всё тело', 'Тяга верхнего блока')).toBe('back')
+    expect(normalizeExerciseMuscleGroup('', '')).toBe('other')
   })
 })
 

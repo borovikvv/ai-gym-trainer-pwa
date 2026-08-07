@@ -23,7 +23,7 @@ import type {
   MuscleVolumeSnapshot,
   WorkoutHistoryEntry,
 } from '../shared/types.js'
-import { normalizeMuscleGroup, CANONICAL_MUSCLE_KEYS } from '../shared/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 
 const MS_PER_DAY = 86_400_000
@@ -64,7 +64,7 @@ export function buildMuscleVolumeSnapshot(
     const sessionMs = new Date(session.completedAt).getTime()
     if (!Number.isFinite(sessionMs) || sessionMs < sevenDaysAgoMs) continue
     for (const exercise of session.exercises ?? []) {
-      const emk = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
+      const emk = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '')
       if (emk === muscleKey) {
         weeklySets += countCompletedSets(exercise)
       }
@@ -128,7 +128,7 @@ export function buildAllMuscleVolumeSnapshots(
   const result: Record<string, MuscleVolumeSnapshot> = {}
   for (const key of CANONICAL_MUSCLE_KEYS) {
     const e1rmsForMuscle = (allE1rmHistories ?? []).filter((h) =>
-      normalizeMuscleGroup(`${h.muscleGroup ?? ''} ${h.exerciseName ?? ''}`) === key,
+      normalizeExerciseMuscleGroup(h.muscleGroup ?? '', h.exerciseName ?? '') === key,
     )
     result[key] = buildMuscleVolumeSnapshot(
       key,
@@ -182,7 +182,7 @@ function bucketHistoryByIsoWeek(
     const weekStart = sessionMs - (sessionMs % MS_PER_WEEK)
     let sets = 0
     for (const exercise of session.exercises ?? []) {
-      const emk = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
+      const emk = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '')
       if (emk === muscleKey) {
         sets += countCompletedSets(exercise)
       }

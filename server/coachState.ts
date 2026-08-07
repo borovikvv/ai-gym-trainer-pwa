@@ -9,7 +9,7 @@ import type {
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { normalizeMuscleGroup, isAssistedExerciseName } from '../shared/muscleGroups.js'
+import { isAssistedExerciseName, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
@@ -260,7 +260,7 @@ function buildExerciseCatalog(workoutDays: WorkoutDayInput[]): Map<string, Catal
         ...exercise,
         id,
         canonicalExerciseId: id,
-        muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.name ?? ''}`),
+        muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? ''),
       } as CatalogItem)
     }
   }
@@ -276,7 +276,7 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }: BuildMuscleGro
     for (const exercise of session.exercises ?? []) {
       const exerciseId = canonicalExerciseId(exercise)
       const catalogItem = exerciseCatalog.get(exerciseId)
-      const muscleKey = catalogItem?.muscleKey ?? normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
+      const muscleKey = catalogItem?.muscleKey ?? normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '')
       const current: MuscleGroupState = groups.get(muscleKey) ?? {
         fatigue: 'low',
         recentHardSets: 0,
