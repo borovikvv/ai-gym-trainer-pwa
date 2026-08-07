@@ -1,0 +1,57 @@
+name: OpenCode
+
+# Исполнитель конвейера: по метке ready-for-code пишет код по плану из issue
+# и открывает PR. Работает на подписке OpenCode Go (открытые модели),
+# чтобы объём кода не расходовал квоту Claude — та нужна на план и ревью.
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: opencode-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    # Репозиторий публичный: issue может завести кто угодно, а его текст
+    # становится инструкцией для агента. Поэтому и метка, и автор issue
+    # должны быть свои.
+    if: >-
+      github.event.label.name == 'ready-for-code' &&
+      github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode/deepseek-v4-flash
+          prompt: |
+            В issue #${{ github.event.issue.number }} есть комментарий с планом от Claude. Выполни его.
+
+            Правила:
+            - Делай ровно то, что написано в плане. Чего в плане нет — не делай:
+              вместо этого напиши комментарий в issue и остановись.
+            - Работай в новой ветке `fix/issue-${{ github.event.issue.number }}`
+              (или `feat/`, `chore/`, `docs/` — по характеру задачи).
+            - Тест обязателен, если меняется поведение. Для бага порядок обратный:
+              сначала падающий тест, затем фикс.
+            - Тесты не должны зависеть от текста UI-элементов и хардкода дат:
+              только `data-testid`, `aria-label` или роль элемента.
+            - Перед PR прогони локально: `npm run lint`, `npx tsc -b`, `npm test`,
+              `npm run build`. Красное не выкладывай — чини.
+            - Файлы в `.github/workflows/` не трогай никогда.
+            - Секреты и содержимое `.env` в код, коммиты и комментарии не попадают.
+            - Открой PR с описанием на русском: что меняется, зачем, что может
+              сломаться, как проверено. В описании укажи `Fixes #${{ github.event.issue.number }}`.
