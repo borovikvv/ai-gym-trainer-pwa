@@ -348,6 +348,7 @@ type UseWorkoutNavigationOptions = {
   persistWorkoutDraft: (nextLogs: Record<string, ExerciseLog>, nextExerciseIndex?: number) => void
         navigate: (screen: NavigationScreen) => void
         notify: (message: string) => void
+        clearActiveWorkoutDraft: () => void
 }
 
 export function useWorkoutNavigation({
@@ -379,6 +380,7 @@ export function useWorkoutNavigation({
   persistWorkoutDraft,
   navigate,
   notify,
+  clearActiveWorkoutDraft,
 }: UseWorkoutNavigationOptions) {
   function selectWorkoutDay(day: WorkoutDay, manual = true) {
     setManualWorkoutDaySelected(manual)
@@ -392,10 +394,19 @@ export function useWorkoutNavigation({
   }
 
   function startWorkout(day: WorkoutDay = import.meta.env.MODE === 'test' || manualWorkoutDaySelected ? activeWorkoutDayBase : nextPlannedWorkout?.workoutDay ?? trainingCalendar[0]?.workoutDay ?? activeWorkoutDayBase) {
-    if (day.id === activeWorkoutDay.id && (draftStatus.startsWith('Черновик восстановлен') || hasActiveDraft)) {
+    // Issue #211: resume into the session only when the draft has at least one
+    // completed set. An all-incomplete draft means the user just opened the
+    // workout without doing anything — route to the preview and clear the
+    // empty draft so it stops silently matching on every "Зал" tap.
+    const isMatchingDraft = day.id === activeWorkoutDay.id
+      && (draftStatus.startsWith('Черновик восстановлен') || hasActiveDraft)
+    const draftHasProgress = Object.values(logs).some((log) => log.sets.some((set) => set.completed))
+
+    if (isMatchingDraft && draftHasProgress) {
       navigate('session')
       return
     }
+    if (isMatchingDraft) clearActiveWorkoutDraft()
     selectWorkoutDay(day, false)
     navigate('preview')
   }
