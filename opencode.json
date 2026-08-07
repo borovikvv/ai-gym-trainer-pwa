@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "options": {
+        "baseURL": "https://opencode.ai/zen/go/v1"
+      }
+    }
+  },
+  "small_model": "opencode/deepseek-v4-flash"
+}
