@@ -212,7 +212,6 @@ describe('coachNarrator — issue #90 deload context in LLM prompt', () => {
       weeklyContext: {
         daysSincePreviousWorkout: 3,
         calendarWorkoutCountLast7: 2,
-        effectiveWorkoutsPerWeek: 3,
         previousExerciseIds: new Set(),
         recoveryRestrictedMuscleKeys: new Set(),
       },
@@ -250,7 +249,6 @@ describe('coachNarrator — issue #90 deload context in LLM prompt', () => {
       weeklyContext: {
         daysSincePreviousWorkout: 3,
         calendarWorkoutCountLast7: 2,
-        effectiveWorkoutsPerWeek: 3,
         previousExerciseIds: new Set(),
         recoveryRestrictedMuscleKeys: new Set(),
       },
