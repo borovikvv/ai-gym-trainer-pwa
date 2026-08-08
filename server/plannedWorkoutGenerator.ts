@@ -254,9 +254,7 @@ interface WeeklyContext {
   previousWorkoutCountLast7: number
   plannedWorkoutsPerWeek: number
   calendarWorkoutCountLast7: number
-  effectiveWorkoutsPerWeek: number
   daysSincePreviousWorkout: number | null
-  calendarLoadStatus: string
   /** Issue #166: остаток недельной цели по группам (цель минус факт). */
   weeklyVolume: Record<string, WeeklyVolumeStatus>
 }
@@ -336,13 +334,18 @@ export async function buildGeneratedPlannedWorkout({
   const decision = (coachDecision ?? buildCoachDecision({ profile, coachState, coachMemory, scheduledDate, previousGeneratedWorkouts })) as CoachDecisionForGenerator
   const readinessScore = Number(coachState?.readinessScore ?? 70)
   const recoveryStatus = String(coachState?.recoveryStatus ?? 'ready')
-  const calendarRecoveryLimited = Number.isFinite(weeklyContext.daysSincePreviousWorkout) && weeklyContext.daysSincePreviousWorkout! > 0 && weeklyContext.daysSincePreviousWorkout! <= 1
-  const calendarLoadLimited = weeklyContext.calendarLoadStatus === 'above_user_calendar'
+  // Issue #225: разрыв в один день — сигнал только там, где он не норма
+  // собственного расписания. При 4+ тренировках в неделю соседние дни
+  // неизбежны: в 7 дней четыре тренировки без соседней пары не расставить, —
+  // и общий флаг разгружал день, который по расписанию совершенно обычный.
+  // Что именно в нём не восстановилось, решает усталость групп, а не календарь.
+  const scheduleSpacesWorkouts = weeklyContext.plannedWorkoutsPerWeek <= 3
+  const calendarRecoveryLimited = scheduleSpacesWorkouts && Number.isFinite(weeklyContext.daysSincePreviousWorkout) && weeklyContext.daysSincePreviousWorkout! > 0 && weeklyContext.daysSincePreviousWorkout! <= 1
   // Issue #106: globalFlags.overtraining forces lowReadiness even if the
   // coachState readinessScore is OK — the analysis detected e1RM dropping
   // or sustained high RPE.
   const analysisOvertraining = Boolean(analysisResult?.globalFlags?.overtraining)
-  const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited || analysisOvertraining
+  const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || analysisOvertraining
   const targetMinutes = Number(profile?.targetWorkoutMinutes ?? 60)
   const exerciseTarget = targetExerciseCount({ targetMinutes, preferences, lowReadiness })
   // Issue #166: недельная цель — рычаг планирования, поэтому порядок групп в
@@ -1199,12 +1202,12 @@ function buildWeeklyContext(
       }
     }
   }
-  const effectiveWorkoutsPerWeek = Math.max(plannedWorkoutsPerWeek, calendarWorkoutCountLast7)
-  const calendarLoadStatus = calendarWorkoutCountLast7 > effectiveWorkoutsPerWeek
-    ? 'above_user_calendar'
-    : calendarWorkoutCountLast7 >= effectiveWorkoutsPerWeek
-      ? 'at_user_calendar'
-      : 'below_plan'
+  // Issue #225: здесь считался calendarLoadStatus, а по нему — шестой триггер
+  // lowReadiness. Он был недостижим с рождения (#132): effectiveWorkoutsPerWeek
+  // = max(план, календарь), поэтому «календарь > effective» не выполнялось
+  // никогда. Чинить сравнение не стали: осмысленная версия разгружала бы день
+  // из-за того, что пользователь сам поставил себе лишнюю тренировку, а
+  // фактический перебор уже ловит weeklyLoadStatus === 'above_plan'.
   return {
     previousExerciseIds,
     recentExerciseIds,
@@ -1214,9 +1217,7 @@ function buildWeeklyContext(
     previousWorkoutCountLast7,
     plannedWorkoutsPerWeek,
     calendarWorkoutCountLast7,
-    effectiveWorkoutsPerWeek,
     daysSincePreviousWorkout,
-    calendarLoadStatus,
     weeklyVolume: weeklyVolume ?? {},
   }
 }
@@ -1415,9 +1416,7 @@ function emptyWeeklyContext(): WeeklyContext {
     previousWorkoutCountLast7: 0,
     plannedWorkoutsPerWeek: 3,
     calendarWorkoutCountLast7: 0,
-    effectiveWorkoutsPerWeek: 3,
     daysSincePreviousWorkout: null,
-    calendarLoadStatus: 'below_plan',
     weeklyVolume: {},
   }
 }

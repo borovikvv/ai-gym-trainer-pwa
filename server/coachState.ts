@@ -286,7 +286,17 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }: BuildMuscleGro
       }
       const completedSets = completedSetsOf(exercise)
       const hardSets = ageDays <= 4 ? completedSets.filter((set) => Number(set.rpe) >= 9).length : 0
-      const maxEffortSets = ageDays <= 3 ? completedSets.filter((set) => Number(set.rpe) >= 10).length : 0
+      // Issue #225: окно было трое суток, и двух подходов на RPE 10 хватало,
+      // чтобы computeRecoveryStatus держал 'low' всё это время — при 3x/нед
+      // следующая тренировка по расписанию попадала в окно гарантированно и
+      // становилась «Разгрузкой». Два предельных подхода в одной сессии это
+      // норма тяжёлого дня, а не сигнал перетренированности; 48 часов на них —
+      // обычный ориентир. Граница строгая: после якоря #223 плановая сессия
+      // попадает на то же время суток, что и прошлая, поэтому ровно двое суток
+      // стали обычным случаем, а не редким совпадением — при `<=` окно
+      // растягивалось бы на третьи сутки ровно в том сценарии, ради которого
+      // сужено.
+      const maxEffortSets = ageDays < 2 ? completedSets.filter((set) => Number(set.rpe) >= 10).length : 0
       const volume = completedSets.reduce((sum, set) => sum + Number(set.weight ?? 0) * Number(set.reps ?? 0), 0)
       current.recentHardSets += hardSets
       current.recentMaxEffortSets += maxEffortSets

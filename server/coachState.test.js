@@ -358,3 +358,41 @@ describe('daysSinceLastWorkout — якорь времени сессии (#223)
     expect(state.daysSinceLastWorkout).toBe(2)
   })
 })
+
+// Issue #225: два подхода на RPE 10 держали recoveryStatus 'low' трое суток —
+// при расписании 3x/нед следующая тренировка попадала в окно гарантированно, и
+// обычный день уезжал в «Разгрузку». Два предельных подхода в одной сессии это
+// норма тяжёлого дня, а не сигнал перетренированности: окно сужено до 2 суток.
+describe('recoveryStatus — окно предельных подходов (#225)', () => {
+  const maxEffortSession = (completedAt) => [{
+    id: 'session-max-effort',
+    userId: 'vyacheslav',
+    workoutDayId: 'day-a',
+    completedAt,
+    totalVolume: 1200,
+    exercises: [{
+      exerciseId: 'bench-press',
+      exerciseName: 'Жим лёжа',
+      pain: false,
+      sets: [
+        { weight: 50, reps: 5, rpe: 10, completed: true },
+        { weight: 50, reps: 4, rpe: 10, completed: true },
+      ],
+    }],
+  }]
+  const now = new Date('2026-08-09T19:00:00.000Z')
+
+  it('через двое суток предельные подходы больше не держат восстановление низким', () => {
+    // Ровно 48 часов: после якоря #224 плановая сессия попадает на то же время
+    // суток, поэтому целые сутки — обычный случай, а не редкая граница.
+    const state = computeCoachState({ profile, workoutDays, history: maxEffortSession('2026-08-07T19:00:00.000Z'), now })
+
+    expect(state.recoveryStatus).not.toBe('low')
+  })
+
+  it('через сутки — всё ещё низкое', () => {
+    const state = computeCoachState({ profile, workoutDays, history: maxEffortSession('2026-08-08T19:00:00.000Z'), now })
+
+    expect(state.recoveryStatus).toBe('low')
+  })
+})

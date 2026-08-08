@@ -23,7 +23,6 @@ interface NarrationInput {
   weeklyContext: {
     daysSincePreviousWorkout: number | null
     calendarWorkoutCountLast7: number
-    effectiveWorkoutsPerWeek: number
     previousExerciseIds: Set<string>
     recoveryRestrictedMuscleKeys: Set<string>
   }
