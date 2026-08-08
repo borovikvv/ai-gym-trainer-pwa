@@ -344,7 +344,7 @@ export async function buildGeneratedPlannedWorkout({
   const analysisOvertraining = Boolean(analysisResult?.globalFlags?.overtraining)
   const lowReadiness = readinessScore < 55 || recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan' || decision.loadPolicy === 'moderate_no_failure' || calendarRecoveryLimited || calendarLoadLimited || analysisOvertraining
   const targetMinutes = Number(profile?.targetWorkoutMinutes ?? 60)
-  const exerciseTarget = targetExerciseCount({ targetMinutes, preferences })
+  const exerciseTarget = targetExerciseCount({ targetMinutes, preferences, lowReadiness })
   // Issue #166: недельная цель — рычаг планирования, поэтому порядок групп в
   // дне определяется остатком цели, а не только ротацией и усталостью.
   const targetPattern = orderPatternByWeeklyDeficit(
@@ -584,14 +584,20 @@ function summarizeMuscleFatigue(coachState: CoachState | null): string {
   return flagged.length > 0 ? flagged.join(', ') : 'низкая'
 }
 
-function targetExerciseCount({ targetMinutes, preferences = emptyPreferences() }: { targetMinutes: number | null | undefined; preferences?: NormalizedPreferences }): number {
+function targetExerciseCount({ targetMinutes, preferences = emptyPreferences(), lowReadiness = false }: { targetMinutes: number | null | undefined; preferences?: NormalizedPreferences; lowReadiness?: boolean }): number {
   const minutes = Number(targetMinutes)
   const base = !Number.isFinite(minutes)
     ? 5
     : minutes >= 85 ? 7 : minutes >= 70 ? 6 : minutes <= 40 ? 4 : 5
-  if (preferences.sessionStyle === 'heavy_short') return Math.max(4, base - 1)
-  if (preferences.sessionStyle === 'volume_light') return Math.min(7, base + 1)
-  return base
+  const styled = preferences.sessionStyle === 'heavy_short'
+    ? Math.max(4, base - 1)
+    : preferences.sessionStyle === 'volume_light'
+      ? Math.min(7, base + 1)
+      : base
+  // Issue #223: размер разгрузочного дня раньше держал фиксированный список
+  // групп — он же его и ограничивал четырьмя слотами. Список ушёл, поэтому
+  // объём дня режем явно: разгрузка на одно упражнение короче обычной сессии.
+  return lowReadiness ? Math.max(3, styled - 1) : styled
 }
 
 function orderExercisesForWorkout(exercises: GeneratedExercise[]): GeneratedExercise[] {
@@ -762,10 +768,13 @@ function chooseTargetPattern(
   for (const focus of preferences.focusMuscleKeys ?? []) {
     if (hasFresh(focus) && !pattern.includes(focus)) pattern.push(focus)
   }
-  if (lowReadiness) {
-    for (const key of ['back', 'shoulders', 'arms', 'core']) if (hasFresh(key) && !pattern.includes(key)) pattern.push(key)
-    return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
-  }
+  // Issue #223: здесь стоял ранний выход по фиксированному списку
+  // back/shoulders/arms/core — то есть по группам, которые чаще всего и
+  // работали в прошлый раз, а свежие грудь и ноги выпадали из дня целиком.
+  // Выбор групп локален и делается ниже общей ротацией: ставим то, что давно не
+  // трогали. Системная готовность решает не «что», а «насколько тяжело» — это
+  // applyPrescription. Единственный структурный след разгрузки — день не
+  // удваивает слоты (см. дедупликацию в конце функции).
 
   // Issue #75: compute recently used muscle groups from previous workouts.
   // This replaces the weekday parity rotation (a7d98b5) with real rotation
@@ -819,7 +828,11 @@ function chooseTargetPattern(
     if (!notRecent.includes(key) && !wasRecent.includes(key)) pattern.push(key)
   }
 
-  return pattern.length ? pattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
+  // Issue #223: разгрузочный день не удваивает слоты — по одному упражнению на
+  // группу. Порядок при этом остаётся общим: застоявшиеся группы впереди.
+  const orderedPattern = lowReadiness ? [...new Set(pattern)] : pattern
+
+  return orderedPattern.length ? orderedPattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
 }
 
 /**
@@ -1102,7 +1115,11 @@ function exerciseScore(
   if (latestExerciseHistory(history, exercise.id)) score += 8
   if (coachState?.exercises?.[exercise.id]?.status === 'progress_possible') score += 8
   if (coachState?.exercises?.[exercise.id]?.status === 'pain') score -= 80
-  if (lowReadiness && ['arms', 'shoulders', 'core', 'back'].includes(exercise.muscleKey)) score += 8
+  // Issue #223: тот же фиксированный список жил и в скоринге — он тянул руки и
+  // плечи обратно в разгрузочный день через филлеры, даже когда паттерн уже
+  // выбрал свежие группы. Слот получает не «лёгкая группа из списка», а та,
+  // которую давно не трогали.
+  if (lowReadiness && (weeklyContext.recentMuscleCounts?.get(exercise.muscleKey) ?? 0) > 0) score -= 12
   if (!lowReadiness && ['legs', 'back', 'chest'].includes(exercise.muscleKey)) score += 5
   if (preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score += 14
   if (coachDecision?.priorityMuscleGroups?.includes(exercise.muscleKey)) score += 18

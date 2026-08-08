@@ -2284,3 +2284,75 @@ describe('Issue #170: область действия инварианта ра�
     expect(benchOf(plan)?.targetWeight).toBe(42.5)
   })
 })
+
+// Issue #223: разгрузочный день собирался по фиксированному списку
+// back/shoulders/arms/core — то есть ровно по тем группам, что чаще всего и
+// работали в прошлый раз, а свежие грудь и ноги исключались целиком. Выбор
+// групп локален (что не тренировали — то и ставим), а системная готовность
+// решает не «что», а «насколько тяжело».
+describe('planned workout generator — разгрузка и свежесть групп (#223)', () => {
+  const lowReadinessState = {
+    recoveryStatus: 'low',
+    readinessScore: 42,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      back: { fatigue: 'medium' },
+      shoulders: { fatigue: 'medium' },
+      arms: { fatigue: 'medium' },
+      core: { fatigue: 'medium' },
+    },
+    exercises: {},
+  }
+  // Явное решение с пустыми приоритетами: проверяем сам выбор групп в
+  // генераторе, без подсказок слоя решений.
+  const neutralDecision = {
+    avoidMuscleGroups: [],
+    priorityMuscleGroups: [],
+    exercisePolicies: {},
+    loadPolicy: 'controlled_progression',
+  }
+  const previousGeneratedWorkouts = [{
+    scheduledDate: '2026-06-05',
+    exercises: [
+      { exerciseId: 'lat-pulldown', exerciseName: 'Тяга верхнего блока', muscleGroup: 'Спина' },
+      { exerciseId: 'db-shoulder-press', exerciseName: 'Жим гантелей сидя', muscleGroup: 'Плечи' },
+      { exerciseId: 'hammer-curl', exerciseName: 'Молотковые сгибания', muscleGroup: 'Руки' },
+      { exerciseId: 'plank', exerciseName: 'Планка', muscleGroup: 'Кор' },
+    ],
+  }]
+
+  const buildLowReadinessPlan = () => buildGeneratedPlannedWorkout({
+    profile,
+    scheduledDate: '2026-06-07',
+    coachState: lowReadinessState,
+    coachDecision: neutralDecision,
+    exerciseLibrary,
+    history: [],
+    previousGeneratedWorkouts,
+  })
+
+  it('ставит в разгрузочный день свежие группы, а не фиксированный список', async () => {
+    const plan = await buildLowReadinessPlan()
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.workoutDayName).toBe('Разгрузка')
+    expect(exerciseIds).toContain('bench-press')
+    expect(exerciseIds.some((id) => id === 'barbell-squat' || id === 'romanian-deadlift')).toBe(true)
+  })
+
+  it('не удваивает слоты в разгрузочный день — по одному упражнению на группу', async () => {
+    const plan = await buildLowReadinessPlan()
+    const muscleGroups = plan.exercises.map((exercise) => exercise.muscleGroup)
+
+    expect(new Set(muscleGroups).size).toBe(muscleGroups.length)
+  })
+
+  it('оставляет нагрузку сниженной: свежесть решает что ставить, не насколько тяжело', async () => {
+    const plan = await buildLowReadinessPlan()
+
+    expect(plan.exercises.every((exercise) => exercise.intensityTarget === 'easy')).toBe(true)
+    expect(plan.exercises.every((exercise) => exercise.restSeconds <= 120)).toBe(true)
+  })
+})
