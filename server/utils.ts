@@ -323,6 +323,48 @@ export function russianWeekdayName(date: Date): string {
   return ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][date.getDay()]
 }
 
+/** Полдень UTC — прежний якорь; остаётся фолбэком, когда истории ещё нет. */
+const DEFAULT_SESSION_ANCHOR_MINUTES = 12 * 60
+/** Сколько последних сессий определяют привычное время тренировки. */
+const SESSION_ANCHOR_HISTORY_SIZE = 10
+
+/**
+ * Issue #223: coachState и coachMemory считаются «на момент» плановой сессии, и
+ * этот момент был прибит к полудню UTC. Но разрыв между тренировками меряется в
+ * часах (`floor(часы / 24)`), поэтому для вечернего графика полдень
+ * систематически съедал полсуток отдыха: пятница 20:00 → воскресенье 12:00 =
+ * 40 часов, то есть «один день», хотя между сессиями двое суток. Дальше это
+ * роняло готовность и уводило обычный день расписания в «Разгрузку».
+ *
+ * Якорь берём из истории — по времени суток, когда человек реально заканчивает
+ * тренировки. Из недавних сессий берём самое позднее время: тогда любая прошлая
+ * сессия лежит не позже якоря по времени суток, и `floor(часы / 24)` совпадает
+ * с числом календарных дней между тренировками в ритме самого пользователя.
+ */
+export function resolveSessionAnchor(
+  scheduledDate: string,
+  history: Array<{ completedAt?: string | Date | null }> = [],
+): Date {
+  const dateOnly = dateToDateOnly(scheduledDate)
+  const startOfDay = new Date(`${dateOnly}T00:00:00.000Z`)
+  const anchorMinutes = latestTrainingMinutesOfDay(history, startOfDay)
+  return new Date(startOfDay.getTime() + anchorMinutes * 60_000)
+}
+
+function latestTrainingMinutesOfDay(
+  history: Array<{ completedAt?: string | Date | null }>,
+  startOfDay: Date,
+): number {
+  const endOfDay = startOfDay.getTime() + 86_400_000
+  const minutes = (history ?? [])
+    .map((session) => new Date(session?.completedAt ?? ''))
+    .filter((completedAt) => !Number.isNaN(completedAt.getTime()) && completedAt.getTime() < endOfDay)
+    .sort((left, right) => right.getTime() - left.getTime())
+    .slice(0, SESSION_ANCHOR_HISTORY_SIZE)
+    .map((completedAt) => completedAt.getUTCHours() * 60 + completedAt.getUTCMinutes())
+  return minutes.length > 0 ? Math.max(...minutes) : DEFAULT_SESSION_ANCHOR_MINUTES
+}
+
 export function nextPlannedDatesFromProfile(profile: ProfileWithTrainingDays, count: number): string[] {
   const trainingDays: string[] = Array.isArray(profile.trainingDays) ? profile.trainingDays.filter(Boolean) : []
   const dates: string[] = []

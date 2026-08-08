@@ -65,3 +65,34 @@ describe('coach decision', () => {
     expect(decision.reasons.join(' ')).toContain('возвращение после перерыва')
   })
 })
+
+// Issue #223: lowReadiness — системный флаг (сон, ЦНС, недельный объём), а
+// восстановление мышц локально. Раньше низкая готовность выключала ноги
+// целиком, даже если они не работали неделю: свежая группа теряла день, а
+// нагрузку получали ровно те группы, что были в прошлой сессии.
+describe('coach decision — низкая готовность и свежие группы (#223)', () => {
+  const lowReadinessProfile = {
+    userId: 'vyacheslav',
+    level: 'intermediate',
+    workoutsPerWeek: 3,
+    preferences: { intensityTolerance: 'normal' },
+  }
+  const lowReadinessState = { readinessScore: 42, recoveryStatus: 'low', weeklyLoadStatus: 'on_plan' }
+  const decisionFor = (legsFatigue) => buildCoachDecision({
+    profile: lowReadinessProfile,
+    scheduledDate: '2026-06-11',
+    coachState: { ...lowReadinessState, muscleGroups: { legs: { fatigue: legsFatigue } } },
+    coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+  })
+
+  it('не выключает свежие ноги — нагрузку срезают предписания, а не запрет группы', () => {
+    expect(decisionFor('low').avoidMuscleGroups).not.toContain('legs')
+    // Интенсивность при этом всё равно урезана: политика дня не меняется.
+    expect(decisionFor('low').loadPolicy).toBe('moderate_no_failure')
+  })
+
+  it('выключает ноги, если они ещё не восстановились', () => {
+    expect(decisionFor('medium').avoidMuscleGroups).toContain('legs')
+    expect(decisionFor('high').avoidMuscleGroups).toContain('legs')
+  })
+})

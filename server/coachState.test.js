@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeCoachState } from './coachState.js'
+import { resolveSessionAnchor } from './utils.js'
 
 const profile = {
   userId: 'vyacheslav',
@@ -321,5 +322,39 @@ describe('Issue #173: lastWeight for assisted exercises', () => {
     })
 
     expect(state.exercises['assisted-pull-up'].lastWeight).toBe(16.5)
+  })
+})
+
+// Issue #223: тренировки по вечерам, а плановая сессия считалась на полдень —
+// пятница 20:00 → воскресенье 12:00 = 40 часов, то есть «один день» вместо
+// двух. Отсюда падала готовность и обычный день расписания уезжал в «Разгрузку».
+describe('daysSinceLastWorkout — якорь времени сессии (#223)', () => {
+  const eveningHistory = [
+    {
+      id: 'session-friday-evening',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      completedAt: '2026-08-07T19:00:00.000Z',
+      totalVolume: 1500,
+      exercises: [
+        {
+          exerciseId: 'lat-pulldown',
+          exerciseName: 'Тяга верхнего блока',
+          pain: false,
+          sets: [{ weight: 40, reps: 10, rpe: 8, completed: true }],
+        },
+      ],
+    },
+  ]
+
+  it('на якоре реального времени тренировки разрыв считается как двое суток', () => {
+    const state = computeCoachState({
+      profile,
+      workoutDays,
+      history: eveningHistory,
+      now: resolveSessionAnchor('2026-08-09', eveningHistory),
+    })
+
+    expect(state.daysSinceLastWorkout).toBe(2)
   })
 })

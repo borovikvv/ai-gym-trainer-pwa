@@ -4,7 +4,7 @@ import { nonFatal, type DbClient } from '../dbClient.js'
 import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
 import { buildGeneratedPlannedWorkout } from '../plannedWorkoutGenerator.js'
-import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramExercise, type NormalizedProgramExercise } from '../utils.js'
+import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramExercise, resolveSessionAnchor, type NormalizedProgramExercise } from '../utils.js'
 import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 import { formatWeight } from '../../shared/format.js'
 import { isTimedExerciseName } from '../../shared/muscleGroups.js'
@@ -265,13 +265,17 @@ export async function createGeneratedPlannedWorkoutForDate(client: DbClient, { u
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
   ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[]]
-  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  // Issue #223: момент сессии — не полдень, а привычное время тренировки
+  // (иначе для вечернего графика разрыв «пятница → воскресенье» считается как
+  // один день вместо двух и обычный день расписания уезжает в «Разгрузку»).
+  const sessionAnchor = resolveSessionAnchor(scheduledDate, history as Array<{ completedAt?: string | Date | null }>)
+  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor })
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
-  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: sessionAnchor })
   // Issue #166: сессия планируется под остаток недельной цели по группам.
   // Оба чтения необязательные и идут внутри транзакции создания — только через
   // nonFatal, иначе их сбой роняет сам insert (см. комментарий в dbClient).
-  const weeklyVolume = await nonFatal(client, 'weeklyVolume', () => loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) }), {} as Record<string, WeeklyVolumeStatus>)
+  const weeklyVolume = await nonFatal(client, 'weeklyVolume', () => loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor }), {} as Record<string, WeeklyVolumeStatus>)
   const longTermMemory = await nonFatal(client, 'longTermMemory', () => loadLongTermMemoryBlock(client, userId), '')
   // Issue #219: генерация отдельного дня (тап по календарю) шла с пустым
   // контекстом ротации — детерминированный генератор с одинаковыми входами
@@ -349,12 +353,15 @@ export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkou
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
   ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[]]
-  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  // Issue #223: тот же якорь, что и при первой генерации — иначе перегенерация
+  // считала бы готовность по другому моменту суток.
+  const sessionAnchor = resolveSessionAnchor(scheduledDate, history as Array<{ completedAt?: string | Date | null }>)
+  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor })
   const previousGeneratedWorkouts = await loadPreviousGeneratedWorkoutContext(client, { userId, scheduledDate, excludeId: plannedWorkoutId })
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
-  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: new Date(`${scheduledDate}T12:00:00.000Z`) })
+  const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: sessionAnchor })
   // Issue #166: сессия планируется под остаток недельной цели по группам.
-  const weeklyVolume = await nonFatal(client, 'weeklyVolume', () => loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: new Date(`${scheduledDate}T12:00:00.000Z`) }), {} as Record<string, WeeklyVolumeStatus>)
+  const weeklyVolume = await nonFatal(client, 'weeklyVolume', () => loadWeeklyVolumeStatus(client, userId, { history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor }), {} as Record<string, WeeklyVolumeStatus>)
   const longTermMemory = await nonFatal(client, 'longTermMemory', () => loadLongTermMemoryBlock(client, userId), '')
   const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [longTermMemory, formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), refineWithLlm, weeklyVolume })
   await client.query('delete from public.planned_workout_exercises where planned_workout_id = $1', [plannedWorkoutId])
