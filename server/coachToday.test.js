@@ -91,3 +91,49 @@ describe('workout today coach plan', () => {
     expect(plan.summary).toContain('можно провести следующую основную тренировку')
   })
 })
+
+// Issue #226: лёгкий день собирался из фиксированного списка
+// arms/shoulders/core/back, а reason при этом обещал «свежие мышечные группы
+// из полной библиотеки». Список дублировал работу accessoryScore (свежая
+// изоляция и так впереди базы по баллам) и вступал в силу ровно там, где
+// вредил: когда уставшие — это и есть аксессуарные группы.
+describe('workout today — свежесть вместо фиксированного списка (#226)', () => {
+  const lowReadiness = { recoveryStatus: 'low', readinessScore: 42, weeklyLoadStatus: 'above_plan', exercises: {} }
+
+  it('свежая грудь попадает в лёгкий день, когда аксессуарные группы уставшие', () => {
+    const coachState = {
+      ...lowReadiness,
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        back: { fatigue: 'medium' },
+        arms: { fatigue: 'medium' },
+        shoulders: { fatigue: 'medium' },
+        core: { fatigue: 'medium' },
+      },
+    }
+
+    const plan = buildWorkoutTodayPlan({ profile, workoutDays, exerciseLibrary, coachState, now: new Date('2026-06-06T12:00:00.000Z') })
+
+    expect(plan.mode).toBe('recovery_accessory')
+    expect(plan.workoutDay.exercises.map((exercise) => exercise.id)).toContain('bench-press')
+  })
+
+  it('когда аксессуарные группы свежие, состав дня не меняется', () => {
+    const coachState = {
+      ...lowReadiness,
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        back: { fatigue: 'high' },
+        arms: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+    }
+
+    const plan = buildWorkoutTodayPlan({ profile, workoutDays, exerciseLibrary, coachState, now: new Date('2026-06-06T12:00:00.000Z') })
+
+    expect(plan.workoutDay.exercises.map((exercise) => exercise.id)).toEqual(['hammer-curl', 'lateral-raise', 'plank'])
+  })
+})

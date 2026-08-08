@@ -136,7 +136,11 @@ export function buildWorkoutTodayPlan({
     return {
       mode: 'recovery_accessory',
       summary: 'Сегодня лучше сделать лёгкую дополнительную тренировку: восстановление или недельная нагрузка не позволяют добавлять тяжёлый full body.',
-      reason: 'выбраны свежие мышечные группы из полной библиотеки упражнений',
+      // Issue #226: прежний текст обещал «полную библиотеку», хотя выбор был
+      // обрезан до четырёх групп из шести. Список убран, но и формулировка
+      // теперь описывает то, что действительно происходит: ранжирование по
+      // свежести групп, а не перебор всей библиотеки.
+      reason: 'упражнения выбраны по свежести мышечных групп, объём и вес снижены',
       workoutDay: {
         id: 'coach-today',
         dayKey: 'coach-today',
@@ -225,7 +229,13 @@ function chooseAccessoryExercises({ exerciseLibrary, coachState, limit }: Choose
   return normalizeExerciseLibrary(exerciseLibrary)
     .filter((exercise) => exercise.targetWeight >= 0)
     .filter((exercise) => !isHighlyFatigued(exercise.muscleKey, coachState))
-    .filter((exercise) => ['arms', 'shoulders', 'core', 'back'].includes(exercise.muscleKey))
+    // Issue #226: здесь стоял фиксированный список arms/shoulders/core/back.
+    // Он дублировал работу accessoryScore — свежая изоляция и так обгоняет базу
+    // по баллам (20 за низкую усталость + бонус группе + 2 за короткие
+    // подходы против 20 у базы), — а вступал в силу ровно там, где вредил:
+    // когда уставшие это и есть аксессуарные группы, а свежие — грудь и ноги.
+    // Ту же инверсию чинили в #223. Лёгкость дня держат баллы и облегчение
+    // предписаний (lightenExercise), а не запрет групп.
     .sort((a, b) => accessoryScore(b, coachState) - accessoryScore(a, coachState))
     .filter((exercise) => {
       if (used.has(exercise.muscleKey) && exercise.muscleKey !== 'core') return false
