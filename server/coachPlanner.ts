@@ -2,7 +2,7 @@
 // Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
 import type { CoachState, MesocycleState, VolumeLandmark, WorkoutHistoryEntry } from '../shared/types.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { normalizeMuscleGroup, labelForLower, isTimedExerciseName } from '../shared/muscleGroups.js'
+import { isTimedExerciseName, labelForLower, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { formatWeight, roundWeight } from '../shared/format.js'
 // Issue #192: прогрессия по повторам, когда веса нет — правило одно на тренера,
 // планировщик и оба дебрифа.
@@ -227,7 +227,7 @@ export function buildSafeCoachPlan({
     // сюда уходил один userId, и возрастная фаза всегда выходила 'adult'.
     const ageProfile: UserTrainingPolicy | null = getUserTrainingPolicy(profile ?? null)
     const phase = ageProfile?.ageRecoveryProfile?.phase ?? 'adult'
-    const volumeMuscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
+    const volumeMuscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.name ?? '')
     const baseLandmarks = getVolumeLandmarks(volumeMuscleKey, phase)
     const overrideLandmarks = (coachState as { volumeLandmarkOverrides?: Record<string, VolumeLandmark | undefined> })?.volumeLandmarkOverrides?.[volumeMuscleKey]
     const landmarks = overrideLandmarks ?? baseLandmarks
@@ -485,7 +485,7 @@ function normalizeExerciseLibrary(exerciseLibrary: ExerciseInput[]): NormalizedL
 }
 
 function exerciseMuscleKey(exercise: ExerciseInput): string {
-  return normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`)
+  return normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.name ?? '')
 }
 
 function latestExerciseHistory(history: WorkoutHistoryEntry[], exerciseId: string | undefined): WorkoutHistoryEntry['exercises'][number] | null {

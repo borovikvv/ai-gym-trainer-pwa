@@ -444,6 +444,11 @@ describe('planned workout generator', () => {
     }
     const variedLibrary = [
       ...exerciseLibrary,
+      // Issue #221: вторая грудная нужна, чтобы у жима лёжа была настоящая
+      // альтернатива. Раньше её роль играл «Французский жим» — он ошибочно
+      // считался грудным и занимал слот груди, из-за чего проверка «недавнее
+      // не повторяется» проходила по неверной причине.
+      { id: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 22, weightStep: 2, restSeconds: 120 },
       { id: 'assisted-pull-up', name: 'Подтягивания в гравитроне', muscleGroup: 'Спина', setsCount: 3, repMin: 6, repMax: 10, targetWeight: 35, weightStep: 5, restSeconds: 90 },
       { id: 'cable-row', name: 'Горизонтальная тяга', muscleGroup: 'Спина', setsCount: 2, repMin: 10, repMax: 12, targetWeight: 42.5, weightStep: 2.5, restSeconds: 90 },
       { id: 'rear-delt-machine', name: 'Обратная бабочка', muscleGroup: 'Плечи · задняя дельта', setsCount: 2, repMin: 12, repMax: 15, targetWeight: 17.5, weightStep: 2.5, restSeconds: 75 },
@@ -1227,6 +1232,103 @@ describe('issue #75: pattern rotation', () => {
     })
     // Should have at least 4 exercises from different muscle groups
     expect(plan.exercises.length).toBeGreaterThanOrEqual(4)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #221: два независимых бага, из-за которых в дне не было настоящей
+// груди, руки дублировались, а икры повторялись две сессии подряд.
+// ---------------------------------------------------------------------------
+
+describe('issue #221: слот груди и recent-штраф', () => {
+  const readyCoachState = {
+    recoveryStatus: 'ready',
+    readinessScore: 85,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+
+  // muscle_group здесь такой же, как в справочнике: у французского жима это
+  // «Руки · трицепс», а не грудь.
+  const libraryWithSkullCrusher = [
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150, instruction: 'жим' },
+    { id: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 22, weightStep: 2, restSeconds: 120, instruction: 'жим' },
+    { id: 'skull-crusher', name: 'Французский жим лёжа', muscleGroup: 'Руки · трицепс', setsCount: 3, repMin: 10, repMax: 12, targetWeight: 20, weightStep: 2.5, restSeconds: 75, instruction: 'трицепс' },
+    { id: 'preacher-curl', name: 'Сгибания на скамье Скотта', muscleGroup: 'Руки · бицепс', setsCount: 3, repMin: 10, repMax: 12, targetWeight: 15, weightStep: 2.5, restSeconds: 75, instruction: 'бицепс' },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90, instruction: 'тяга' },
+    { id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 60, weightStep: 2.5, restSeconds: 150, instruction: 'присед' },
+    { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90, instruction: 'плечи' },
+    { id: 'plank', name: 'Планка', muscleGroup: 'Кор', setsCount: 2, repMin: 40, repMax: 60, targetWeight: 0, weightStep: 0, restSeconds: 60, instruction: 'кор' },
+  ]
+
+  it('баг A: трицепс не занимает слот груди, когда настоящие грудные оштрафованы', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      // 70 минут → ровно 6 слотов на 6 групп: у груди один слот, без дублей,
+      // поэтому видно, кто именно его занял.
+      profile: { ...profile, targetWorkoutMinutes: 70 },
+      scheduledDate: '2026-08-07',
+      coachState: readyCoachState,
+      exerciseLibrary: libraryWithSkullCrusher,
+      history: [],
+      // Обе грудные были три дня назад → −120 каждой. Пока французский жим
+      // считался грудным, он выигрывал слот груди как «свежий».
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-08-04',
+        exercises: [
+          { exerciseId: 'bench-press', exerciseName: 'Жим лёжа', muscleGroup: 'Грудь' },
+          { exerciseId: 'incline-db-press', exerciseName: 'Жим гантелей на наклонной', muscleGroup: 'Грудь' },
+        ],
+      }],
+    })
+
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+    expect(exerciseIds.some((id) => ['bench-press', 'incline-db-press'].includes(id))).toBe(true)
+  })
+
+  it('баг B: упражнение из плана прошлой сессии не повторяется, даже если в зале его заменили', async () => {
+    // Икры стоят в библиотеке раньше приседа: при равном счёте слот ног
+    // достаётся им, и увести их оттуда может только штраф за повтор.
+    const libraryWithCalvesFirst = libraryWithSkullCrusher.flatMap((exercise) => exercise.id === 'barbell-squat'
+      ? [
+        { id: 'seated-calf-raise', name: 'Подъёмы на икры сидя', muscleGroup: 'Ноги', setsCount: 3, repMin: 12, repMax: 15, targetWeight: 30, weightStep: 2.5, restSeconds: 60, instruction: 'икры' },
+        exercise,
+      ]
+      : [exercise])
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: { ...profile, targetWorkoutMinutes: 70 },
+      scheduledDate: '2026-08-07',
+      coachState: readyCoachState,
+      exerciseLibrary: libraryWithCalvesFirst,
+      // Выполненная сессия 08-04: икры сделаны через замену, поэтому id другой.
+      history: [{
+        completedAt: '2026-08-04T18:00:00.000Z',
+        exercises: [{
+          exerciseId: 'seated-calf-raise-alternative-икры-в-жиме-ногами-replacement-1',
+          exerciseName: 'Икры в жиме ногами',
+          muscleGroup: 'Ноги',
+          sets: [{ completed: true, weight: 60, reps: 15, rpe: 7 }],
+        }],
+      }],
+      // Плановая строка того же дня — с исходным упражнением. Дедупликация по
+      // дате выкидывала её целиком, и штраф за повтор до икр не доезжал.
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-08-04',
+        exercises: [{ exerciseId: 'seated-calf-raise', exerciseName: 'Подъёмы на икры сидя', muscleGroup: 'Ноги' }],
+      }],
+    })
+
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+    expect(exerciseIds).toContain('barbell-squat')
+    expect(exerciseIds).not.toContain('seated-calf-raise')
   })
 })
 

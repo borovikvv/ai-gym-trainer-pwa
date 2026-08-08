@@ -19,7 +19,7 @@ import { buildCoachDecision } from './coachDecision.js'
 import type { WeeklyVolumeStatus } from './weeklyVolumeTargets.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { CANONICAL_MUSCLE_KEYS, normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, harderWeight, easierWeight, strongerOf, easierOf } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
 import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, teenLimitsApply } from '../shared/teenLimits.js'
@@ -512,7 +512,7 @@ async function refineBaselinePrescriptions({
     exerciseId: exercise.exerciseId,
     exerciseName: exercise.exerciseName,
     muscleGroup: exercise.muscleGroup,
-    muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`),
+    muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? ''),
     setsCount: exercise.setsCount,
     repMin: exercise.repMin,
     repMax: exercise.repMax,
@@ -611,7 +611,7 @@ function ensureCoreFinisher({ selected, library, coachState, coachMemory, decisi
   // correctly maps both 'Кор' and 'Пресс' to 'core', but we need to be
   // extra defensive — also check by muscleKey of the candidate.
   const hasCoreAlready = current.some((exercise) => {
-    const key = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
+    const key = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '')
     return key === 'core'
   })
   if (workoutIsCoreFocused(current) || hasCoreAlready) return current
@@ -656,14 +656,14 @@ function ensureCoreFinisher({ selected, library, coachState, coachMemory, decisi
 }
 
 function workoutIsCoreFocused(exercises: GeneratedExercise[]): boolean {
-  const coreCount = (exercises ?? []).filter((exercise) => normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`) === 'core').length
+  const coreCount = (exercises ?? []).filter((exercise) => normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '') === 'core').length
   return coreCount > 0 && coreCount / Math.max(1, exercises.length) >= 0.6
 }
 
 function findCoreFinisherReplacementIndex(exercises: GeneratedExercise[]): number {
   for (let index = exercises.length - 1; index >= 0; index -= 1) {
     const exercise = exercises[index]
-    const muscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? ''} ${exercise.exerciseName ?? ''}`)
+    const muscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '')
     const text = normalizeText(`${exercise.exerciseName ?? ''} ${exercise.muscleGroup ?? ''}`)
     if (muscleKey === 'core') return -1
     if (isIsolationOrAccessory(text, muscleKey) || muscleKey === 'arms' || muscleKey === 'shoulders') return index
@@ -1145,16 +1145,26 @@ function buildWeeklyContext(
   let previousWorkoutCountLast7 = 0
   let calendarWorkoutCountLast7 = 1
   let daysSincePreviousWorkout: number | null = null
-  const seenWorkoutDates = new Set<string>([String(scheduledDate ?? '').slice(0, 10)])
+  // Issue #221: дедупликация по дате нужна только счётчикам сессий — плановая
+  // строка и выполненная сессия одного дня это одна тренировка, и считать её
+  // дважды нельзя. А вот упражнения надо брать из обоих источников: в зале
+  // упражнение могли заменить, тогда в выполненной сессии лежит id замены
+  // (`…-replacement-N`), а исходное есть только в плановой строке. Пока её
+  // выкидывали целиком, исходное упражнение не попадало в recent-штраф и
+  // выигрывало слот второй раз подряд (икры 08-04 → 08-07).
+  const scheduledDateKey = String(scheduledDate ?? '').slice(0, 10)
+  const countedWorkoutDates = new Set<string>([scheduledDateKey])
   for (const workout of previousGeneratedWorkouts ?? []) {
     const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
     const workoutDateKey = String(workout?.scheduledDate ?? '').slice(0, 10)
-    if (workoutDateKey && seenWorkoutDates.has(workoutDateKey)) continue
-    if (workoutDateKey) seenWorkoutDates.add(workoutDateKey)
-    if (Number.isFinite(daysSinceWorkout) && Math.abs(daysSinceWorkout) <= 6) {
+    // Сама планируемая сессия в свой же контекст не входит.
+    if (workoutDateKey && workoutDateKey === scheduledDateKey) continue
+    const dateAlreadyCounted = Boolean(workoutDateKey) && countedWorkoutDates.has(workoutDateKey)
+    if (workoutDateKey) countedWorkoutDates.add(workoutDateKey)
+    if (!dateAlreadyCounted && Number.isFinite(daysSinceWorkout) && Math.abs(daysSinceWorkout) <= 6) {
       calendarWorkoutCountLast7 += 1
     }
-    if (Number.isFinite(daysSinceWorkout) && daysSinceWorkout > 0 && daysSinceWorkout <= 7) {
+    if (!dateAlreadyCounted && Number.isFinite(daysSinceWorkout) && daysSinceWorkout > 0 && daysSinceWorkout <= 7) {
       previousWorkoutCountLast7 += 1
       daysSincePreviousWorkout = daysSincePreviousWorkout === null ? daysSinceWorkout : Math.min(daysSincePreviousWorkout, daysSinceWorkout)
     }
@@ -1162,7 +1172,7 @@ function buildWeeklyContext(
       const id = canonicalExerciseId(exercise)
       if (id) previousExerciseIds.add(id)
       if (id && Number.isFinite(daysSinceWorkout) && daysSinceWorkout > 0 && daysSinceWorkout <= 3) recentExerciseIds.add(id)
-      const muscleKey = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.exerciseName ?? exercise.name ?? ''}`)
+      const muscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')
       if (muscleKey !== 'other') previousMuscleCounts.set(muscleKey, (previousMuscleCounts.get(muscleKey) ?? 0) + 1)
       if (muscleKey !== 'other' && Number.isFinite(daysSinceWorkout) && daysSinceWorkout > 0 && daysSinceWorkout <= 3) {
         recentMuscleCounts.set(muscleKey, (recentMuscleCounts.get(muscleKey) ?? 0) + 1)
@@ -1295,7 +1305,7 @@ function buildMuscleRecencyDays(
     const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
     if (!Number.isFinite(daysSinceWorkout) || daysSinceWorkout <= 0) continue
     for (const exercise of workout?.exercises ?? []) {
-      const key = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.exerciseName ?? exercise.name ?? ''}`)
+      const key = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')
       if (key === 'other') continue
       const current = recencyDays.get(key)
       if (current === undefined || daysSinceWorkout < current) recencyDays.set(key, daysSinceWorkout)
@@ -1319,7 +1329,7 @@ function extractRecentMuscleKeys(
   if (!prev?.exercises?.length) return []
   const keys = new Set<string>()
   for (const exercise of prev.exercises) {
-    const key = normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.exerciseName ?? exercise.name ?? ''}`)
+    const key = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')
     if (key !== 'other') keys.add(key)
   }
   return [...keys]
@@ -1330,7 +1340,7 @@ function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): Norm
     id: canonicalExerciseId(exercise) ?? '',
     name: String(exercise.name ?? ''),
     muscleGroup: exercise.muscleGroup ?? exercise.muscle_group ?? '',
-    muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`),
+    muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.name ?? ''),
     setsCount: Number(exercise.setsCount ?? exercise.sets_count ?? 2),
     repMin: Number(exercise.repMin ?? exercise.rep_min ?? 8),
     repMax: Number(exercise.repMax ?? exercise.rep_max ?? 12),

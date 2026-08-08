@@ -103,6 +103,31 @@ export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey
   return 'other'
 }
 
+/**
+ * Issue #221: группа из справочника — источник истины, название только запасной
+ * вариант.
+ *
+ * Алиасы проверяются по порядку, поэтому в склейке «группа + название» общий
+ * глагол из названия перебивал точную группу: у «Французского жима лёжа»
+ * muscle_group = 'Руки · трицепс', но в строке «руки · трицепс французский жим
+ * лёжа» алиас 'жим' (грудь) стоит раньше 'трицеп' (руки) — упражнение
+ * оказывалось кандидатом на слот груди. Тем же порядком страдал «Присед со
+ * штангой на плечах» (группа 'Ноги', но 'плеч' в названии → shoulders).
+ *
+ * Порядок внутри MUSCLE_ALIASES не спасает: 'рук' встречается в названиях
+ * грудных упражнений («Разведения рук»), поэтому поднять arms выше chest
+ * нельзя — сломается уже грудь. Разбирать надо не порядок алиасов, а источник:
+ * если группа известна, название не спрашиваем.
+ */
+export function normalizeExerciseMuscleGroup(
+  muscleGroup: string | null | undefined,
+  exerciseName: string | null | undefined,
+): MuscleKey {
+  const fromMuscleGroup = normalizeMuscleGroup(muscleGroup)
+  if (fromMuscleGroup !== 'other') return fromMuscleGroup
+  return normalizeMuscleGroup(`${muscleGroup ?? ''} ${exerciseName ?? ''}`)
+}
+
 // `other` is included so labelFor('other') resolves server-side (the client
 // relies on the Record<string,string> fallback in labelFor instead).
 export const MUSCLE_LABELS: Record<MuscleKey, string> = {

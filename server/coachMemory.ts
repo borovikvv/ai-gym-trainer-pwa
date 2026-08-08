@@ -8,7 +8,7 @@ import type {
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { normalizeMuscleGroup, MUSCLE_LABELS, isAssistedExerciseName } from '../shared/muscleGroups.js'
+import { MUSCLE_LABELS, isAssistedExerciseName, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { completedSetsOf, daysBetween, clampNumber, roundNumber } from './lib/numeric.js'
 import { RECENTLY_TRAINED_DAYS } from './coachState.js'
@@ -277,7 +277,7 @@ function buildMuscleGroupProfiles({ library, history, now, profile, coachState }
     for (const loggedExercise of session.exercises ?? []) {
       const exerciseId = canonicalExerciseId(loggedExercise)
       const libraryExercise = library.find((item) => item.id === exerciseId)
-      const muscleKey = libraryExercise?.muscleKey ?? normalizeMuscleGroup(`${loggedExercise.muscleGroup ?? ''} ${loggedExercise.exerciseName ?? ''}`)
+      const muscleKey = libraryExercise?.muscleKey ?? normalizeExerciseMuscleGroup(loggedExercise.muscleGroup ?? '', loggedExercise.exerciseName ?? '')
       const profileEntry = profiles[muscleKey] ?? emptyMuscleProfile(muscleKey)
       const sets = completedSetsOf(loggedExercise)
       const hardSets = sets.filter((set) => Number(set.rpe) >= 9).length
@@ -309,7 +309,7 @@ function buildWeeklyBalance({ profile, history, library, now }: BuildWeeklyBalan
     for (const loggedExercise of session.exercises ?? []) {
       const exerciseId = canonicalExerciseId(loggedExercise)
       const libraryExercise = library.find((item) => item.id === exerciseId)
-      const muscleKey = libraryExercise?.muscleKey ?? normalizeMuscleGroup(`${loggedExercise.muscleGroup ?? ''} ${loggedExercise.exerciseName ?? ''}`)
+      const muscleKey = libraryExercise?.muscleKey ?? normalizeExerciseMuscleGroup(loggedExercise.muscleGroup ?? '', loggedExercise.exerciseName ?? '')
       muscleSetCounts[muscleKey] = (muscleSetCounts[muscleKey] ?? 0) + completedSetsOf(loggedExercise).length
     }
   }
@@ -397,7 +397,7 @@ function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): Norm
     id: canonicalExerciseId(exercise) ?? '',
     name: String(exercise.name ?? ''),
     muscleGroup: exercise.muscleGroup ?? exercise.muscle_group ?? '',
-    muscleKey: normalizeMuscleGroup(`${exercise.muscleGroup ?? exercise.muscle_group ?? ''} ${exercise.name ?? ''}`),
+    muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.name ?? ''),
     targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
     repMin: Number(exercise.repMin ?? exercise.rep_min ?? 8),
     repMax: Number(exercise.repMax ?? exercise.rep_max ?? 12),
