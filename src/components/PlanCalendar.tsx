@@ -239,10 +239,19 @@ export function PlanCalendar({
         <div className="plan-week-strip" role="group" aria-label="Дни недели для тренировок">
           {weekStrip.map((d) => {
             const selected = selectedWeekDates.includes(d.date)
-            const todayToggleable = d.state === 'today' && plannedWorkouts.some(
+            // Issue #230: убрать тренировку тапом можно было для 'today' (#204)
+            // и 'plan', но не для 'next' — ближайшей будущей. А это самый
+            // частый объект удаления (тренировка на завтра), и основной
+            // визуальный аффорданс для неё был мёртв: тап только показывал
+            // подпись. Условие теперь одно на все три состояния — день с живой
+            // запланированной тренировкой. 'done' остаётся нетоггабельным:
+            // пройденное из календаря не убирают.
+            const hasActivePlannedWorkout = plannedWorkouts.some(
               (w) => w.scheduledDate === d.date && w.status !== 'cancelled' && w.status !== 'completed',
             )
-            const toggleable = d.isFuture && (d.state === 'rest' || d.state === 'plan' || todayToggleable)
+            const plannedToggleable = (d.state === 'today' || d.state === 'next' || d.state === 'plan')
+              && hasActivePlannedWorkout
+            const toggleable = d.isFuture && (d.state === 'rest' || plannedToggleable)
             const noteFor = toggleable
               ? (selected
                   ? `Тренировка на ${d.formatted} отменена`

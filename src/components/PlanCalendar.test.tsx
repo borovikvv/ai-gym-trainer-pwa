@@ -246,3 +246,63 @@ describe('PlanCalendar', () => {
     expect(screen.getByRole('button', { name: /пт, 12\.06.*отдых/i })).toHaveAttribute('aria-pressed', 'false')
   })
 })
+
+// Issue #230: тап по дню убирал тренировку для состояний 'today' и 'plan', но
+// не для 'next' — ближайшей будущей. А это самый частый объект удаления
+// (тренировка на завтра), и основной визуальный аффорданс для неё был мёртв.
+describe('PlanCalendar — тап по ближайшей будущей тренировке (#230)', () => {
+  const today = '2026-06-08'
+
+  function renderStrip(plannedWorkouts: PlannedWorkout[], onToggleWeekDate: () => void) {
+    render(
+      <PlanCalendar
+        activeProfile={profile}
+        selectedWeekDates={plannedWorkouts.map((workout) => workout.scheduledDate)}
+        weekDateOptions={[
+          { label: 'Пн', date: today, formatted: 'пн, 08.06' },
+          { label: 'Вт', date: '2026-06-09', formatted: 'вт, 09.06' },
+        ]}
+        plannedWorkouts={plannedWorkouts}
+        userHistory={[]}
+        trainingCalendar={[]}
+        activeUserId="vyacheslav"
+        activeWorkoutDay={workoutDay('active', 'Активная')}
+        editingPlannedWorkoutId={null}
+        editingPlannedDate=""
+        coachState={null}
+        onToggleWeekDate={onToggleWeekDate}
+        onSelectWorkoutDay={vi.fn()}
+        onStartWorkout={vi.fn()}
+        onBeginEditPlannedDate={vi.fn()}
+        onSetEditingPlannedDate={vi.fn()}
+        onCancelEditPlannedDate={vi.fn()}
+        onSavePlannedWorkoutDate={vi.fn()}
+        onRegeneratePlannedWorkout={vi.fn()}
+        onCancelPlannedWorkout={vi.fn()}
+        onStartEditExercise={vi.fn()}
+        formatDateOnly={(date) => date}
+        formatWeight={String}
+        todayDateInputValue={() => today}
+      />,
+    )
+  }
+
+  it('тап по завтрашней тренировке убирает её из календаря', () => {
+    const onToggleWeekDate = vi.fn()
+    renderStrip([planned('planned-tomorrow', '2026-06-09')], onToggleWeekDate)
+
+    fireEvent.click(screen.getByRole('button', { name: /09\.06.*тренировка/i }))
+
+    expect(onToggleWeekDate).toHaveBeenCalledWith('2026-06-09')
+  })
+
+  it('пройденную тренировку тапом не убрать', () => {
+    const onToggleWeekDate = vi.fn()
+    const completed = { ...planned('planned-done', '2026-06-09'), status: 'completed' as const }
+    renderStrip([completed], onToggleWeekDate)
+
+    fireEvent.click(screen.getByRole('button', { name: /09\.06.*тренировка/i }))
+
+    expect(onToggleWeekDate).not.toHaveBeenCalled()
+  })
+})
