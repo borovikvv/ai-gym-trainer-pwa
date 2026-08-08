@@ -2356,3 +2356,48 @@ describe('planned workout generator — разгрузка и свежесть �
     expect(plan.exercises.every((exercise) => exercise.restSeconds <= 120)).toBe(true)
   })
 })
+
+// Issue #225: разрыв в один день уводил день в «Разгрузку» независимо от
+// расписания. При 4+ тренировках в неделю соседние дни неизбежны (в 7 днях 4
+// тренировки без соседней пары не расставить) — общий флаг разгружал день,
+// который по расписанию пользователя совершенно обычный. Что именно в нём не
+// восстановилось, решает усталость групп, а не календарь.
+describe('planned workout generator — разрыв в день и расписание (#225)', () => {
+  const readyState = {
+    recoveryStatus: 'ready',
+    readinessScore: 70,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+  const yesterday = [{
+    scheduledDate: '2026-06-09',
+    exercises: [
+      { exerciseId: 'lat-pulldown', exerciseName: 'Тяга верхнего блока', muscleGroup: 'Спина' },
+      { exerciseId: 'db-shoulder-press', exerciseName: 'Жим гантелей сидя', muscleGroup: 'Плечи' },
+    ],
+  }]
+  const planFor = (workoutsPerWeek) => buildGeneratedPlannedWorkout({
+    profile: { ...profile, workoutsPerWeek },
+    scheduledDate: '2026-06-10',
+    coachState: readyState,
+    exerciseLibrary,
+    history: [],
+    previousGeneratedWorkouts: yesterday,
+  })
+
+  it('при частом расписании соседний день не считается недовосстановлением', async () => {
+    expect((await planFor(5)).workoutDayName).toBe('Силовая')
+  })
+
+  it('при редком расписании соседний день по-прежнему разгрузочный', async () => {
+    expect((await planFor(3)).workoutDayName).toBe('Разгрузка')
+  })
+})
