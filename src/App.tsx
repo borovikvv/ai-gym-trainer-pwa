@@ -479,7 +479,7 @@ function App() {
     }}>
       <>
         <AppShell mode={screen === 'session' ? 'gym' : 'default'}>
-          {toast && <div className="toast show">{toast}</div>}
+          {toast && <div className="toast show" data-testid="toast">{toast}</div>}
 
           {screen === 'home' && (
             <CoachHomePage

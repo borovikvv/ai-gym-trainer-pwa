@@ -50,7 +50,7 @@ describe('Coach Timeline workout flow', () => {
     // questionnaire (the old direct "Профиль" button is gone).
     await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
-    expect(screen.getByText('Анкета пользователя')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Анкета пользователя' })).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toBeInTheDocument()
   })
 
@@ -76,7 +76,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByText(/57,5 кг/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
+    expect(screen.getByTestId('gym-active-day')).toHaveTextContent('День A')
     expect(screen.getByLabelText('Вес')).toHaveValue('57,5')
   })
 
@@ -105,8 +105,8 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
-    expect(screen.getByText('Жим лёжа')).toBeInTheDocument()
+    expect(screen.getByTestId('gym-active-day')).toHaveTextContent('День A')
+    expect(screen.getByRole('heading', { level: 2, name: 'Жим лёжа' })).toBeInTheDocument()
     expect(screen.queryByText(/RPE/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Норм — 3 в запасе' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Тяж — 1–2 в запасе' }))
@@ -116,20 +116,20 @@ describe('Coach Timeline workout flow', () => {
     await user.clear(firstSetReps)
     await user.type(firstSetReps, '10')
     await user.click(screen.getByRole('button', { name: 'Подход 1 выполнен' }))
-    expect(screen.getByText('Подход записан')).toBeInTheDocument()
+    expect(screen.getByTestId('toast')).toHaveTextContent('Подход записан')
     // Recorded set appears as a done chip "60×10" (weight×reps) above the logger
     expect(screen.getByText('60×10')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /пропустить упражнение/i }))
-    expect(screen.getByText('Сейчас · 2 из 5')).toBeInTheDocument()
-    expect(screen.getByText('Тяга верхнего блока')).toBeInTheDocument()
+    expect(screen.getByTestId('gym-progress-counter')).toHaveTextContent('2 из 5')
+    expect(screen.getByRole('heading', { level: 2, name: 'Тяга верхнего блока' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
-    expect(screen.getByText('Отличная работа')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Отличная работа' })).toBeInTheDocument()
     expect(screen.getByText(/сохранить и на главную/i)).toBeInTheDocument()
 
     await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: 'Прогресс' }))
-    expect(screen.getByText('Отличная работа')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Отличная работа' })).toBeInTheDocument()
     expect(screen.getByText(/Сначала сохрани тренировку/i)).toBeInTheDocument()
   })
 
@@ -138,17 +138,17 @@ describe('Coach Timeline workout flow', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: /выбрать день b/i }))
-    expect(screen.getByText(/Выбран День B/i)).toBeInTheDocument()
+    expect(screen.getByTestId('toast')).toHaveTextContent(/Выбран День B/i)
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('Вкладка «Зал» · День B')).toBeInTheDocument()
-    expect(screen.getByText('Присед со штангой')).toBeInTheDocument()
-    expect(screen.getByText('Сейчас · 1 из 4')).toBeInTheDocument()
+    expect(screen.getByTestId('gym-active-day')).toHaveTextContent('День B')
+    expect(screen.getByRole('heading', { level: 2, name: 'Присед со штангой' })).toBeInTheDocument()
+    expect(screen.getByTestId('gym-progress-counter')).toHaveTextContent('1 из 4')
 
     await user.click(screen.getByRole('button', { name: /пропустить упражнение/i }))
-    expect(screen.getByText('Румынская тяга')).toBeInTheDocument()
-    expect(screen.getByText('Сейчас · 2 из 4')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Румынская тяга' })).toBeInTheDocument()
+    expect(screen.getByTestId('gym-progress-counter')).toHaveTextContent('2 из 4')
   })
 
   it('opens a 3/4 exercise guide sheet when the current exercise name is tapped in the gym', async () => {
@@ -234,7 +234,7 @@ describe('Coach Timeline workout flow', () => {
     await user.type(reps, '8')
     await recordCurrentSet(user, 1)
 
-    expect(screen.getByText(/Черновик сохранён · \d{2}\.\d{2}, \d{2}:\d{2}/i)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/Черновик сохранён · \d{2}\.\d{2}, \d{2}:\d{2}/i)
     const rawDraft = window.localStorage.getItem('ai-gym-trainer:v0.1:active-draft')
     expect(rawDraft).toContain('bench-press')
     expect(rawDraft).toContain('52.5')
@@ -255,7 +255,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
+    expect(screen.getByTestId('gym-active-day')).toHaveTextContent('День A')
 
     // Закрыли приложение, не выполнив ни одного подхода (draft уже
     // сохранён — beginPreparedWorkout персистит его сразу при входе в session).
@@ -265,7 +265,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
 
     expect(screen.getByText('Перед тренировкой')).toBeInTheDocument()
-    expect(screen.queryByText('Вкладка «Зал» · День A')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('gym-active-day')).not.toBeInTheDocument()
     expect(window.localStorage.getItem('ai-gym-trainer:v0.1:active-draft')).toBeNull()
   })
 
@@ -355,7 +355,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /добавить упражнение/i }))
     await user.click(screen.getByRole('button', { name: /добавить жим лёжа/i }))
-    expect(screen.getByText('Сейчас · 1 из 5')).toBeInTheDocument()
+    expect(screen.getByTestId('gym-progress-counter')).toHaveTextContent('1 из 5')
   })
 
   it('shows a trainer suggestion for an exercise that can be added to the current workout', async () => {
@@ -367,8 +367,8 @@ describe('Coach Timeline workout flow', () => {
 
     expect(screen.getByText('Тренер предлагает добавить')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /добавить предложенное упражнение/i }))
-    expect(screen.getByText(/Добавлено упражнение/i)).toBeInTheDocument()
-    expect(screen.getByText('Сейчас · 1 из 6')).toBeInTheDocument()
+    expect(screen.getByTestId('toast')).toHaveTextContent(/Добавлено упражнение/i)
+    expect(screen.getByTestId('gym-progress-counter')).toHaveTextContent('1 из 6')
   })
 
   it('saves a finished workout locally, shows history, and applies next recommended weight after reload', async () => {
@@ -509,7 +509,7 @@ describe('Coach Timeline workout flow', () => {
     // questionnaire (was a direct "Профиль" button).
     await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
-    expect(screen.getByText('Анкета пользователя')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Анкета пользователя' })).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toHaveValue('3')
 
     await user.click(screen.getByRole('button', { name: '4×/нед' }))
@@ -556,7 +556,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.queryByRole('button', { name: /выбрать день c/i })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
     await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
-    expect(screen.getByText('Вкладка «Зал» · День A')).toBeInTheDocument()
+    expect(screen.getByTestId('gym-active-day')).toHaveTextContent('День A')
   })
 
   it('shows the plan as a coach calendar and recommends the next set during the workout', async () => {
@@ -619,7 +619,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /сохранить упражнение/i }))
 
-    expect(screen.getByText('Изменения программы сохранены')).toBeInTheDocument()
+    expect(screen.getByTestId('toast')).toHaveTextContent('Изменения программы сохранены')
     expect(screen.getByText(/4×6–8 · 62,5 кг/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Зал' }))
