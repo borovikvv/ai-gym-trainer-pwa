@@ -396,3 +396,57 @@ describe('recoveryStatus — окно предельных подходов (#22
     expect(state.recoveryStatus).toBe('low')
   })
 })
+
+// Issue #232: каталог для классификации усталости должен включать упражнения из
+// exercise_library, а не только из дней активной программы. Слот-филлер вне
+// программы (skull-crusher) не должен «перекрашиваться» в группу по названию:
+// «Французский жим лёжа» содержит алиас 'жим' (грудь) — без справочника грудь
+// получала чужую усталость и штрафы готовности.
+describe('Issue #232: упражнения вне программы классифицируются по exerciseLibrary', () => {
+  const noChestWorkoutDays = [
+    {
+      id: 'vyacheslav-program-day-a',
+      dayKey: 'day-a',
+      name: 'Full Body A',
+      exercises: [
+        { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'спина', targetWeight: 22.5, repMin: 8, repMax: 10 },
+        { id: 'plank', name: 'Планка', muscleGroup: 'кор', targetWeight: 0, repMin: 40, repMax: 60 },
+      ],
+    },
+  ]
+  const exerciseLibrary = [
+    { id: 'skull-crusher', name: 'Французский жим лёжа', muscleGroup: 'Руки · трицепс', targetWeight: 20, repMin: 8, repMax: 12 },
+  ]
+  const skullCrusherHistory = [
+    {
+      id: 'session-skull-crusher',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'Full Body A',
+      completedAt: '2026-08-08T18:00:00.000Z',
+      totalVolume: 400,
+      exercises: [{
+        exerciseId: 'skull-crusher',
+        exerciseName: 'Французский жим лёжа',
+        pain: false,
+        sets: [
+          { weight: 20, reps: 8, rpe: 10, completed: true },
+          { weight: 20, reps: 8, rpe: 10, completed: true },
+        ],
+      }],
+    },
+  ]
+
+  it('skull-crusher из справочника даёт усталость arms, а не chest', () => {
+    const state = computeCoachState({
+      profile,
+      workoutDays: noChestWorkoutDays,
+      exerciseLibrary,
+      history: skullCrusherHistory,
+      now: new Date('2026-08-09T18:00:00.000Z'),
+    })
+
+    expect(state.muscleGroups.chest).toBeUndefined()
+    expect(state.muscleGroups.arms).toMatchObject({ fatigue: 'high', recentMaxEffortSets: 2 })
+  })
+})

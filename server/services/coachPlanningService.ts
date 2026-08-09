@@ -93,6 +93,7 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
     history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],
     now: new Date(completedAt.getTime() + daysUntilNext * 86_400_000),
     lastWorkoutQualityScore: debriefQualityScore,
+    exerciseLibrary: exerciseLibrary as unknown as Parameters<typeof computeCoachState>[0]['exerciseLibrary'],
   })
 
   const rulesPlan = buildSafeCoachPlan({
