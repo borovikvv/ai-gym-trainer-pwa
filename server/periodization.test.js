@@ -58,9 +58,15 @@ describe('getPeriodizationAdjustment', () => {
   })
 
   it('falls back to 2.5 for invalid weightStep', () => {
-    expect(getPeriodizationAdjustment('intensification', 0).weightDelta).toBe(2.5)
     expect(getPeriodizationAdjustment('intensification', NaN).weightDelta).toBe(2.5)
     expect(getPeriodizationAdjustment('intensification', null).weightDelta).toBe(2.5)
+    expect(getPeriodizationAdjustment('intensification', undefined).weightDelta).toBe(2.5)
+  })
+
+  it('intensification: weightStep 0 (bodyweight) → no weight delta, rep delta stays', () => {
+    const adj = getPeriodizationAdjustment('intensification', 0)
+    expect(adj.weightDelta).toBe(0)
+    expect(adj.repMaxDelta).toBe(-1)
   })
 })
 
@@ -134,6 +140,23 @@ describe('applyPeriodization', () => {
       'intensification',
     )
     expect(result.targetWeight).toBe(2.5) // 0 + 2.5
+  })
+
+  it('intensification: bodyweight (weightStep 0, targetWeight 0) stays at 0', () => {
+    const result = applyPeriodization(
+      {
+        targetWeight: 0,
+        repMin: 8,
+        repMax: 10,
+        setsCount: 3,
+        intensityTarget: 'controlled',
+        weightStep: 0,
+      },
+      'intensification',
+    )
+    expect(result.targetWeight).toBe(0) // no invented +2.5 kg for bodyweight
+    expect(result.repMax).toBe(9)       // 10 - 1, rep range still drops
+    expect(result.periodizationNote).toContain('Интенсификация')
   })
 
   it('prevents repMin from going below 1', () => {
