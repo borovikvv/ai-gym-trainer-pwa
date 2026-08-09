@@ -4,8 +4,12 @@ name: Claude
 # Авторизация — OAuth-токен подписки (secrets.CLAUDE_CODE_OAUTH_TOKEN),
 # а не API-ключ: расходуется квота подписки, оплаты за токены нет.
 #
-# Метки, которые ставят эти джобы, порождают события от имени GitHub App,
-# а не от GITHUB_TOKEN, — поэтому следующее звено конвейера ими запускается.
+# Метки конвейера агент не ставит — их ставит отдельный шаг под PAT владельца.
+# Причина: claude-code-action перезаписывает GH_TOKEN своим App-токеном перед
+# запуском агента (src/entrypoints/run.ts), поэтому PAT из env до `gh` в
+# песочнице не доходит и метка выходит от claude[bot]. А метку от бота не
+# принимает исполнитель: экшен opencode безусловно сверяет права актора
+# события, и у GitHub App их нет. В обычном `run`-шаге подмены нет.
 
 on:
   issue_comment:
@@ -42,19 +46,39 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         env:
-          # Токен владельца, а не github.token: метку, поставленную ботом,
-          # исполнитель не примет — экшен opencode проверяет права актора
-          # события, а у GitHub App их нет. Заодно даёт `gh` доступ к issue,
-          # без которого ревью не с чем сверять дифф.
-          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
+          # Страховка на случай, если экшен перестанет выставлять токен сам:
+          # без GH_TOKEN `gh` в песочнице не авторизован и ревьюеру нечем
+          # прочитать план из issue. Пробросить сюда PAT владельца, чтобы
+          # метки шли от него, нельзя — экшен эту переменную перетирает.
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # 20 ходов хватало на дифф в одну строку, но не на PR с тестами.
           # Потолок против зацикливания держит timeout-minutes выше.
           claude_args: |
             --max-turns 40
-            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),Bash(gh pr edit:*)"
-            --append-system-prompt "Ты ревьюишь PR. Начни с диффа целиком (gh pr diff), а не с чтения файлов по одному. Проверь по порядку: (1) дифф соответствует плану из связанного issue, лишнего нет; (2) корректность — граничные случаи, а не только счастливый путь; (3) тесты: упал бы каждый новый тест, если откатить фикс? Если нет — он подогнан под текущее поведение, это changes-requested; (4) тесты не зависят от текста UI-элементов и хардкода дат — только data-testid, aria-label или роль; (5) уложился ли автор в потолок диффа из плана. Замечания давай конкретные, со ссылкой на файл и строку. В конце отдельной строкой вывод: ready-to-merge или changes-requested. Затем обязательно поставь этот вердикт меткой на PR: gh pr edit <номер> --add-label ready-to-merge (или --add-label changes-requested), и сними противоположную метку, если она висит. Метка запускает следующее звено конвейера — без неё вердикт остаётся текстом, который никто не подхватит."
+            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
+            --append-system-prompt "Ты ревьюишь PR. Начни с диффа целиком (gh pr diff), а не с чтения файлов по одному. Проверь по порядку: (1) дифф соответствует плану из связанного issue, лишнего нет; (2) корректность — граничные случаи, а не только счастливый путь; (3) тесты: упал бы каждый новый тест, если откатить фикс? Если нет — он подогнан под текущее поведение, это changes-requested; (4) тесты не зависят от текста UI-элементов и хардкода дат — только data-testid, aria-label или роль; (5) уложился ли автор в потолок диффа из плана. Замечания давай конкретные, со ссылкой на файл и строку. Последней строкой разбора выведи вердикт одним словом, без кавычек и пояснений: ready-to-merge или changes-requested. По этой строке метку проставит шаг воркфлоу — сам метки не ставь."
+
+      # Шаг под PAT владельца — см. шапку файла. Вердикт берётся из последнего
+      # упоминания в свежем комментарии, то есть из итоговой строки разбора:
+      # выше по тексту оба слова могут встречаться в рассуждениях.
+      - name: Проставить вердикт меткой
+        env:
+          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
+          PR: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          body=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments -q '.comments | last | .body')
+          verdict=$(printf '%s' "$body" | grep -oE 'ready-to-merge|changes-requested' | tail -1 || true)
+          if [ -z "$verdict" ]; then
+            echo "вердикта в последнем комментарии нет — метку не ставлю"
+            exit 0
+          fi
+          if [ "$verdict" = "ready-to-merge" ]; then opposite=changes-requested; else opposite=ready-to-merge; fi
+          echo "вердикт: $verdict"
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$opposite" || true
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label "$verdict"
 
   plan:
     # План пишет Claude — это первое звено конвейера. Метку ставит владелец,
@@ -76,9 +100,8 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         env:
-          # См. комментарий в джобе review: метка ready-for-code должна
-          # исходить от владельца, иначе исполнитель откажется работать.
-          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
+          # См. комментарий в джобе review.
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # На событие issues задачу брать неоткуда — комментария с обращением
@@ -108,11 +131,18 @@ jobs:
             Опубликуй план комментарием:
             `gh issue comment ${{ github.event.issue.number }} --body '<план>'`
 
-            После публикации переставь метки:
-            `gh issue edit ${{ github.event.issue.number }} --remove-label needs-plan --add-label ready-for-code`
-
-            Метка `ready-for-code` запускает исполнителя, поэтому ставь её последней
-            и только когда план уже опубликован.
+            Метки не трогай: их переставит шаг воркфлоу после тебя.
           claude_args: |
-            --max-turns 40
-            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*)"
+            --max-turns 100
+            --allowedTools "Glob,Grep,LS,Read,mcp__github_comment__update_claude_comment,Bash(gh issue view:*),Bash(gh issue comment:*)"
+
+      # Шаг под PAT владельца — см. шапку файла. Не выполняется, если экшен
+      # упал: метка ready-for-code не должна возникнуть без опубликованного
+      # плана, иначе исполнитель уйдёт работать в пустоту.
+      - name: Передать задачу исполнителю
+        env:
+          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
+        run: >-
+          gh issue edit ${{ github.event.issue.number }}
+          --repo ${{ github.repository }}
+          --remove-label needs-plan --add-label ready-for-code
