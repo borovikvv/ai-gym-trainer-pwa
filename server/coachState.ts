@@ -51,6 +51,16 @@ interface WorkoutDayInput {
   }>
 }
 
+interface LibraryExerciseInput {
+  id?: string
+  name?: string
+  muscleGroup?: string
+  targetWeight?: number
+  repMin?: number
+  repMax?: number
+  weightDirection?: string | null
+}
+
 interface E1rmHistoryInput {
   muscleGroup?: string | null
   exerciseName?: string | null
@@ -71,6 +81,7 @@ interface VolumeLandmarkOverridesInput {
 interface ComputeCoachStateInput {
   profile?: ProfileForCoachState
   workoutDays?: WorkoutDayInput[]
+  exerciseLibrary?: LibraryExerciseInput[] | null
   history?: WorkoutHistoryEntryInput[]
   now?: Date
   lastWorkoutQualityScore?: number | null
@@ -139,6 +150,7 @@ interface BuildExerciseStateInput {
 export function computeCoachState({
   profile = {},
   workoutDays = [],
+  exerciseLibrary = null,
   history = [],
   now = new Date(),
   lastWorkoutQualityScore = null,
@@ -167,7 +179,7 @@ export function computeCoachState({
   const weeklyLoadRatio = plannedWorkoutsPerWeek > 0 ? workoutsLast7Days / plannedWorkoutsPerWeek : 0
   const weeklyLoadStatus = weeklyLoadRatio >= 1.35 ? 'above_plan' : weeklyLoadRatio >= 0.75 ? 'on_plan' : 'below_plan'
 
-  const exerciseCatalog = buildExerciseCatalog(workoutDays)
+  const exerciseCatalog = buildExerciseCatalog(workoutDays, exerciseLibrary ?? [])
   const muscleGroups = buildMuscleGroupState({ history: normalizedHistory, exerciseCatalog, now: nowDate })
   const exercises = buildExerciseState({ history: normalizedHistory, exerciseCatalog })
   const highFatigueGroups = Object.values(muscleGroups).filter((group) => group?.fatigue === 'high').length
@@ -250,8 +262,26 @@ export function computeCoachState({
   }
 }
 
-function buildExerciseCatalog(workoutDays: WorkoutDayInput[]): Map<string, CatalogItem> {
+// Issue #232: каталог для классификации усталости строим не только из дней
+// активной программы, но и из exercise_library. Упражнение, которое генератор
+// взял вне программы (слот-филлер вроде skull-crusher), в workoutDays не
+// попадает, и фолбэк buildMuscleGroupState уходил в normalizeExerciseMuscleGroup
+// по названию — «Французский жим лёжа» матчился по алиасу 'жим' (chest). Сначала
+// заполняем каталог из справочника (мускульная классификация — источник истины,
+// issue #221), затем ПОВЕРХ идут дни программы: записи из workoutDays перетирают
+// библиотечные тем же ключом id, сохраняя веса/диапазоны программы.
+function buildExerciseCatalog(workoutDays: WorkoutDayInput[], exerciseLibrary: LibraryExerciseInput[] = []): Map<string, CatalogItem> {
   const catalog = new Map<string, CatalogItem>()
+  for (const exercise of exerciseLibrary ?? []) {
+    const id = canonicalExerciseId(exercise)
+    if (!id) continue
+    catalog.set(id, {
+      ...exercise,
+      id,
+      canonicalExerciseId: id,
+      muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? ''),
+    } as CatalogItem)
+  }
   for (const day of workoutDays ?? []) {
     for (const exercise of day.exercises ?? []) {
       const id = canonicalExerciseId(exercise)

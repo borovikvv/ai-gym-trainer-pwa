@@ -399,6 +399,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   // First pass: coachState without coachMemory (mesocycle MRV triggers unavailable).
   const coachStatePass1 = computeCoachState({
     profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, now,
+    exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"],
     volumeLandmarkOverrides, e1rmHistories,
   })
   const coachMemory = computeCoachMemory({
@@ -412,6 +413,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   // Second pass: coachState WITH coachMemory — mesocycle MRV triggers now work.
   const coachState = computeCoachState({
     profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, coachMemory, now,
+    exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"],
     volumeLandmarkOverrides, e1rmHistories,
   })
   // Persist any non-hold adjustment decisions to volume_landmark_overrides.
