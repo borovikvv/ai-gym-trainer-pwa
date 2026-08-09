@@ -155,8 +155,8 @@ export function GymScreen({
         </div>
         <span className="session-top-bar__counter">{activeExerciseIndex + 1} / {totalExercises}</span>
       </div>
-      <span className="sr-only">Вкладка «Зал» · {activeWorkoutDay.name}</span>
-      <span className="sr-only">Сейчас · {activeExerciseIndex + 1} из {totalExercises}</span>
+      <span className="sr-only" data-testid="gym-active-day">Вкладка «Зал» · {activeWorkoutDay.name}</span>
+      <span className="sr-only" data-testid="gym-progress-counter">Сейчас · {activeExerciseIndex + 1} из {totalExercises}</span>
 
       {/* Issue #122: exercise header */}
       <div className="gym-exercise-head">
