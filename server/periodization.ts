@@ -52,12 +52,21 @@ export interface PeriodizationAdjustment {
  *   intensification weight delta flips sign.
  * @returns PeriodizationAdjustment (deltas, all 0 for idle/deload)
  */
+// Issue #233: 0 — валидный шаг веса для bodyweight-упражнений («прогрессии
+// веса нет»), а не «шаг не задан». Только NaN/null/undefined уходят в
+// дефолтный шаг 2.5 кг.
+function resolveWeightStep(weightStep: number | null | undefined): number {
+  if (weightStep === null || weightStep === undefined) return 2.5
+  const n = Number(weightStep)
+  return Number.isFinite(n) ? Math.max(0, n) : 2.5
+}
+
 export function getPeriodizationAdjustment(
   phase: string | null | undefined,
   weightStep: number,
   weightDirection: WeightDirection = 'load',
 ): PeriodizationAdjustment {
-  const step = Math.max(0, Number(weightStep) || 2.5)
+  const step = resolveWeightStep(weightStep)
 
   switch (phase) {
     case 'loading':
