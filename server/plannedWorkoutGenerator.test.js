@@ -369,6 +369,69 @@ describe('planned workout generator', () => {
     expect(second.exercises.some((exercise) => exercise.reason.includes('разнообраз'))).toBe(true)
   })
 
+  // Issue #239: preferred_exercises должен перевешивать штраф повтора обычного
+  // окна ротации (previousExerciseIds, ≤7 дней — 6 дней это нормальный перерыв
+  // между тренировками группы), но не «свежий повтор» (recentExerciseIds, ≤3 дня).
+  it('Issue #239: preferred exercise wins over the rotation penalty but not over a fresh repeat', async () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 82,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' },
+        back: { fatigue: 'low' },
+        legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' },
+        arms: { fatigue: 'low' },
+        core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    const chestLibrary = [
+      ...exerciseLibrary,
+      { id: 'incline-db-press', name: 'Жим гантелей на наклонной', muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 14, weightStep: 2, restSeconds: 90 },
+    ]
+    const preferenceProfile = {
+      ...profile,
+      preferredExercises: ['Жим лёжа'],
+      preferences: {
+        focusAreas: ['грудь', 'спина'],
+        exerciseStyle: 'mixed',
+        intensityTolerance: 'normal',
+        sessionStyle: 'moderate_stable',
+      },
+    }
+    const chestSlot = (plan) => plan.exercises.find((exercise) => exercise.muscleGroup === 'Грудь')?.exerciseId
+
+    // Сценарий A: жим лёжа тренировался 6 дней назад (окно ротации, не свежий
+    // повтор) — предпочтение перевешивает штраф, слот груди занимает bench-press.
+    const sixDaysAgo = await buildGeneratedPlannedWorkout({
+      profile: preferenceProfile,
+      scheduledDate: '2026-06-07',
+      coachState,
+      exerciseLibrary: chestLibrary,
+      history: [{
+        completedAt: '2026-06-01T20:00:00.000Z',
+        exercises: [{ exerciseId: 'bench-press', nextRecommendedWeight: 52.5, sets: [{ completed: true, weight: 50, reps: 8, rpe: 7 }] }],
+      }],
+    })
+    expect(chestSlot(sixDaysAgo)).toBe('bench-press')
+
+    // Сценарий B: жим лёжа тренировался 2 дня назад (свежий повтор) — предпочтение
+    // не перебивает штраф свежести, слот груди занимает incline-db-press.
+    const twoDaysAgo = await buildGeneratedPlannedWorkout({
+      profile: preferenceProfile,
+      scheduledDate: '2026-06-07',
+      coachState,
+      exerciseLibrary: chestLibrary,
+      history: [{
+        completedAt: '2026-06-05T20:00:00.000Z',
+        exercises: [{ exerciseId: 'bench-press', nextRecommendedWeight: 52.5, sets: [{ completed: true, weight: 50, reps: 8, rpe: 7 }] }],
+      }],
+    })
+    expect(chestSlot(twoDaysAgo)).toBe('incline-db-press')
+  })
+
   it('avoids repeating the exact completed workout two days later when alternatives exist', async () => {
     const coachState = {
       recoveryStatus: 'partial',
