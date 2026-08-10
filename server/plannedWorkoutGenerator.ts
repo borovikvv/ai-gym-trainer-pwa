@@ -1128,13 +1128,18 @@ function exerciseScore(
   if (coachDecision?.priorityMuscleGroups?.includes(exercise.muscleKey)) score += 18
   if (coachDecision?.exercisePolicies?.[exercise.id] === 'progress_possible') score += 8
   if (coachDecision?.exercisePolicies?.[exercise.id] === 'consolidate') score += 4
-  if (preferences.preferredExerciseNames?.some((name) => matchesExercisePreference(exercise, name))) score += 20
+  const isPreferredExercise = preferences.preferredExerciseNames?.some((name) => matchesExercisePreference(exercise, name)) ?? false
+  if (isPreferredExercise) score += 20
   if (preferences.exerciseStyle === 'machines' && isMachineLike(exercise)) score += 10
   if (preferences.exerciseStyle === 'free_weights' && isFreeWeightLike(exercise)) score += 10
   if (preferences.exerciseStyle === 'bodyweight' && exercise.targetWeight === 0) score += 12
   if (isRecoveryRestricted(exercise.muscleKey, weeklyContext)) score -= 9000
   if (weeklyContext.recentExerciseIds?.has(exercise.id)) score -= 120
-  if (weeklyContext.previousExerciseIds?.has(exercise.id)) score -= 34
+  // Issue #239: предпочтение перевешивает обычную ротацию (previousExerciseIds —
+  // окно до 7 дней, 6 дней это нормальный перерыв между тренировками группы),
+  // но не «свежий повтор» (recentExerciseIds, ≤3 дня): тренировался позавчера —
+  // предпочтение проигрывает альтернативе.
+  if (weeklyContext.previousExerciseIds?.has(exercise.id)) score -= isPreferredExercise ? 10 : 34
   const previousMuscleCount = weeklyContext.previousMuscleCounts?.get(exercise.muscleKey) ?? 0
   if (previousMuscleCount > 1 && !preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score -= 6
   const recentMuscleCount = weeklyContext.recentMuscleCounts?.get(exercise.muscleKey) ?? 0
