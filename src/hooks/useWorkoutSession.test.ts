@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { createSets, useWorkoutSetActions } from './useWorkoutSession'
-import type { ExercisePlan } from '../../shared/types'
+import { createSets, useWorkoutNavigation, useWorkoutSetActions } from './useWorkoutSession'
+import type { ExercisePlan, WorkoutDay } from '../../shared/types'
 
 const bench: ExercisePlan = {
   id: 'bench-press',
@@ -61,5 +61,109 @@ describe('markSetDone — таймстемп подхода (#165)', () => {
 
     const nextLogs = setLogs.mock.calls[0][0]
     expect(nextLogs[bench.id].sets[1].performedAt).toBeUndefined()
+  })
+})
+
+// Issue #242, п.3: первый подход жима лёжа предзаполнялся 10 повторами для
+// всех пользователей — хардкод по id упражнения в createSets.
+describe('createSets — без предзаполнения повторов (#242)', () => {
+  it('не подставляет повторы первому подходу жима лёжа', () => {
+    const sets = createSets(bench)
+    expect(sets[0].reps).toBe(0)
+    expect(sets[0].repsInput).toBe('')
+  })
+
+  it('одинаково пуст для любого упражнения', () => {
+    const other = { ...bench, id: 'squat' }
+    expect(createSets(other).map((set) => set.repsInput)).toEqual(createSets(bench).map((set) => set.repsInput))
+  })
+
+  it('вес по-прежнему предзаполняется', () => {
+    const sets = createSets(bench)
+    expect(sets).toHaveLength(bench.setsCount)
+    expect(sets.every((set) => set.weight === bench.targetWeight)).toBe(true)
+  })
+})
+
+// Issue #242, п.2: replaceNextExerciseInCurrentWorkout не удалял лог
+// заменяемого упражнения — в черновике оставались оба, и при повторном
+// добавлении того же упражнения всплывали старые подходы.
+describe('replaceNextExerciseInCurrentWorkout — лог старого упражнения (#242)', () => {
+  const nextUp: ExercisePlan = { ...bench, id: 'incline-dumbbell-press', name: 'Жим гантелей на наклонной' }
+  const workoutDay = {
+    id: 'day-1',
+    name: 'День 1',
+    label: '',
+    description: '',
+    exercises: [bench, nextUp],
+  } as WorkoutDay
+
+  function makeNavigationOptions(setLogs: ReturnType<typeof vi.fn>, persistWorkoutDraft: ReturnType<typeof vi.fn>) {
+    return {
+      activeWorkoutDay: workoutDay,
+      activeWorkoutDayBase: workoutDay,
+      activeExerciseIndex: 0,
+      logs: {},
+      nextExercise: nextUp,
+      nextTargets: {},
+      draftStatus: '',
+      hasActiveDraft: true,
+      previewWorkoutDay: workoutDay,
+      manualWorkoutDaySelected: false,
+      nextPlannedWorkout: undefined,
+      trainingCalendar: [],
+      extraExercisesByDay: {},
+      setManualWorkoutDaySelected: vi.fn(),
+      setActiveSessionWorkoutDay: vi.fn(),
+      setWorkoutReadinessMode: vi.fn(),
+      setActiveWorkoutDayId: vi.fn(),
+      setActiveExerciseIndex: vi.fn(),
+      setRestRemainingSeconds: vi.fn(),
+      setCoachNextSetHint: vi.fn(),
+      setExerciseGuideOpen: vi.fn(),
+      setExtraExercisesByDay: vi.fn(),
+      setExercisePickerOpen: vi.fn(),
+      setLogs,
+      createExerciseLog: (exercise: ExercisePlan) => ({ exerciseId: exercise.id, pain: false, sets: createSets(exercise) }),
+      persistWorkoutDraft,
+      navigate: vi.fn(),
+      notify: vi.fn(),
+      clearActiveWorkoutDraft: vi.fn(),
+    } as unknown as Parameters<typeof useWorkoutNavigation>[0]
+  }
+
+  it('удаляет лог заменяемого упражнения и заводит лог замены', () => {
+    const setLogs = vi.fn()
+    const persistWorkoutDraft = vi.fn()
+    const { result } = renderHook(() => useWorkoutNavigation(makeNavigationOptions(setLogs, persistWorkoutDraft)))
+
+    act(() => {
+      result.current.replaceNextExerciseInCurrentWorkout({ ...bench, id: 'cable-fly', name: 'Сведе́ния' })
+    })
+
+    const reducer = setLogs.mock.calls[0][0] as (current: Record<string, unknown>) => Record<string, unknown>
+    const nextLogs = reducer({ [bench.id]: { exerciseId: bench.id, pain: false, sets: [] }, [nextUp.id]: { exerciseId: nextUp.id, pain: false, sets: [] } })
+
+    expect(nextLogs[nextUp.id]).toBeUndefined()
+    expect(nextLogs[bench.id]).toBeDefined()
+    expect(Object.keys(nextLogs).some((id) => id.startsWith('cable-fly-replacement-'))).toBe(true)
+  })
+
+  it('передаёт новый состав дня в черновик', () => {
+    const setLogs = vi.fn()
+    const persistWorkoutDraft = vi.fn()
+    const { result } = renderHook(() => useWorkoutNavigation(makeNavigationOptions(setLogs, persistWorkoutDraft)))
+
+    act(() => {
+      result.current.replaceNextExerciseInCurrentWorkout({ ...bench, id: 'cable-fly', name: 'Сведе́ния' })
+    })
+
+    const reducer = setLogs.mock.calls[0][0] as (current: Record<string, unknown>) => Record<string, unknown>
+    reducer({})
+
+    const sessionExercises = persistWorkoutDraft.mock.calls[0][2] as ExercisePlan[]
+    expect(sessionExercises).toHaveLength(2)
+    expect(sessionExercises[0].id).toBe(bench.id)
+    expect(sessionExercises[1].id).toMatch(/^cable-fly-replacement-/)
   })
 })

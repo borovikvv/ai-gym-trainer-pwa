@@ -9,12 +9,15 @@ import type { NextSetHint, SetDraft } from '../components/gymTypes'
 import { formatWeight } from '../lib/format'
 import { requestNotificationPermissionOnce } from './useRestTimer'
 
+// Issue #242: повторы не предзаполняются. Раньше первый подход жима лёжа
+// получал 10 повторов по хардкоду `exercise.id === 'bench-press'` — у всех
+// пользователей, без ввода, и уезжал в историю как выполненная работа.
 export const createSets = (exercise: ExercisePlan, targetWeight = exercise.targetWeight): SetDraft[] =>
-  Array.from({ length: exercise.setsCount }, (_, index) => ({
+  Array.from({ length: exercise.setsCount }, () => ({
     weight: targetWeight,
     weightInput: formatWeight(targetWeight),
-    reps: index === 0 && exercise.id === 'bench-press' ? 10 : 0,
-    repsInput: index === 0 && exercise.id === 'bench-press' ? '10' : '',
+    reps: 0,
+    repsInput: '',
     rpe: 7,
     completed: false,
   }))
@@ -345,7 +348,7 @@ type UseWorkoutNavigationOptions = {
   setExercisePickerOpen: Dispatch<SetStateAction<boolean>>
         setLogs: Dispatch<SetStateAction<Record<string, ExerciseLog>>>
         createExerciseLog: (exercise: ExercisePlan) => ExerciseLog
-  persistWorkoutDraft: (nextLogs: Record<string, ExerciseLog>, nextExerciseIndex?: number) => void
+  persistWorkoutDraft: (nextLogs: Record<string, ExerciseLog>, nextExerciseIndex?: number, nextSessionExercises?: ExercisePlan[]) => void
         navigate: (screen: NavigationScreen) => void
         notify: (message: string) => void
         clearActiveWorkoutDraft: () => void
@@ -421,7 +424,9 @@ export function useWorkoutNavigation({
     setCoachNextSetHint(null)
     const initialLogs = createInitialLogs(previewWorkoutDay, nextTargets)
     setLogs(initialLogs)
-    persistWorkoutDraft(initialLogs, 0)
+    // Issue #242: день сессии — это previewWorkoutDay (адаптированный под
+    // готовность), а не тот, что в замыкании рендера.
+    persistWorkoutDraft(initialLogs, 0, previewWorkoutDay.exercises)
     navigate('session')
   }
 
@@ -441,13 +446,17 @@ export function useWorkoutNavigation({
     // instead of appending to the end. This way the user doesn't have to scroll
     // past the core finisher to find the exercise they just added.
     const insertIndex = activeExerciseIndex + 1
-    setActiveSessionWorkoutDay((current) => current && current.id === activeWorkoutDay.id
-      ? { ...current, exercises: current.exercises.toSpliced(insertIndex, 0, extraExercise) }
-      : current,
-    )
+    const nextSessionExercises = activeWorkoutDay.exercises.toSpliced(insertIndex, 0, extraExercise)
+    // Issue #242: если день сессии ещё не заведён (например, сессия только что
+    // восстановлена из черновика), берём за основу текущий активный день —
+    // иначе добавленное упражнение не попало бы в состав сессии вовсе.
+    setActiveSessionWorkoutDay((current) => ({
+      ...(current && current.id === activeWorkoutDay.id ? current : activeWorkoutDay),
+      exercises: nextSessionExercises,
+    }))
     setLogs((current) => {
       const nextLogs = { ...current, [extraExercise.id]: createExerciseLog(extraExercise) }
-      persistWorkoutDraft(nextLogs)
+      persistWorkoutDraft(nextLogs, activeExerciseIndex, nextSessionExercises)
       return nextLogs
     })
     setExercisePickerOpen(false)
@@ -463,6 +472,7 @@ export function useWorkoutNavigation({
               todayGoal: exercise.todayGoal || `${exercise.repMin}–${exercise.repMax}`,
             }
             const currentExercise = activeWorkoutDay.exercises[activeExerciseIndex]
+            const nextSessionExercises = activeWorkoutDay.exercises.map((item, index) => index === activeExerciseIndex ? replacementExercise : item)
             setActiveSessionWorkoutDay((current) => {
               const sessionDay = current && current.id === activeWorkoutDay.id ? current : activeWorkoutDay
               return {
@@ -473,7 +483,7 @@ export function useWorkoutNavigation({
             setLogs((current) => {
               const { [currentExercise?.id ?? '']: _removed, ...rest } = current
               const nextLogs = { ...rest, [replacementExercise.id]: createExerciseLog(replacementExercise) }
-              persistWorkoutDraft(nextLogs)
+              persistWorkoutDraft(nextLogs, activeExerciseIndex, nextSessionExercises)
               return nextLogs
             })
             setExercisePickerOpen(false)
@@ -493,7 +503,7 @@ export function useWorkoutNavigation({
             })
             setLogs((current) => {
               const { [removedExercise.id]: _removed, ...rest } = current
-              persistWorkoutDraft(rest, Math.min(activeExerciseIndex, nextExercises.length - 1))
+              persistWorkoutDraft(rest, Math.min(activeExerciseIndex, nextExercises.length - 1), nextExercises)
               return rest
             })
             setActiveExerciseIndex((index) => Math.min(index, nextExercises.length - 1))
@@ -511,16 +521,22 @@ export function useWorkoutNavigation({
       todayGoal: exercise.todayGoal || `${exercise.repMin}–${exercise.repMax}`,
     }
     const replaceIndex = activeExerciseIndex + 1
-    setActiveSessionWorkoutDay((current) => {
-      if (!current || current.id !== activeWorkoutDay.id || replaceIndex >= current.exercises.length) return current
-      return {
-        ...current,
-        exercises: current.exercises.map((item, index) => index === replaceIndex ? replacementExercise : item),
-      }
-    })
+    const replacedExercise = activeWorkoutDay.exercises[replaceIndex]
+    // Заменять нечего — выходим до создания лога, иначе он остался бы
+    // сиротским: упражнения с таким id в дне нет (issue #242).
+    if (!replacedExercise) return
+    const nextSessionExercises = activeWorkoutDay.exercises.map((item, index) => index === replaceIndex ? replacementExercise : item)
+    setActiveSessionWorkoutDay((current) => ({
+      ...(current && current.id === activeWorkoutDay.id ? current : activeWorkoutDay),
+      exercises: nextSessionExercises,
+    }))
     setLogs((current) => {
-      const nextLogs = { ...current, [replacementExercise.id]: createExerciseLog(replacementExercise) }
-      persistWorkoutDraft(nextLogs)
+      // Issue #242: лог заменённого упражнения удаляется вместе с ним. Иначе
+      // в черновике оставались оба, и при повторном добавлении того же
+      // упражнения всплывали старые подходы.
+      const { [replacedExercise.id]: _removed, ...rest } = current
+      const nextLogs = { ...rest, [replacementExercise.id]: createExerciseLog(replacementExercise) }
+      persistWorkoutDraft(nextLogs, activeExerciseIndex, nextSessionExercises)
       return nextLogs
     })
     notify(`Следующее упражнение заменено: ${exercise.name}`)
