@@ -24,6 +24,9 @@
  *     - +1 weightStep on targetWeight (heavier)
  *     - -1 rep on repMax (fewer reps at higher weight)
  *     - Focus: peak strength
+ *     - Bodyweight exercises (weightStep 0, issue #241) are the exception:
+ *       weight cannot go up, so cutting reps would only mean LESS work at the
+ *       same load. They progress by volume instead — +2 reps on repMax.
  *
  * These are SMALL adjustments (±1 rep, ±1 step) — not drastic. The goal
  * is to give each week a distinct character without breaking the
@@ -67,6 +70,9 @@ export function getPeriodizationAdjustment(
   weightDirection: WeightDirection = 'load',
 ): PeriodizationAdjustment {
   const step = resolveWeightStep(weightStep)
+  // Issue #241: шаг 0 — единственный признак «вес добавить нельзя» (упражнения
+  // с собственным весом). Невалидный шаг уже ушёл в дефолтные 2.5 кг выше.
+  const isBodyweight = step === 0
 
   switch (phase) {
     case 'loading':
@@ -90,6 +96,20 @@ export function getPeriodizationAdjustment(
       }
 
     case 'intensification':
+      // Issue #241: для bodyweight (шаг веса 0) вес добавить нельзя, поэтому
+      // рецепт «тяжелее весом, меньше повторов» вырождается в «меньше работы
+      // при той же нагрузке». Прогрессируем повторами вместо веса.
+      if (isBodyweight) {
+        return {
+          weightDelta: 0,
+          repMinDelta: 0,
+          repMaxDelta: 2,     // +2 reps on the maximum → progressive overload by volume
+          setsCountDelta: 0,
+          intensityShift: 'harder',
+          focusNote: 'Интенсификация: вес собственный — добавляем 2 повтора к верху диапазона.',
+        }
+      }
+
       // Issue #173: «тяжелее» для гравитрона = МЕНЬШЕ помощи (дельта со знаком минус).
       return {
         weightDelta: weightDirection === 'assistance' ? -step : step,

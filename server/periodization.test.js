@@ -63,10 +63,36 @@ describe('getPeriodizationAdjustment', () => {
     expect(getPeriodizationAdjustment('intensification', undefined).weightDelta).toBe(2.5)
   })
 
-  it('intensification: weightStep 0 (bodyweight) → no weight delta, rep delta stays', () => {
+  // Issue #241: для bodyweight «тяжелее весом» невозможно, поэтому
+  // интенсификация выражается ростом повторов, а не их урезанием.
+  it('intensification: weightStep 0 (bodyweight) → no weight delta, +2 reps on maximum', () => {
     const adj = getPeriodizationAdjustment('intensification', 0)
     expect(adj.weightDelta).toBe(0)
-    expect(adj.repMaxDelta).toBe(-1)
+    expect(adj.repMinDelta).toBe(0)
+    expect(adj.repMaxDelta).toBe(2)
+    expect(adj.intensityShift).toBe('harder')
+  })
+
+  it('intensification: bodyweight focus note never mentions a weight increase', () => {
+    const adj = getPeriodizationAdjustment('intensification', 0)
+    expect(adj.focusNote).toContain('Интенсификация')
+    expect(adj.focusNote).not.toContain('0 кг')
+    expect(adj.focusNote).not.toContain('повышаем вес')
+  })
+
+  it('intensification: bodyweight rule applies to assistance direction too', () => {
+    const adj = getPeriodizationAdjustment('intensification', 0, 'assistance')
+    expect(adj.weightDelta).toBe(0)
+    expect(adj.repMaxDelta).toBe(2)
+    expect(adj.focusNote).not.toContain('0 кг')
+  })
+
+  it('intensification: weighted exercises keep the -1 rep rule (regression)', () => {
+    expect(getPeriodizationAdjustment('intensification', 2.5).repMaxDelta).toBe(-1)
+    expect(getPeriodizationAdjustment('intensification', 1).repMaxDelta).toBe(-1)
+    // Invalid step falls back to 2.5 → weighted branch, not bodyweight.
+    expect(getPeriodizationAdjustment('intensification', null).repMaxDelta).toBe(-1)
+    expect(getPeriodizationAdjustment('intensification', NaN).repMaxDelta).toBe(-1)
   })
 })
 
@@ -142,7 +168,7 @@ describe('applyPeriodization', () => {
     expect(result.targetWeight).toBe(2.5) // 0 + 2.5
   })
 
-  it('intensification: bodyweight (weightStep 0, targetWeight 0) stays at 0', () => {
+  it('intensification: bodyweight (weightStep 0, targetWeight 0) stays at 0 and gains reps', () => {
     const result = applyPeriodization(
       {
         targetWeight: 0,
@@ -155,8 +181,28 @@ describe('applyPeriodization', () => {
       'intensification',
     )
     expect(result.targetWeight).toBe(0) // no invented +2.5 kg for bodyweight
-    expect(result.repMax).toBe(9)       // 10 - 1, rep range still drops
+    expect(result.repMax).toBe(12)      // issue #241: 10 + 2, rep range grows
+    expect(result.repMin).toBe(8)       // unchanged
     expect(result.periodizationNote).toContain('Интенсификация')
+    expect(result.periodizationNote).not.toContain('0 кг')
+  })
+
+  // Issue #241: «Подъём коленей в упоре» — дефолт 8-15, вес собственный.
+  // До фикса выдавалось 8-14 и «повышаем вес на 0 кг».
+  it('intensification: bodyweight exercise never drops below its library rep range', () => {
+    const libraryRepMax = 15
+    const result = applyPeriodization(
+      {
+        targetWeight: 0,
+        repMin: 8,
+        repMax: libraryRepMax,
+        setsCount: 3,
+        intensityTarget: 'controlled',
+        weightStep: 0,
+      },
+      'intensification',
+    )
+    expect(result.repMax).toBeGreaterThanOrEqual(libraryRepMax)
   })
 
   it('prevents repMin from going below 1', () => {
