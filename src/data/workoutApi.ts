@@ -1,3 +1,4 @@
+import type { ExercisePlan } from '../../shared/types'
 import type { ExerciseLog, WorkoutHistoryEntry } from '../domain/workoutHistory'
 import type { WorkoutDebrief } from '../domain/workoutDebrief'
 import { mapSupabaseWorkoutRows, type SupabaseWorkoutRow } from './workoutRepository'
@@ -12,6 +13,10 @@ export type WorkoutDraftPayload = {
   workoutDayId: string
   activeExerciseIndex: number
   logs: Record<string, ExerciseLog>
+  // Issue #242: состав дня сессии (extra/replacement упражнения). Сервер
+  // хранит черновик целиком в payload jsonb и разворачивает его при чтении,
+  // поэтому поле доезжает без миграции и правок API.
+  exercises?: ExercisePlan[]
   savedAt: string
 }
 

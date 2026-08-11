@@ -28,6 +28,8 @@ type UseActiveWorkoutContextOptions = {
   coachTodayWorkoutDay: WorkoutDay | null
   extraExercisesByDay: Record<string, ExercisePlan[]>
   activeSessionWorkoutDay: WorkoutDay | null
+  // Issue #242: состав дня из восстановленного черновика.
+  draftSessionExercises?: { workoutDayId: string; exercises: ExercisePlan[] } | null
   activeExerciseIndex: number
   logs: Record<string, ExerciseLog>
 }
@@ -42,6 +44,7 @@ export function useActiveWorkoutContext({
   coachTodayWorkoutDay,
   extraExercisesByDay,
   activeSessionWorkoutDay,
+  draftSessionExercises,
   activeExerciseIndex,
   logs,
 }: UseActiveWorkoutContextOptions) {
@@ -83,7 +86,14 @@ export function useActiveWorkoutContext({
     }),
     [baseActiveWorkoutDay, extraExercisesByDay],
   )
-  const activeWorkoutDay = activeSessionWorkoutDay ?? activeWorkoutDayBase
+  // Issue #242: пока пользователь не менял состав в этой сессии
+  // (activeSessionWorkoutDay ещё null), день берётся из черновика — иначе
+  // добавленные и заменённые упражнения исчезали после перезагрузки, а
+  // выполненные на них подходы молча терялись при сохранении.
+  const restoredSessionWorkoutDay = draftSessionExercises?.workoutDayId === baseActiveWorkoutDay.id
+    ? { ...activeWorkoutDayBase, exercises: draftSessionExercises.exercises }
+    : null
+  const activeWorkoutDay = activeSessionWorkoutDay ?? restoredSessionWorkoutDay ?? activeWorkoutDayBase
   const workoutDays = userWorkoutDays
 
   const trainingCalendar = useMemo(

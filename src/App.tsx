@@ -71,6 +71,20 @@ function App() {
     setToast(message)
     window.setTimeout(() => setToast(''), 1700)
   }
+  // Issue #242: состав дня, восстановленный из черновика. Применяется, только
+  // когда базовый день с тем же id разрешился (программа приезжает из API
+  // асинхронно) — иначе упражнения приклеились бы к fallback-дню с чужим id.
+  // Как только пользователь сам меняет состав, приоритет берёт
+  // activeSessionWorkoutDay, и это значение становится неактуальным.
+  const [draftSessionExercises, setDraftSessionExercises] = useState<{ workoutDayId: string; exercises: ExercisePlan[] } | null>(
+    initialDraft?.exercises?.length
+      ? { workoutDayId: initialDraft.workoutDayId, exercises: initialDraft.exercises }
+      : null,
+  )
+  const restoreSessionExercises = (draft: { workoutDayId: string; exercises?: ExercisePlan[] }) => {
+    if (!draft.exercises?.length) return
+    setDraftSessionExercises({ workoutDayId: draft.workoutDayId, exercises: draft.exercises })
+  }
   const {
     programData,
     setProgramData,
@@ -91,6 +105,7 @@ function App() {
     createInitialLogs,
     setActiveExerciseIndex,
     setLogs,
+    restoreSessionExercises,
     notify,
   })
   const [extraExercisesByDay, setExtraExercisesByDay] = useState<Record<string, ExercisePlan[]>>({})
@@ -148,6 +163,7 @@ function App() {
     coachTodayWorkoutDay,
     extraExercisesByDay,
     activeSessionWorkoutDay,
+    draftSessionExercises,
     activeExerciseIndex,
     logs,
   })
@@ -179,6 +195,7 @@ function App() {
     activeUserId,
     workoutDayId: activeWorkoutDay.id,
     activeExerciseIndex,
+    sessionExercises: activeWorkoutDay.exercises,
     formatDateTime,
   })
   // Wrap clearActiveWorkoutDraft to also reset restoredDraftKey.

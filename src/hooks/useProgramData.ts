@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { WorkoutDay  } from '../../shared/types'
+import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import {
   fallbackProgramData,
   isProgramApiConfigured,
@@ -22,6 +22,16 @@ export type ActiveWorkoutDraft = {
   workoutDayId: string
   activeExerciseIndex: number
   logs: Record<string, ExerciseLog>
+  /**
+   * Issue #242: состав дня сессии, включая добавленные (`-extra-`) и
+   * заменённые (`-replacement-`) упражнения. Без него после перезагрузки
+   * день восстанавливался из планового, логи на добавленных упражнениях
+   * становились сиротскими, и `createWorkoutHistoryEntry` молча их
+   * отбрасывал — выполненные подходы не доезжали до истории.
+   *
+   * Необязательное поле: черновики старого формата читаются как прежде.
+   */
+  exercises?: ExercisePlan[]
   savedAt: string
 }
 
@@ -84,6 +94,8 @@ type UseProgramDataOptions = {
   createInitialLogs: (workoutDay: WorkoutDay | undefined, targets?: Record<string, number>) => Record<string, ExerciseLog>
   setActiveExerciseIndex: (index: number) => void
   setLogs: (logs: Record<string, ExerciseLog>) => void
+  // Issue #242: вернуть в сессию состав дня из черновика (extra/replacement).
+  restoreSessionExercises: (draft: ActiveWorkoutDraft) => void
   notify: (message: string) => void
 }
 
@@ -94,6 +106,7 @@ export function useProgramData({
   createInitialLogs,
   setActiveExerciseIndex,
   setLogs,
+  restoreSessionExercises,
   notify,
 }: UseProgramDataOptions) {
   const [programData, setProgramData] = useState<ProgramData>(fallbackProgramData)
@@ -139,6 +152,7 @@ export function useProgramData({
             setActiveWorkoutDayId(draftForUser.workoutDayId)
             setActiveExerciseIndex(draftForUser.activeExerciseIndex)
             setLogs(draftForUser.logs)
+            restoreSessionExercises(draftForUser)
           } else if (nextDay) {
             setActiveWorkoutDayId(nextDay.id)
             const userTargets = buildNextTargets(loadHistory().filter((workout) => workout.userId === nextUserId))
@@ -180,6 +194,7 @@ export function useProgramData({
         setActiveWorkoutDayId(draft.workoutDayId)
         setActiveExerciseIndex(draft.activeExerciseIndex)
         setLogs(draft.logs)
+        restoreSessionExercises(draft)
         setRestoredDraftKey(`${draft.userId}:${draft.workoutDayId}`)
         saveActiveWorkoutDraft(draft)
         notify('Черновик тренировки восстановлен')
