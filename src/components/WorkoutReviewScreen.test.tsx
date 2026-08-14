@@ -8,8 +8,6 @@ import type { ProgressionType } from '../../shared/types'
 const defaultProps = {
   progressionSummary: [] as ProgressionResult[],
   totalVolume: 0,
-  userRating: 0,
-  onUserRatingChange: vi.fn(),
   onBackToWorkout: vi.fn(),
   onSaveAndExit: vi.fn(),
 }
@@ -101,84 +99,12 @@ describe('WorkoutReviewScreen', () => {
     expect(screen.getByRole('button', { name: /вернуться к тренировке/i })).toBeInTheDocument()
   })
 
-  // Issue #161: user rating 1–5 stars
-  it('renders 5 star buttons', () => {
-    render(<WorkoutReviewScreen {...defaultProps} userRating={0} />)
+  it('Issue #249: does not render the workout rating section', () => {
+    render(<WorkoutReviewScreen {...defaultProps} totalVolume={500} />)
 
-    for (let i = 1; i <= 5; i++) {
-      expect(screen.getByTestId(`star-${i}`)).toBeInTheDocument()
-    }
-  })
-
-  it('shows all stars empty when userRating is 0', () => {
-    render(<WorkoutReviewScreen {...defaultProps} userRating={0} />)
-
-    for (let i = 1; i <= 5; i++) {
-      const star = screen.getByTestId(`star-${i}`)
-      expect(star).toHaveTextContent('☆')
-      expect(star).not.toHaveClass('review-star--filled')
-    }
-  })
-
-  it('fills first 4 stars when userRating is 4', () => {
-    render(<WorkoutReviewScreen {...defaultProps} userRating={4} />)
-
-    for (let i = 1; i <= 4; i++) {
-      expect(screen.getByTestId(`star-${i}`)).toHaveClass('review-star--filled')
-      expect(screen.getByTestId(`star-${i}`)).toHaveTextContent('★')
-    }
-    expect(screen.getByTestId('star-5')).not.toHaveClass('review-star--filled')
-    expect(screen.getByTestId('star-5')).toHaveTextContent('☆')
-  })
-
-  it('calls onUserRatingChange when a star is clicked', async () => {
-    const onUserRatingChange = vi.fn()
-    const user = userEvent.setup()
-
-    render(
-      <WorkoutReviewScreen
-        {...defaultProps}
-        userRating={0}
-        onUserRatingChange={onUserRatingChange}
-      />,
-    )
-
-    await user.click(screen.getByTestId('star-3'))
-    expect(onUserRatingChange).toHaveBeenCalledWith(3)
-  })
-
-  it('disables star buttons while saving', () => {
-    render(<WorkoutReviewScreen {...defaultProps} userRating={3} isSaving={true} />)
-
-    for (let i = 1; i <= 5; i++) {
-      expect(screen.getByTestId(`star-${i}`)).toBeDisabled()
-    }
-  })
-
-  it('switches the hint between rated and not-rated states', () => {
-    const { rerender } = render(<WorkoutReviewScreen {...defaultProps} userRating={0} />)
-    expect(screen.getByTestId('rating-hint')).toHaveAttribute('data-rated', 'false')
-
-    rerender(<WorkoutReviewScreen {...defaultProps} userRating={4} />)
-    expect(screen.getByTestId('rating-hint')).toHaveAttribute('data-rated', 'true')
-  })
-
-  it('has radiogroup role with accessible label', () => {
-    render(<WorkoutReviewScreen {...defaultProps} userRating={2} />)
-
-    const group = screen.getByRole('radiogroup')
-    expect(group).toHaveAttribute('aria-label', 'Оценка тренировки')
-  })
-
-  // A radiogroup may have exactly one checked radio — the visual fill is
-  // cumulative (stars 1..N), but only star N is the selected value.
-  it('marks exactly the selected star as aria-checked', () => {
-    render(<WorkoutReviewScreen {...defaultProps} userRating={3} />)
-
-    const checked = [1, 2, 3, 4, 5].filter(
-      (i) => screen.getByTestId(`star-${i}`).getAttribute('aria-checked') === 'true',
-    )
-    expect(checked).toEqual([3])
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/^star-/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rating-hint')).not.toBeInTheDocument()
   })
 })
 

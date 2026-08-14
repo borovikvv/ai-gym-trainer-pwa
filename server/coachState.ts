@@ -84,7 +84,6 @@ interface ComputeCoachStateInput {
   exerciseLibrary?: LibraryExerciseInput[] | null
   history?: WorkoutHistoryEntryInput[]
   now?: Date
-  lastWorkoutQualityScore?: number | null
   coachMemory?: { muscleGroupProfiles?: Record<string, unknown> } | null
   volumeLandmarkOverrides?: VolumeLandmarkOverridesInput | null
   e1rmHistories?: E1rmHistoryInput[] | null
@@ -121,7 +120,6 @@ interface ComputeRecoveryStatusInput {
 
 interface ComputeReadinessScoreInput extends ComputeRecoveryStatusInput {
   weeklyLoadRatio: number
-  lastWorkoutQualityScore?: number | null
 }
 
 interface BuildWarningsInput {
@@ -153,7 +151,6 @@ export function computeCoachState({
   exerciseLibrary = null,
   history = [],
   now = new Date(),
-  lastWorkoutQualityScore = null,
   coachMemory = null,
   volumeLandmarkOverrides = null,
   e1rmHistories = null,
@@ -205,7 +202,6 @@ export function computeCoachState({
     painFlagsLast14Days,
     userTrainingPolicy,
     trainingDataConfidence,
-    lastWorkoutQualityScore,
   })
 
   const mesocycle = computeMesocycleState({
@@ -408,7 +404,7 @@ function computeRecoveryStatus({ daysSinceLastWorkout, highFatigueGroups, recent
   return 'ready'
 }
 
-function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0, lastWorkoutQualityScore = null }: ComputeReadinessScoreInput): number {
+function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFatigueGroups, recentMaxEffortSets, painFlagsLast14Days, userTrainingPolicy = null, trainingDataConfidence = 0 }: ComputeReadinessScoreInput): number {
   let score = 75
   if (daysSinceLastWorkout === null) score -= 5
   else if (daysSinceLastWorkout < 1) score -= 35
@@ -419,13 +415,6 @@ function computeReadinessScore({ daysSinceLastWorkout, weeklyLoadRatio, highFati
   score -= highFatigueGroups * 8
   score -= recentMaxEffortSets * 7
   score -= painFlagsLast14Days * 20
-  if (lastWorkoutQualityScore !== null) {
-    if (lastWorkoutQualityScore >= 80) score += 5
-    else if (lastWorkoutQualityScore >= 60) score += 2
-    else if (lastWorkoutQualityScore >= 40) score -= 5
-    else if (lastWorkoutQualityScore >= 20) score -= 10
-    else score -= 15
-  }
   // Issue #111: priorWeight must have a minimum floor (0.3) so the age-based
   // readiness adjustment is always applied, even after 8+ workouts. Without
   // this floor, teen (+5) and mature_adult (-8) adjustments are completely
