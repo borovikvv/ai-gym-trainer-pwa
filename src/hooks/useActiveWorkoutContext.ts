@@ -4,7 +4,7 @@ import { fallbackProgramData } from '../data/programApi'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { buildTrainingCalendar } from '../domain/coachPlanning'
 import { buildProgressDashboard } from '../domain/progressDashboard'
-import { calculateProgression, type WorkoutSetInput } from '../domain/progression'
+import { calculateProgression, countPreviousFailures, type WorkoutSetInput } from '../domain/progression'
 import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { nextActionablePlannedWorkout, visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { getCanonicalExerciseId } from '../domain/exerciseIdentity'
@@ -145,9 +145,15 @@ export function useActiveWorkoutContext({
           weightStep: exercise.weightStep,
           sets: log.sets,
           pain: log.pain,
+          // Issue #245: история тянет ветку deload — без счётчика снижение
+          // веса между тренировками недостижимо.
+          previousFailureCount: countPreviousFailures(userHistory, {
+            canonicalExerciseId: getCanonicalExerciseId(exercise),
+            repMin: exercise.repMin,
+          }),
         })
       }),
-    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets],
+    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets, userHistory],
   )
 
   const totalVolume = useMemo(

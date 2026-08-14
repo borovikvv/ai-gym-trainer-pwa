@@ -1,6 +1,6 @@
 import type { ExercisePlan, WorkoutHistoryEntry } from '../../shared/types'
 import type { ReadinessCheckIn } from './readinessCheckIn'
-import { calculateProgression, type WorkoutSetInput } from './progression'
+import { calculateProgression, countPreviousFailures, type WorkoutSetInput } from './progression'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildWorkoutDebrief } from './workoutDebrief'
 
@@ -26,6 +26,9 @@ export type CreateWorkoutHistoryEntryInput = {
   logs: Record<string, ExerciseLog>
   readinessCheckIn?: ReadinessCheckIn | null
   completedAt?: string
+  // Issue #245: предыдущие сессии пользователя — из них считается
+  // previousFailureCount (второй провал подряд ниже repMin → deload).
+  history?: WorkoutHistoryEntry[]
 }
 
 export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput): WorkoutHistoryEntry {
@@ -42,6 +45,13 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       weightStep: exercise.weightStep,
       sets: log.sets,
       pain: log.pain,
+      previousFailureCount: countPreviousFailures(
+        (input.history ?? []).filter((workout) => workout.userId === input.userId),
+        {
+          canonicalExerciseId: getCanonicalExerciseId(exercise),
+          repMin: exercise.repMin,
+        },
+      ),
     })
 
     return {

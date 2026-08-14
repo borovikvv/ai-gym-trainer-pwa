@@ -78,6 +78,55 @@ describe('workout history', () => {
     expect(entry.totalVolume).toBe(1800)
   })
 
+  // Issue #245: previousFailureCount должен доезжать из истории в расчёт
+  // прогрессии — второй провал подряд ниже repMin даёт deload.
+  it('deloads when history shows the previous session also failed below repMin', () => {
+    const failedLog = {
+      'bench-press': {
+        exerciseId: 'bench-press',
+        pain: false,
+        sets: [
+          { weight: 60, reps: 5, rpe: 9, completed: true },
+          { weight: 60, reps: 4, rpe: 10, completed: true },
+        ],
+      },
+    }
+    const base = { userId: 'vyacheslav', workoutDayId: 'day-a', workoutDayName: 'День A', exercises: [bench], logs: failedLog }
+    const previousEntry = createWorkoutHistoryEntry({ ...base, completedAt: '2026-06-03T15:00:00.000Z' })
+    const entry = createWorkoutHistoryEntry({ ...base, history: [previousEntry], completedAt: '2026-06-10T15:00:00.000Z' })
+
+    expect(entry.exercises[0].progressionType).toBe('deload')
+    expect(entry.exercises[0].nextRecommendedWeight).toBe(57.5)
+  })
+
+  // Review #250: history — глобальный массив всех пользователей, считать
+  // провалы нужно только по записям текущего userId.
+  it('ignores failed sessions of other users when counting previous failures', () => {
+    const failedLog = {
+      'bench-press': {
+        exerciseId: 'bench-press',
+        pain: false,
+        sets: [
+          { weight: 60, reps: 5, rpe: 9, completed: true },
+          { weight: 60, reps: 4, rpe: 10, completed: true },
+        ],
+      },
+    }
+    const base = { userId: 'vyacheslav', workoutDayId: 'day-a', workoutDayName: 'День A', exercises: [bench], logs: failedLog }
+    const otherUserFailed = createWorkoutHistoryEntry({
+      ...base,
+      userId: 'other-user',
+      completedAt: '2026-06-03T15:00:00.000Z',
+    })
+    const entry = createWorkoutHistoryEntry({
+      ...base,
+      history: [otherUserFailed],
+      completedAt: '2026-06-10T15:00:00.000Z',
+    })
+
+    expect(entry.exercises[0].progressionType).not.toBe('deload')
+  })
+
   it('builds next target weights from the most recent completed workout', () => {
     const history = [
       createWorkoutHistoryEntry({
