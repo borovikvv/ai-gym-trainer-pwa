@@ -77,6 +77,13 @@ export interface SessionRepDeviation {
 /** Минимум сессий на этом весе, чтобы ожидание вообще имело смысл. */
 export const MIN_SESSIONS_FOR_EXPECTATION = 2
 
+/**
+ * Порог среднего отклонения повторов от ожидания, ниже которого считаем, что
+ * усилие выросло: на том же весе человек стабильно недобирает повтор.
+ * Общий для effortRising (mesocycle, #175) и progression-guard (#247).
+ */
+export const EFFORT_RISE_DEVIATION = -1
+
 /** Ограничение наклона: больше повтора за сессию — это не прогрессия, а шум. */
 const MAX_SLOPE_PER_SESSION = 1
 

@@ -20,7 +20,7 @@ import type { AgeRecoveryPhase, MesocycleState, WorkoutHistoryEntry } from '../s
 import type { BodyWeightMeasurement } from '../shared/bodyWeight.js'
 import type { DbClient } from './dbClient.js'
 import { bodyWeightTrend } from '../shared/bodyWeight.js'
-import { computeSessionRepDeviation } from '../src/domain/repExpectation.js'
+import { computeSessionRepDeviation, EFFORT_RISE_DEVIATION } from '../src/domain/repExpectation.js'
 import {
   diagnoseStagnation,
   type StagnationDiagnosis,
@@ -402,12 +402,6 @@ const ADHERENCE_WINDOW_DAYS = 14
 
 /** Сессий, по которым смотрим усилие и самочувствие. */
 const RECENT_SESSIONS = 3
-
-/**
- * Ниже этого среднего отклонения повторов (#167) считаем, что усилие выросло:
- * на том же весе человек стабильно недобирает повтор к ожиданию.
- */
-const EFFORT_RISE_DEVIATION = -1
 
 /** Средняя энергия по чек-инам (1–5), ниже которой готовность считается сниженной. */
 const LOW_ENERGY_LEVEL = 2.5

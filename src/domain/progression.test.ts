@@ -291,3 +291,43 @@ describe('Issue #173: deload for assisted exercises', () => {
     })
   })
 })
+
+// Issue #247: отклонение фактических повторов от личного ожидания (#167) —
+// стоп-фактор роста веса внутри ветки allAtTop && allControlled.
+describe('Issue #247: rep deviation guards progression at the top of the range', () => {
+  const atTop = {
+    exerciseName: 'Жим лёжа',
+    currentWeight: 60,
+    repMin: 8,
+    repMax: 10,
+    weightStep: 2.5,
+    sets: [
+      { weight: 60, reps: 10, rpe: 8, completed: true },
+      { weight: 60, reps: 10, rpe: 8, completed: true },
+      { weight: 60, reps: 10, rpe: 7, completed: true },
+    ],
+    pain: false,
+  }
+
+  it('держит вес, когда повторы заметно ниже личной нормы на этом весе', () => {
+    const result = calculateProgression({ ...atTop, avgRepDeviation: -2 })
+
+    expect(result.type).toBe('hold')
+    expect(result.recommendedWeight).toBe(60)
+    expect(result.reason).toContain('ниже вашей нормы')
+  })
+
+  it('без сигнала поведение не меняется — вес растёт как раньше', () => {
+    const result = calculateProgression(atTop)
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(62.5)
+  })
+
+  it('отклонение мягче порога рост не останавливает', () => {
+    const result = calculateProgression({ ...atTop, avgRepDeviation: -0.5 })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(62.5)
+  })
+})
