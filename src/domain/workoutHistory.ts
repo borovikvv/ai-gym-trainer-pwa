@@ -45,10 +45,13 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       weightStep: exercise.weightStep,
       sets: log.sets,
       pain: log.pain,
-      previousFailureCount: countPreviousFailures(input.history ?? [], {
-        canonicalExerciseId: getCanonicalExerciseId(exercise),
-        repMin: exercise.repMin,
-      }),
+      previousFailureCount: countPreviousFailures(
+        (input.history ?? []).filter((workout) => workout.userId === input.userId),
+        {
+          canonicalExerciseId: getCanonicalExerciseId(exercise),
+          repMin: exercise.repMin,
+        },
+      ),
     })
 
     return {
