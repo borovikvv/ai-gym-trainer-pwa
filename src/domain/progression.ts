@@ -2,7 +2,8 @@ import { resolveWeightDirection, harderWeight, easierWeight, isWeightlessProgres
 import { isTimedExerciseName } from '../../shared/muscleGroups'
 // Issue #98 PR2: ProgressionType unified in shared/types.ts
 export type { ProgressionType } from '../../shared/types'
-import type { ProgressionType } from '../../shared/types'
+import type { ProgressionType, WorkoutHistoryEntry } from '../../shared/types'
+import { getCanonicalExerciseId } from './exerciseIdentity'
 
 export type WorkoutSetInput = {
   weight: number
@@ -28,6 +29,23 @@ export type ProgressionResult = {
   recommendedWeight: number
   type: ProgressionType
   reason: string
+}
+
+// Issue #245: провал = в самой свежей прошлой сессии с этим упражнением два и
+// больше выполненных подхода ниже repMin. Хватает 0/1 — правило смотрит `>= 1`.
+// Допущение: repMin берётся из текущего плана — в CompletedExerciseHistory
+// диапазона нет, он считается неизменившимся между сессиями.
+export function countPreviousFailures(
+  history: WorkoutHistoryEntry[],
+  options: { canonicalExerciseId: string; repMin: number },
+): number {
+  const previousExercise = [...history]
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt))
+    .flatMap((workout) => workout.exercises)
+    .find((exercise) => getCanonicalExerciseId(exercise) === options.canonicalExerciseId)
+  if (!previousExercise) return 0
+  const belowMinCount = previousExercise.sets.filter((set) => set.completed && set.reps < options.repMin).length
+  return belowMinCount >= 2 ? 1 : 0
 }
 
 export function calculateProgression(input: ProgressionInput): ProgressionResult {
