@@ -17,6 +17,28 @@ export const defaultReadinessCheckIn: ReadinessCheckIn = {
   notes: '',
 }
 
+/**
+ * Самочувствие не сообщали: все поля самочувствия ровно в дефолте и боли нет.
+ * Панель готовности умеет только сообщать о проблемах (тумблеры поверх
+ * дефолта), поэтому дефолтные значения — это молчание, а не подтверждение
+ * нормы (#246): нетронутый чек-ин не должен читаться как измерение.
+ *
+ * availableMinutes и soreMuscleGroups в сравнение НЕ входят: доступное время
+ * нужно планировщику и заполняется отдельно, а забитые мышцы приходят вместе
+ * с soreness !== 'light' (панель меняет оба поля разом), поэтому отдельного
+ * сравнения им не требуется.
+ */
+export function isWellbeingReported(checkIn: ReadinessCheckIn | null | undefined): boolean {
+  if (!checkIn) return false
+  return (
+    checkIn.sleepQuality !== defaultReadinessCheckIn.sleepQuality ||
+    checkIn.energy !== defaultReadinessCheckIn.energy ||
+    checkIn.stress !== defaultReadinessCheckIn.stress ||
+    checkIn.soreness !== defaultReadinessCheckIn.soreness ||
+    (checkIn.painAreas?.length ?? 0) > 0
+  )
+}
+
 export function resolveReadinessMode(checkIn: ReadinessCheckIn): ReadinessMode {
   if (checkIn.painAreas.length > 0 || checkIn.soreness === 'high') {
     return 'very_light'

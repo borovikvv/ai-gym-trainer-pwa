@@ -21,6 +21,7 @@ import type { BodyWeightMeasurement } from '../shared/bodyWeight.js'
 import type { DbClient } from './dbClient.js'
 import { bodyWeightTrend } from '../shared/bodyWeight.js'
 import { computeSessionRepDeviation } from '../src/domain/repExpectation.js'
+import { isWellbeingReported } from '../src/domain/readinessCheckIn.js'
 import {
   diagnoseStagnation,
   type StagnationDiagnosis,
@@ -502,9 +503,12 @@ function effortRising(recent: WorkoutHistoryEntry[], history: WorkoutHistoryEntr
   return average <= EFFORT_RISE_DEVIATION
 }
 
-/** Самочувствие по чек-инам готовности; null — чек-инов не было. */
+/** Самочувствие по чек-инам готовности; null — чек-инов или данных самочувствия нет. */
 function energyLow(recent: WorkoutHistoryEntry[]): boolean | null {
   const levels = recent
+    // Нетронутый чек-ин (все поля в дефолте) — молчание, а не «нормально» (#246):
+    // без фильтра он бы схлопывал три состояния функции в одно — «энергия ровная».
+    .filter((session) => isWellbeingReported(session?.readinessCheckIn))
     .map((session) => Number(session?.readinessCheckIn?.energy))
     .filter((value) => Number.isFinite(value) && value > 0)
   if (levels.length === 0) return null

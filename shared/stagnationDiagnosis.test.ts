@@ -131,3 +131,14 @@ describe('текст для пользователя', () => {
     expect(verdict?.note).not.toContain('гипотез')
   })
 })
+
+describe('самочувствие не сообщали (#246)', () => {
+  it('energyLow: null не читается как «нормально»: срабатывает гипотеза, а не ветка строки 148', () => {
+    // Ветка уверенного вывода требует energyLow === false. Отсутствие данных о
+    // самочувствии (energyLow: null) должно вести в ветку гипотезы с оговоркой.
+    const verdict = diagnoseStagnation(signals({ energyLow: null, effortRising: false }), TODAY)
+    expect(verdict?.diagnosis).toBe('insufficient_stimulus')
+    expect(verdict?.hypothesis).toBe(true)
+    expect(verdict?.note).toContain('не хватает данных: самочувствие')
+  })
+})
