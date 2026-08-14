@@ -546,24 +546,6 @@ describe('buildStagnationSignals', () => {
     expect(signals.effortRising).toBeNull()
   })
 
-  it('нетронутый чек-ин (все поля в дефолте) не читается как «энергия нормальная» (#246)', () => {
-    const untouched = { sleepQuality: 3, energy: 3, stress: 3, soreness: 'light', soreMuscleGroups: [], painAreas: [], availableMinutes: 60, notes: '' }
-    const signals = buildStagnationSignals({
-      goal: goal(),
-      progress,
-      profile: {},
-      e1rmHistories: HISTORIES,
-      history: [
-        session('2026-07-20', { readinessCheckIn: untouched }),
-        session('2026-07-24', { readinessCheckIn: untouched }),
-        session('2026-07-27', { readinessCheckIn: untouched }),
-      ],
-      bodyWeightLog: [],
-      today: '2026-07-30',
-    })
-    expect(signals.energyLow).toBeNull()
-  })
-
   it('падение веса берётся из ряда замеров (#176)', () => {
     const log = [
       { measuredOn: '2026-06-25', weightKg: 82 },

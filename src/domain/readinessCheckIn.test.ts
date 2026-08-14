@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultReadinessCheckIn, isWellbeingReported, resolveReadinessMode, summarizeReadinessCheckIn } from './readinessCheckIn'
+import { defaultReadinessCheckIn, resolveReadinessMode, summarizeReadinessCheckIn } from './readinessCheckIn'
 
 describe('readiness check-in', () => {
   it('keeps a normal plan for balanced inputs', () => {
@@ -48,28 +48,5 @@ describe('readiness check-in', () => {
       ...defaultReadinessCheckIn,
       painAreas: ['Спина'],
     })).toBe('Есть боль: Спина. Уберём рискованные движения и оставим безопасную работу.')
-  })
-})
-
-describe('isWellbeingReported (#246)', () => {
-  it('дефолтный чек-ин — самочувствие не сообщали', () => {
-    expect(isWellbeingReported(defaultReadinessCheckIn)).toBe(false)
-  })
-
-  it('отклонение от дефолта по любому полю самочувствия — сообщали', () => {
-    expect(isWellbeingReported({ ...defaultReadinessCheckIn, energy: 2 })).toBe(true)
-    expect(isWellbeingReported({ ...defaultReadinessCheckIn, sleepQuality: 2 })).toBe(true)
-    expect(isWellbeingReported({ ...defaultReadinessCheckIn, stress: 4 })).toBe(true)
-    expect(isWellbeingReported({ ...defaultReadinessCheckIn, soreness: 'medium' })).toBe(true)
-    expect(isWellbeingReported({ ...defaultReadinessCheckIn, painAreas: ['Спина'] })).toBe(true)
-  })
-
-  it('доступное время — не самочувствие: дефолт с availableMinutes остаётся молчанием', () => {
-    expect(isWellbeingReported({ ...defaultReadinessCheckIn, availableMinutes: 30 })).toBe(false)
-  })
-
-  it('отсутствие чек-ина — тоже молчание', () => {
-    expect(isWellbeingReported(null)).toBe(false)
-    expect(isWellbeingReported(undefined)).toBe(false)
   })
 })

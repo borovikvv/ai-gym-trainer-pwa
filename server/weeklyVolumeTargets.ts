@@ -22,7 +22,6 @@ import type { DbClient } from './dbClient.js'
 import { CANONICAL_MUSCLE_KEYS, labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { countCompletedSets } from './buildVolumeSnapshot.js'
 import { dateToDateOnly, startOfWeek } from './utils.js'
-import { isWellbeingReported } from '../src/domain/readinessCheckIn.js'
 
 export type VolumeAction = 'add' | 'hold' | 'cut'
 export type WeeklyVolumeVerdict = 'undershoot' | 'hit' | 'overshoot'
@@ -95,14 +94,10 @@ export function buildWeeklyMuscleFacts(
     }
     for (const key of touched) facts[key].sessions += 1
 
-    // Крепатура — из чек-ина готовности перед тренировкой. Нетронутый чек-ин
-    // (дефолт) наблюдением не считается (#246): тумблер «забиты мышцы» меняет
-    // soreness, поэтому несообщённое самочувствие не может нести крепатуру.
-    if (isWellbeingReported(session.readinessCheckIn)) {
-      for (const sore of session.readinessCheckIn?.soreMuscleGroups ?? []) {
-        const key = normalizeMuscleGroup(String(sore))
-        if (facts[key]) facts[key].soreSessions += 1
-      }
+    // Крепатура — из чек-ина готовности перед тренировкой.
+    for (const sore of session.readinessCheckIn?.soreMuscleGroups ?? []) {
+      const key = normalizeMuscleGroup(String(sore))
+      if (facts[key]) facts[key].soreSessions += 1
     }
   }
 
