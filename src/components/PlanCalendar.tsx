@@ -251,7 +251,14 @@ export function PlanCalendar({
             )
             const plannedToggleable = (d.state === 'today' || d.state === 'next' || d.state === 'plan')
               && hasActivePlannedWorkout
-            const toggleable = d.isFuture && (d.state === 'rest' || plannedToggleable)
+            // Issue #262: день «today» без живой тренировки должен создавать её по
+            // тапу (как rest), а не быть мёртвым — иначе сегодняшний тренировочный
+            // день после паузы/пересборки нельзя запланировать вообще.
+            const toggleable = d.isFuture && (
+              d.state === 'rest'
+              || plannedToggleable
+              || (d.state === 'today' && !hasActivePlannedWorkout)
+            )
             const noteFor = toggleable
               ? (selected
                   ? `Тренировка на ${d.formatted} отменена`

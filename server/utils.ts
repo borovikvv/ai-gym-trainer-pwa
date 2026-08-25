@@ -365,11 +365,16 @@ function latestTrainingMinutesOfDay(
   return minutes.length > 0 ? Math.max(...minutes) : DEFAULT_SESSION_ANCHOR_MINUTES
 }
 
-export function nextPlannedDatesFromProfile(profile: ProfileWithTrainingDays, count: number): string[] {
+export function nextPlannedDatesFromProfile(
+  profile: ProfileWithTrainingDays,
+  count: number,
+  options: { includeToday?: boolean } = {},
+): string[] {
   const trainingDays: string[] = Array.isArray(profile.trainingDays) ? profile.trainingDays.filter(Boolean) : []
   const dates: string[] = []
   const now = new Date()
-  for (let dayOffset = 1; dates.length < count && dayOffset < 28; dayOffset += 1) {
+  const initialOffset = options.includeToday ? 0 : 1
+  for (let dayOffset = initialOffset; dates.length < count && dayOffset < 28; dayOffset += 1) {
     const date = new Date(now)
     date.setDate(now.getDate() + dayOffset)
     const weekday = russianWeekdayName(date)

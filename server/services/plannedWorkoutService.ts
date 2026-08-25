@@ -128,21 +128,23 @@ const ROTATION_CONTEXT_DAYS = 7
 
 export async function ensureDefaultPlannedWorkouts(client: DbClient, userId: string): Promise<void> {
   const existing = await client.query(
-    `select count(*)::int as count
+    `select
+       count(*) filter (where status in ('planned','generated') and scheduled_date >= current_date)::int as future_count,
+       count(*) filter (where scheduled_date = current_date)::int as today_count
      from public.planned_workouts
-     where user_id = $1
-       and status in ('planned', 'generated')
-       and scheduled_date >= current_date`,
+     where user_id = $1`,
     [userId],
   )
-  if (Number(existing.rows[0]?.count ?? 0) > 0) return
+  const futureCount = Number(existing.rows[0]?.future_count ?? 0)
+  if (futureCount > 0) return
+  const todayCount = Number(existing.rows[0]?.today_count ?? 0)
 
   const [profile, workoutDays] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
   ]) as unknown as [Record<string, unknown>, unknown[]]
   if (workoutDays.length === 0) return
-  const dates = nextPlannedDatesFromProfile(profile, Math.max(1, Math.min(Number((profile as Record<string, unknown>).workoutsPerWeek) || 2, workoutDays.length)))
+  const dates = nextPlannedDatesFromProfile(profile, Math.max(1, Math.min(Number((profile as Record<string, unknown>).workoutsPerWeek) || 2, workoutDays.length)), { includeToday: todayCount === 0 })
   for (const scheduledDate of dates) {
     await createGeneratedPlannedWorkoutForDate(client, { userId, scheduledDate, source: 'auto' })
   }

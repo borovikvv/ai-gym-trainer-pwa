@@ -203,6 +203,48 @@ describe('PlanCalendar', () => {
     expect(onToggleWeekDate).toHaveBeenCalledWith(today)
   })
 
+  it('today without a planned workout is toggleable and creates via onToggleWeekDate', () => {
+    const onToggleWeekDate = vi.fn()
+    const today = '2026-06-08'
+    const activeDay = workoutDay('active', 'Сегодняшняя')
+
+    render(
+      <PlanCalendar
+        activeProfile={profile}
+        selectedWeekDates={[]}
+        weekDateOptions={[
+          { label: 'Пн', date: '2026-06-08', formatted: 'пн, 08.06' },
+        ]}
+        plannedWorkouts={[]}
+        userHistory={[]}
+        trainingCalendar={[]}
+        activeUserId="vyacheslav"
+        activeWorkoutDay={activeDay}
+        editingPlannedWorkoutId={null}
+        editingPlannedDate=""
+        coachState={null}
+        onToggleWeekDate={onToggleWeekDate}
+        onSelectWorkoutDay={vi.fn()}
+        onStartWorkout={vi.fn()}
+        onBeginEditPlannedDate={vi.fn()}
+        onSetEditingPlannedDate={vi.fn()}
+        onCancelEditPlannedDate={vi.fn()}
+        onSavePlannedWorkoutDate={vi.fn()}
+        onRegeneratePlannedWorkout={vi.fn()}
+        onCancelPlannedWorkout={vi.fn()}
+        onStartEditExercise={vi.fn()}
+        formatDateOnly={(date) => date}
+        formatWeight={String}
+        todayDateInputValue={() => today}
+      />,
+    )
+
+    const todayButton = screen.getByRole('button', { name: /08\.06.*тренировка/i })
+    expect(todayButton).toBeInTheDocument()
+    fireEvent.click(todayButton)
+    expect(onToggleWeekDate).toHaveBeenCalledWith(today)
+  })
+
   it('shows planned dates as toggleable calendar dots', () => {
     const onToggleWeekDate = vi.fn()
     const activeDay = workoutDay('active', 'Активная')
