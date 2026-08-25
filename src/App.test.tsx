@@ -393,7 +393,9 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getAllByText('День A').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/\.\d{2} · \d+/).length).toBeGreaterThan(0)
     const savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
-    expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 3, energy: 3, availableMinutes: 60 }))
+    // Issue #246: пользователь не трогал панель готовности — дефолт не
+    // записывается как измерение, в историю уходит null.
+    expect(savedHistory[0].readinessCheckIn).toBeNull()
 
     unmount()
     render(<App />)
@@ -403,6 +405,31 @@ describe('Coach Timeline workout flow', () => {
     // Issue #33: weight pre-filled from plan (targetWeight=60), not from
     // history (nextRecommendedWeight=62.5).
     expect(screen.getByLabelText('Вес')).toHaveValue('60')
+  })
+
+  it('saves a touched readiness check-in as a measurement, not the default (#246)', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /мало спал/i }))
+    await user.click(screen.getByRole('button', { name: /мало энергии/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+
+    for (const index of [1, 2, 3]) {
+      const reps = screen.getByLabelText('Повторы')
+      await user.clear(reps)
+      await user.type(reps, '10')
+      await recordCurrentSet(user, index)
+    }
+
+    await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
+
+    // Issue #246: тронутый чек-ин обязан сохраниться в БД/историю —
+    // защита от регрессии «после фикса перестали сохранять даже тронутое».
+    const savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
+    expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 2, energy: 2 }))
   })
 
   it('shows the progress tab as a trainer dashboard instead of a mock bench-only chart', async () => {

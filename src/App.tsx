@@ -112,6 +112,9 @@ function App() {
   const [activeSessionWorkoutDay, setActiveSessionWorkoutDay] = useState<WorkoutDay | null>(null)
   const [workoutReadinessMode, setWorkoutReadinessMode] = useState<ReadinessMode>('normal')
   const [readinessCheckIn, setReadinessCheckIn] = useState<ReadinessCheckIn>(defaultReadinessCheckIn)
+  // Issue #246: пользователь трогал чек-ин готовности. Дефолт в БД как
+  // измерение не пишется — молчание читается как отсутствие данных.
+  const [readinessTouched, setReadinessTouched] = useState(false)
   const [exercisePickerOpen, setExercisePickerOpen] = useState(false)
   // Issue #69: lifted state for useExtraWorkoutToday (hook moved to CoachHomePage)
   const [coachTodayWorkoutDay, setCoachTodayWorkoutDay] = useState<WorkoutDay | null>(null)
@@ -233,6 +236,7 @@ function App() {
   function updateReadinessCheckIn(patch: Partial<ReadinessCheckIn>) {
     const next = { ...readinessCheckIn, ...patch }
     setReadinessCheckIn(next)
+    setReadinessTouched(true)
     setWorkoutReadinessMode(resolveReadinessMode(next))
   }
 
@@ -450,7 +454,11 @@ function App() {
     activeUserId,
     activeWorkoutDay,
     activeExerciseIndex,
-    readinessCheckIn,
+    // Issue #246: нетронутый чек-ин — это дефолт панели, а не наблюдение
+    // пользователя. В БД уходит null, и энергия/крепатура читают отсутствие
+    // данных, а не «всё нормально». Preview/reviewEntry дефолт не трогают —
+    // там он нужен для локальной адаптации тренировки.
+    readinessCheckIn: readinessTouched ? readinessCheckIn : null,
     logs,
     history,
     setHistory,
