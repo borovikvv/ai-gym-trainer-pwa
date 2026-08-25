@@ -68,8 +68,8 @@ export function useWorkoutSave({
       exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
       logs,
       readinessCheckIn,
-      // Issue #245: история уходит в счётчик previousFailureCount — без неё
-      // ветка deload (второй провал подряд) не срабатывает.
+      // Issue #245/#247: история уходит в previousFailureCount и в отклонение
+      // повторов; по userId её фильтрует сам createWorkoutHistoryEntry.
       history,
     })
     // Issue #161: attach user rating if selected (0 = not rated → omit)

@@ -205,4 +205,65 @@ describe('workout history', () => {
       expect(computeSetIntervals([])).toEqual([])
     })
   })
+
+  // Issue #247: отклонение повторов от личного ожидания (#167) становится
+  // стоп-фактором решения о весе: человек упирается в repMax, но делает на
+  // этом весе заметно меньше повторов, чем раньше, — вес не растёт.
+  describe('rep deviation as progression guard (#247)', () => {
+    const historyEntry = (completedAt: string, reps: number[]) =>
+      createWorkoutHistoryEntry({
+        userId: 'vyacheslav',
+        workoutDayId: 'day-a',
+        workoutDayName: 'День A',
+        exercises: [bench],
+        logs: {
+          'bench-press': {
+            exerciseId: 'bench-press',
+            pain: false,
+            sets: reps.map((reps) => ({ weight: 60, reps, rpe: 7, completed: true })),
+          },
+        },
+        completedAt,
+      })
+
+    const decliningSession = () => ({
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      exercises: [bench],
+      logs: {
+        'bench-press': {
+          exerciseId: 'bench-press',
+          pain: false,
+          sets: [
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+          ],
+        },
+      },
+      completedAt: '2026-06-15T15:00:00.000Z',
+    })
+
+    it('держивает вес при падении отдачи на том же весе', () => {
+      const history = [
+        historyEntry('2026-06-01T15:00:00.000Z', [12, 12, 12]),
+        historyEntry('2026-06-08T15:00:00.000Z', [12, 12, 12]),
+      ]
+
+      const entry = createWorkoutHistoryEntry({ ...decliningSession(), history })
+
+      expect(entry.exercises[0].progressionType).toBe('hold')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(60)
+    })
+
+    it('без накопленного ожидания фолбэк не меняется — вес растёт как раньше', () => {
+      const history = [historyEntry('2026-06-01T15:00:00.000Z', [12, 12, 12])]
+
+      const entry = createWorkoutHistoryEntry({ ...decliningSession(), history })
+
+      expect(entry.exercises[0].progressionType).toBe('increase')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(62.5)
+    })
+  })
 })

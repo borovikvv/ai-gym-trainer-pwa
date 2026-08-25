@@ -1,6 +1,7 @@
 import type { ExercisePlan, WorkoutHistoryEntry } from '../../shared/types'
 import type { ReadinessCheckIn } from './readinessCheckIn'
 import { calculateProgression, countPreviousFailures, type WorkoutSetInput } from './progression'
+import { computeSessionRepDeviation } from './repExpectation'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildWorkoutDebrief } from './workoutDebrief'
 
@@ -26,17 +27,28 @@ export type CreateWorkoutHistoryEntryInput = {
   logs: Record<string, ExerciseLog>
   readinessCheckIn?: ReadinessCheckIn | null
   completedAt?: string
-  // Issue #245: предыдущие сессии пользователя — из них считается
-  // previousFailureCount (второй провал подряд ниже repMin → deload).
+  // Issue #245/#247: предыдущие сессии — из них считаются previousFailureCount
+  // (второй провал подряд ниже repMin → deload) и отклонение повторов.
+  // Фильтруются по userId здесь, вызывающим этого делать не надо.
   history?: WorkoutHistoryEntry[]
 }
 
 export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput): WorkoutHistoryEntry {
   const completedAt = input.completedAt ?? new Date().toISOString()
+  const userHistory = (input.history ?? []).filter((workout) => workout.userId === input.userId)
   const exercises = input.exercises.map((exercise) => {
     const log = input.logs[exercise.id] ?? { exerciseId: exercise.id, pain: false, sets: [] }
     const volume = log.sets.reduce((sum, set) => sum + (set.completed ? set.weight * set.reps : 0), 0)
     const currentWeight = firstCompletedWeight(log.sets) ?? exercise.targetWeight
+    // Issue #247: отклонение факта от личного ожидания на этом весе — стоп-фактор
+    // решения о весе. Считается одним вызовом на объекте из одного упражнения.
+    const avgRepDeviation = computeSessionRepDeviation(
+      {
+        completedAt,
+        exercises: [{ exerciseId: exercise.id, canonicalExerciseId: getCanonicalExerciseId(exercise), sets: log.sets }],
+      },
+      userHistory,
+    ).avgDeviation
     const progression = calculateProgression({
       exerciseName: exercise.name,
       currentWeight,
@@ -45,13 +57,11 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       weightStep: exercise.weightStep,
       sets: log.sets,
       pain: log.pain,
-      previousFailureCount: countPreviousFailures(
-        (input.history ?? []).filter((workout) => workout.userId === input.userId),
-        {
-          canonicalExerciseId: getCanonicalExerciseId(exercise),
-          repMin: exercise.repMin,
-        },
-      ),
+      avgRepDeviation,
+      previousFailureCount: countPreviousFailures(userHistory, {
+        canonicalExerciseId: getCanonicalExerciseId(exercise),
+        repMin: exercise.repMin,
+      }),
     })
 
     return {
