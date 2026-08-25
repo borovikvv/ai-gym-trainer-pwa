@@ -46,8 +46,6 @@ interface GymPageProps {
   reviewDebrief: import("../domain/workoutDebrief").WorkoutDebrief | null | undefined
   // Issue #167: отклонение фактических повторов от ожидаемых на том же весе
   reviewRepDeviation: import("../domain/repExpectation").SessionRepDeviation | null | undefined
-  userRating: number
-  onUserRatingChange: (rating: number) => void
   isSavingWorkout: boolean
   // Readiness
   workoutReadinessMode: ReadinessMode
@@ -200,8 +198,6 @@ export function GymPage(props: GymPageProps) {
           debrief={props.reviewDebrief}
           repDeviation={props.reviewRepDeviation}
           isSaving={props.isSavingWorkout}
-          userRating={props.userRating}
-          onUserRatingChange={props.onUserRatingChange}
           onBackToWorkout={() => onNavigate('session')}
           onSaveAndExit={props.onSaveAndExit}
         />

@@ -4,7 +4,8 @@ import { fallbackProgramData } from '../data/programApi'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { buildTrainingCalendar } from '../domain/coachPlanning'
 import { buildProgressDashboard } from '../domain/progressDashboard'
-import { calculateProgression, type WorkoutSetInput } from '../domain/progression'
+import { calculateProgression, countPreviousFailures, type WorkoutSetInput } from '../domain/progression'
+import { computeSessionRepDeviation } from '../domain/repExpectation'
 import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '../domain/workoutHistory'
 import { nextActionablePlannedWorkout, visibleActionablePlannedWorkouts } from '../domain/plannedWorkoutStatus'
 import { getCanonicalExerciseId } from '../domain/exerciseIdentity'
@@ -137,6 +138,15 @@ export function useActiveWorkoutContext({
     () =>
       activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)).map((exercise) => {
         const log = logs[exercise.id] ?? createExerciseLog(exercise)
+        // Issue #247: то же отклонение повторов, что считает сохранение, — иначе
+        // предпросмотр на экране обзора обещал бы increase, а запись — hold.
+        const avgRepDeviation = computeSessionRepDeviation(
+          {
+            completedAt: new Date().toISOString(),
+            exercises: [{ exerciseId: exercise.id, canonicalExerciseId: getCanonicalExerciseId(exercise), sets: log.sets }],
+          },
+          userHistory,
+        ).avgDeviation
         return calculateProgression({
           exerciseName: exercise.name,
           currentWeight: log.sets.find((set) => set.completed)?.weight ?? nextTargets[exercise.id] ?? exercise.targetWeight,
@@ -145,9 +155,16 @@ export function useActiveWorkoutContext({
           weightStep: exercise.weightStep,
           sets: log.sets,
           pain: log.pain,
+          avgRepDeviation,
+          // Issue #245: история тянет ветку deload — без счётчика снижение
+          // веса между тренировками недостижимо.
+          previousFailureCount: countPreviousFailures(userHistory, {
+            canonicalExerciseId: getCanonicalExerciseId(exercise),
+            repMin: exercise.repMin,
+          }),
         })
       }),
-    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets],
+    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets, userHistory],
   )
 
   const totalVolume = useMemo(

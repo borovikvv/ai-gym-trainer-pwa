@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { calculateProgression } from './progression'
+import { calculateProgression, countPreviousFailures } from './progression'
+import type { WorkoutHistoryEntry, WorkoutSet } from '../../shared/types'
 
 describe('calculateProgression', () => {
   it('raises weight when every set reaches the top of the rep range and RPE stays controlled', () => {
@@ -191,6 +192,79 @@ describe('calculateProgression', () => {
   })
 })
 
+// Issue #245: previousFailureCount не передавался ни одним вызывающим — ветка
+// deload была недостижима. Счётчик считается из истории: самая свежая прошлая
+// сессия с упражнением, в которой два и больше выполненных подхода ниже repMin.
+describe('Issue #245: deload driven by previous session history', () => {
+  const benchSession = (completedAt: string, sets: WorkoutSet[]): WorkoutHistoryEntry => ({
+    id: `prev-${completedAt}`,
+    userId: 'vyacheslav',
+    workoutDayId: 'day-a',
+    workoutDayName: 'День A',
+    completedAt,
+    totalVolume: 600,
+    exercises: [{
+      exerciseId: 'bench-press',
+      exerciseName: 'Жим лёжа',
+      canonicalExerciseId: 'bench-press',
+      pain: false,
+      sets,
+      volume: 900,
+      nextRecommendedWeight: 60,
+      progressionType: 'hold',
+      progressionReason: 'x',
+    }],
+  })
+  const failedSets: WorkoutSet[] = [
+    { weight: 60, reps: 5, rpe: 9, completed: true },
+    { weight: 60, reps: 4, rpe: 10, completed: true },
+    { weight: 60, reps: 6, rpe: 9, completed: true },
+  ]
+  const currentFailedInput = {
+    exerciseName: 'Жим лёжа',
+    currentWeight: 60,
+    repMin: 8,
+    repMax: 10,
+    weightStep: 2.5,
+    sets: failedSets,
+    pain: false,
+  }
+
+  it('deloads when the exercise failed twice in a row', () => {
+    const previousFailureCount = countPreviousFailures(
+      [benchSession('2026-08-01T15:00:00.000Z', failedSets)],
+      { canonicalExerciseId: 'bench-press', repMin: 8 },
+    )
+    const result = calculateProgression({ ...currentFailedInput, previousFailureCount })
+
+    expect(previousFailureCount).toBe(1)
+    expect(result.type).toBe('deload')
+    expect(result.recommendedWeight).toBe(57.5)
+  })
+
+  it('holds (not deload) when the previous session stayed in range', () => {
+    const previousFailureCount = countPreviousFailures(
+      [benchSession('2026-08-01T15:00:00.000Z', [
+        { weight: 60, reps: 9, rpe: 8, completed: true },
+        { weight: 60, reps: 10, rpe: 8, completed: true },
+      ])],
+      { canonicalExerciseId: 'bench-press', repMin: 8 },
+    )
+    const result = calculateProgression({
+      ...currentFailedInput,
+      sets: [
+        { weight: 60, reps: 5, rpe: 7, completed: true },
+        { weight: 60, reps: 4, rpe: 7, completed: true },
+      ],
+      previousFailureCount,
+    })
+
+    expect(previousFailureCount).toBe(0)
+    expect(result.type).toBe('hold')
+    expect(result.recommendedWeight).toBe(60)
+  })
+})
+
 // Issue #173: повторный провал на гравитроне — разгрузка = БОЛЬШЕ помощи,
 // а не меньше веса (для assisted меньший вес = тяжелее).
 describe('Issue #173: deload for assisted exercises', () => {
@@ -289,5 +363,45 @@ describe('Issue #173: deload for assisted exercises', () => {
       expect(result.type).toBe('deload')
       expect(result.reason).not.toMatch(/кг/)
     })
+  })
+})
+
+// Issue #247: отклонение фактических повторов от личного ожидания (#167) —
+// стоп-фактор роста веса внутри ветки allAtTop && allControlled.
+describe('Issue #247: rep deviation guards progression at the top of the range', () => {
+  const atTop = {
+    exerciseName: 'Жим лёжа',
+    currentWeight: 60,
+    repMin: 8,
+    repMax: 10,
+    weightStep: 2.5,
+    sets: [
+      { weight: 60, reps: 10, rpe: 8, completed: true },
+      { weight: 60, reps: 10, rpe: 8, completed: true },
+      { weight: 60, reps: 10, rpe: 7, completed: true },
+    ],
+    pain: false,
+  }
+
+  it('держит вес, когда повторы заметно ниже личной нормы на этом весе', () => {
+    const result = calculateProgression({ ...atTop, avgRepDeviation: -2 })
+
+    expect(result.type).toBe('hold')
+    expect(result.recommendedWeight).toBe(60)
+    expect(result.reason).toContain('ниже вашей нормы')
+  })
+
+  it('без сигнала поведение не меняется — вес растёт как раньше', () => {
+    const result = calculateProgression(atTop)
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(62.5)
+  })
+
+  it('отклонение мягче порога рост не останавливает', () => {
+    const result = calculateProgression({ ...atTop, avgRepDeviation: -0.5 })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(62.5)
   })
 })

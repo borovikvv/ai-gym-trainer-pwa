@@ -73,7 +73,6 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
   ]) as unknown as [ProfileForPlanning, WorkoutDayRef[], WorkoutHistoryEntry[], unknown[]]
   const nextWorkoutDay = chooseNextWorkoutDay({ workoutDays, completedWorkout: completedEntry })
   if (!nextWorkoutDay) return null
-  const debriefQualityScore = completedEntry.debrief?.qualityScore ?? null
   // Issue #137: coachState для правки СЛЕДУЮЩЕЙ тренировки считаем на её дату,
   // а не на момент завершения текущей. Иначе только что отработанная группа
   // всегда выглядит как «тренирована 0 дней назад», и планировщик занижает
@@ -92,7 +91,6 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
     workoutDays: workoutDays as unknown as Parameters<typeof computeCoachState>[0]['workoutDays'],
     history: [completedEntry as unknown as WorkoutHistoryEntry, ...history],
     now: new Date(completedAt.getTime() + daysUntilNext * 86_400_000),
-    lastWorkoutQualityScore: debriefQualityScore,
     exerciseLibrary: exerciseLibrary as unknown as Parameters<typeof computeCoachState>[0]['exerciseLibrary'],
   })
 
@@ -104,7 +102,6 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
     now: new Date(completedEntry.completedAt ?? Date.now()),
     coachState,
     exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildSafeCoachPlan>[0]>["exerciseLibrary"],
-    workoutQualityScore: debriefQualityScore,
   })
 
   // Issue #107: run progress analysis so LLM can reason about plateaus,

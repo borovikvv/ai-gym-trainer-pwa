@@ -112,6 +112,9 @@ function App() {
   const [activeSessionWorkoutDay, setActiveSessionWorkoutDay] = useState<WorkoutDay | null>(null)
   const [workoutReadinessMode, setWorkoutReadinessMode] = useState<ReadinessMode>('normal')
   const [readinessCheckIn, setReadinessCheckIn] = useState<ReadinessCheckIn>(defaultReadinessCheckIn)
+  // Issue #246: пользователь трогал чек-ин готовности. Дефолт в БД как
+  // измерение не пишется — молчание читается как отсутствие данных.
+  const [readinessTouched, setReadinessTouched] = useState(false)
   const [exercisePickerOpen, setExercisePickerOpen] = useState(false)
   // Issue #69: lifted state for useExtraWorkoutToday (hook moved to CoachHomePage)
   const [coachTodayWorkoutDay, setCoachTodayWorkoutDay] = useState<WorkoutDay | null>(null)
@@ -170,8 +173,6 @@ function App() {
 
   const [sheetOpen, setSheetOpen] = useState(false)
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false)
-  // Issue #161: user rating 1–5 after workout, 0 = not yet rated
-  const [userRating, setUserRating] = useState<number>(0)
   // Фаза 3.2: уведомление «отдых окончен» показывает цель следующего подхода.
   // Замыкание вызывается только по окончании таймера — visibleNextSetRecommendation
   // к этому моменту инициализировано (объявлено ниже в этом же компоненте).
@@ -233,6 +234,7 @@ function App() {
   function updateReadinessCheckIn(patch: Partial<ReadinessCheckIn>) {
     const next = { ...readinessCheckIn, ...patch }
     setReadinessCheckIn(next)
+    setReadinessTouched(true)
     setWorkoutReadinessMode(resolveReadinessMode(next))
   }
 
@@ -450,7 +452,11 @@ function App() {
     activeUserId,
     activeWorkoutDay,
     activeExerciseIndex,
-    readinessCheckIn,
+    // Issue #246: нетронутый чек-ин — это дефолт панели, а не наблюдение
+    // пользователя. В БД уходит null, и энергия/крепатура читают отсутствие
+    // данных, а не «всё нормально». Preview/reviewEntry дефолт не трогают —
+    // там он нужен для локальной адаптации тренировки.
+    readinessCheckIn: readinessTouched ? readinessCheckIn : null,
     logs,
     history,
     setHistory,
@@ -461,8 +467,6 @@ function App() {
     setLogs,
     navigate,
     notify,
-    userRating,
-    setUserRating,
   })
   const reviewEntry = useMemo(() => createWorkoutHistoryEntry({
     userId: activeUserId,
@@ -471,7 +475,8 @@ function App() {
     exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
     logs,
     readinessCheckIn,
-  }), [activeUserId, activeWorkoutDay, activeExerciseIndex, logs, readinessCheckIn])
+    history,
+  }), [activeUserId, activeWorkoutDay, activeExerciseIndex, logs, readinessCheckIn, history])
   const reviewDebrief = reviewEntry.debrief
   // Issue #167: отклонение фактических повторов от ожидаемых на том же весе.
   // Считаем и показываем; на решения тренера пока не влияет.
@@ -544,8 +549,6 @@ function App() {
             totalVolume={totalVolume}
             reviewDebrief={reviewDebrief}
             reviewRepDeviation={reviewRepDeviation}
-            userRating={userRating}
-            onUserRatingChange={setUserRating}
             isSavingWorkout={isSavingWorkout}
             workoutReadinessMode={workoutReadinessMode}
             readinessOptions={readinessOptions}

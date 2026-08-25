@@ -78,6 +78,55 @@ describe('workout history', () => {
     expect(entry.totalVolume).toBe(1800)
   })
 
+  // Issue #245: previousFailureCount должен доезжать из истории в расчёт
+  // прогрессии — второй провал подряд ниже repMin даёт deload.
+  it('deloads when history shows the previous session also failed below repMin', () => {
+    const failedLog = {
+      'bench-press': {
+        exerciseId: 'bench-press',
+        pain: false,
+        sets: [
+          { weight: 60, reps: 5, rpe: 9, completed: true },
+          { weight: 60, reps: 4, rpe: 10, completed: true },
+        ],
+      },
+    }
+    const base = { userId: 'vyacheslav', workoutDayId: 'day-a', workoutDayName: 'День A', exercises: [bench], logs: failedLog }
+    const previousEntry = createWorkoutHistoryEntry({ ...base, completedAt: '2026-06-03T15:00:00.000Z' })
+    const entry = createWorkoutHistoryEntry({ ...base, history: [previousEntry], completedAt: '2026-06-10T15:00:00.000Z' })
+
+    expect(entry.exercises[0].progressionType).toBe('deload')
+    expect(entry.exercises[0].nextRecommendedWeight).toBe(57.5)
+  })
+
+  // Review #250: history — глобальный массив всех пользователей, считать
+  // провалы нужно только по записям текущего userId.
+  it('ignores failed sessions of other users when counting previous failures', () => {
+    const failedLog = {
+      'bench-press': {
+        exerciseId: 'bench-press',
+        pain: false,
+        sets: [
+          { weight: 60, reps: 5, rpe: 9, completed: true },
+          { weight: 60, reps: 4, rpe: 10, completed: true },
+        ],
+      },
+    }
+    const base = { userId: 'vyacheslav', workoutDayId: 'day-a', workoutDayName: 'День A', exercises: [bench], logs: failedLog }
+    const otherUserFailed = createWorkoutHistoryEntry({
+      ...base,
+      userId: 'other-user',
+      completedAt: '2026-06-03T15:00:00.000Z',
+    })
+    const entry = createWorkoutHistoryEntry({
+      ...base,
+      history: [otherUserFailed],
+      completedAt: '2026-06-10T15:00:00.000Z',
+    })
+
+    expect(entry.exercises[0].progressionType).not.toBe('deload')
+  })
+
   it('builds next target weights from the most recent completed workout', () => {
     const history = [
       createWorkoutHistoryEntry({
@@ -154,6 +203,67 @@ describe('workout history', () => {
 
     it('returns empty array for empty input', () => {
       expect(computeSetIntervals([])).toEqual([])
+    })
+  })
+
+  // Issue #247: отклонение повторов от личного ожидания (#167) становится
+  // стоп-фактором решения о весе: человек упирается в repMax, но делает на
+  // этом весе заметно меньше повторов, чем раньше, — вес не растёт.
+  describe('rep deviation as progression guard (#247)', () => {
+    const historyEntry = (completedAt: string, reps: number[]) =>
+      createWorkoutHistoryEntry({
+        userId: 'vyacheslav',
+        workoutDayId: 'day-a',
+        workoutDayName: 'День A',
+        exercises: [bench],
+        logs: {
+          'bench-press': {
+            exerciseId: 'bench-press',
+            pain: false,
+            sets: reps.map((reps) => ({ weight: 60, reps, rpe: 7, completed: true })),
+          },
+        },
+        completedAt,
+      })
+
+    const decliningSession = () => ({
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      exercises: [bench],
+      logs: {
+        'bench-press': {
+          exerciseId: 'bench-press',
+          pain: false,
+          sets: [
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+          ],
+        },
+      },
+      completedAt: '2026-06-15T15:00:00.000Z',
+    })
+
+    it('держивает вес при падении отдачи на том же весе', () => {
+      const history = [
+        historyEntry('2026-06-01T15:00:00.000Z', [12, 12, 12]),
+        historyEntry('2026-06-08T15:00:00.000Z', [12, 12, 12]),
+      ]
+
+      const entry = createWorkoutHistoryEntry({ ...decliningSession(), history })
+
+      expect(entry.exercises[0].progressionType).toBe('hold')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(60)
+    })
+
+    it('без накопленного ожидания фолбэк не меняется — вес растёт как раньше', () => {
+      const history = [historyEntry('2026-06-01T15:00:00.000Z', [12, 12, 12])]
+
+      const entry = createWorkoutHistoryEntry({ ...decliningSession(), history })
+
+      expect(entry.exercises[0].progressionType).toBe('increase')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(62.5)
     })
   })
 })

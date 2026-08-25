@@ -1,8 +1,10 @@
 import { resolveWeightDirection, harderWeight, easierWeight, isWeightlessProgression, nextRepRange } from '../../shared/weightDirection'
 import { isTimedExerciseName } from '../../shared/muscleGroups'
+import { EFFORT_RISE_DEVIATION } from './repExpectation'
 // Issue #98 PR2: ProgressionType unified in shared/types.ts
 export type { ProgressionType } from '../../shared/types'
-import type { ProgressionType } from '../../shared/types'
+import type { ProgressionType, WorkoutHistoryEntry } from '../../shared/types'
+import { getCanonicalExerciseId } from './exerciseIdentity'
 
 export type WorkoutSetInput = {
   weight: number
@@ -22,12 +24,31 @@ export type ProgressionInput = {
   sets: WorkoutSetInput[]
   pain: boolean
   previousFailureCount?: number
+  /** Отклонение факта от ожидания по истории на этом весе (#167); null/undefined — сигнала нет. */
+  avgRepDeviation?: number | null
 }
 
 export type ProgressionResult = {
   recommendedWeight: number
   type: ProgressionType
   reason: string
+}
+
+// Issue #245: провал = в самой свежей прошлой сессии с этим упражнением два и
+// больше выполненных подхода ниже repMin. Хватает 0/1 — правило смотрит `>= 1`.
+// Допущение: repMin берётся из текущего плана — в CompletedExerciseHistory
+// диапазона нет, он считается неизменившимся между сессиями.
+export function countPreviousFailures(
+  history: WorkoutHistoryEntry[],
+  options: { canonicalExerciseId: string; repMin: number },
+): number {
+  const previousExercise = [...history]
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt))
+    .flatMap((workout) => workout.exercises)
+    .find((exercise) => getCanonicalExerciseId(exercise) === options.canonicalExerciseId)
+  if (!previousExercise) return 0
+  const belowMinCount = previousExercise.sets.filter((set) => set.completed && set.reps < options.repMin).length
+  return belowMinCount >= 2 ? 1 : 0
 }
 
 export function calculateProgression(input: ProgressionInput): ProgressionResult {
@@ -64,6 +85,18 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
   const belowMinCount = completedSets.filter((set) => set.reps < input.repMin).length
 
   if (allAtTop && allControlled) {
+    // Issue #247: человек может упираться в repMax и при этом делать на этом
+    // весе заметно меньше повторов, чем раньше (#167). Диапазон этого не видит
+    // (allAtTop сверяет с НАЗНАЧЕННЫМ диапазоном), отклонение — единственный
+    // сигнал, который ловит недобор относительно ЛИЧНОЙ нормы. Поэтому он
+    // стоит как стоп-фактор внутри ветки роста, а не отдельной веткой.
+    if (input.avgRepDeviation != null && input.avgRepDeviation <= EFFORT_RISE_DEVIATION) {
+      return {
+        recommendedWeight: input.currentWeight,
+        type: 'hold',
+        reason: `${input.exerciseName}: все подходы на верхней границе, но по ${unit} — ниже вашей нормы на этом весе. Вес пока держим.`,
+      }
+    }
     const nextWeight = harderWeight(input.currentWeight, input.weightStep, direction)
     // Issue #192: у отжиманий и планки шага веса нет — «+0 кг» было советом
     // сделать ровно то, что уже сделано. Растёт диапазон повторов (планировщик

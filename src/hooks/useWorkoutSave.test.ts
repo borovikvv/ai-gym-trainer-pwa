@@ -40,23 +40,11 @@ function makeOptions(overrides: Partial<Parameters<typeof useWorkoutSave>[0]> = 
   } as Parameters<typeof useWorkoutSave>[0]
 }
 
-describe('useWorkoutSave — issue #161 rating', () => {
-  it('attaches the rating to the saved entry', async () => {
+describe('useWorkoutSave — issue #249: user rating removed', () => {
+  it('saves an entry without userRating', async () => {
     const setHistory = vi.fn()
     const { result } = renderHook(() =>
-      useWorkoutSave(makeOptions({ setHistory, userRating: 4 })),
-    )
-
-    await act(async () => { await result.current.saveWorkoutAndExit() })
-
-    const [savedEntry] = setHistory.mock.calls[0][0]
-    expect(savedEntry.userRating).toBe(4)
-  })
-
-  it('omits the rating when the workout was not rated', async () => {
-    const setHistory = vi.fn()
-    const { result } = renderHook(() =>
-      useWorkoutSave(makeOptions({ setHistory, userRating: 0 })),
+      useWorkoutSave(makeOptions({ setHistory })),
     )
 
     await act(async () => { await result.current.saveWorkoutAndExit() })
@@ -65,16 +53,11 @@ describe('useWorkoutSave — issue #161 rating', () => {
     expect(savedEntry.userRating).toBeUndefined()
   })
 
-  // The rating lives in App state, which survives navigation between workouts.
-  // Without an explicit reset the next workout silently inherits this rating.
-  it('resets the rating after a successful save', async () => {
-    const setUserRating = vi.fn()
-    const { result } = renderHook(() =>
-      useWorkoutSave(makeOptions({ userRating: 5, setUserRating })),
-    )
-
-    await act(async () => { await result.current.saveWorkoutAndExit() })
-
-    expect(setUserRating).toHaveBeenCalledWith(0)
+  it('no longer accepts a userRating option', () => {
+    // Issue #249: userRating удалён из UseWorkoutSaveOptions. Если поле вернут,
+    // директива ниже перестанет находить ошибку и сломает сборку.
+    // @ts-expect-error — userRating не входит в UseWorkoutSaveOptions
+    const rejectedOptions = makeOptions({ userRating: 4 })
+    expect(rejectedOptions).toBeDefined()
   })
 })

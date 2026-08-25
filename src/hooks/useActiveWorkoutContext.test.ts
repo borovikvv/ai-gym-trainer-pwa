@@ -1,7 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { ExercisePlan, WorkoutDay } from '../../shared/types'
+import type { ExercisePlan, WorkoutDay, WorkoutHistoryEntry } from '../../shared/types'
 import { fallbackProgramData } from '../data/programApi'
+import { createWorkoutHistoryEntry } from '../domain/workoutHistory'
 import { useActiveWorkoutContext } from './useActiveWorkoutContext'
 
 function makeExercise(id: string, name: string): ExercisePlan {
@@ -93,5 +94,47 @@ describe('useActiveWorkoutContext — состав дня из черновик�
     })
 
     expect(result.current.activeWorkoutDay.exercises.map((item) => item.id)).toEqual([replacement.id])
+  })
+})
+
+// Issue #247: предпросмотр на экране обзора должен совпадать с тем, что
+// реально сохранится, — отклонение повторов (#167) даёт hold в обоих местах.
+describe('useActiveWorkoutContext — предпросмотр прогрессии и отклонение повторов (#247)', () => {
+  const historyEntry = (completedAt: string, reps: number[]): WorkoutHistoryEntry =>
+    createWorkoutHistoryEntry({
+      userId,
+      workoutDayId: workoutDay.id,
+      workoutDayName: workoutDay.name,
+      exercises: [planned],
+      logs: {
+        [planned.id]: {
+          exerciseId: planned.id,
+          pain: false,
+          sets: reps.map((reps) => ({ weight: 60, reps, rpe: 7, completed: true })),
+        },
+      },
+      completedAt,
+    })
+
+  it('показывает hold, когда повторы на верхней границе, но ниже личной нормы', () => {
+    const history = [
+      historyEntry('2026-06-01T15:00:00.000Z', [12, 12, 12]),
+      historyEntry('2026-06-08T15:00:00.000Z', [12, 12, 12]),
+    ]
+    const logs = {
+      [planned.id]: {
+        exerciseId: planned.id,
+        pain: false,
+        sets: [
+          { weight: 60, reps: 10, rpe: 8, completed: true },
+          { weight: 60, reps: 10, rpe: 8, completed: true },
+          { weight: 60, reps: 10, rpe: 8, completed: true },
+        ],
+      },
+    }
+
+    const { result } = renderContext({ history, logs })
+
+    expect(result.current.progressionSummary[0].type).toBe('hold')
   })
 })

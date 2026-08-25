@@ -31,9 +31,6 @@ type UseWorkoutSaveOptions = {
   setLogs: Dispatch<SetStateAction<Record<string, ExerciseLog>>>
   navigate: (screen: Screen, options?: { allowReviewExit?: boolean }) => void
   notify: (message: string) => void
-  // Issue #161: user rating 1–5 after workout, 0 = not yet rated
-  userRating?: number
-  setUserRating?: Dispatch<SetStateAction<number>>
 }
 
 export function useWorkoutSave({
@@ -51,8 +48,6 @@ export function useWorkoutSave({
   setLogs,
   navigate,
   notify,
-  userRating = 0,
-  setUserRating,
 }: UseWorkoutSaveOptions) {
         const [isSavingWorkout, setIsSavingWorkout] = useState(false)
         const savingRef = useRef(false)
@@ -68,18 +63,17 @@ export function useWorkoutSave({
       exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
       logs,
       readinessCheckIn,
+      // Issue #245/#247: история уходит в previousFailureCount и в отклонение
+      // повторов; по userId её фильтрует сам createWorkoutHistoryEntry.
+      history,
     })
-    // Issue #161: attach user rating if selected (0 = not rated → omit)
-    const entry: WorkoutHistoryEntry = userRating > 0
-      ? { ...baseEntry, userRating }
-      : baseEntry
-    const nextHistory = [entry, ...history]
+    const nextHistory = [baseEntry, ...history]
     setHistory(nextHistory)
     saveHistory(nextHistory)
             try {
               if (isWorkoutApiConfigured) {
                 try {
-                  const saveResult = await saveWorkoutEntryToApi(entry)
+                  const saveResult = await saveWorkoutEntryToApi(baseEntry)
                   const remoteHistory = await loadWorkoutHistoryFromApi()
                   setHistory(remoteHistory)
                   saveHistory(remoteHistory)
@@ -103,14 +97,14 @@ export function useWorkoutSave({
                     await enqueueRequest(
                       `${apiBase}/api/workout-history`,
                       'POST',
-                      entry,
+                      baseEntry,
                     )
                   }
                   notify('Сохранено локально. Отправим в базу при появлении интернета.')
                 }
               } else if (supabase) {
                 try {
-                  await saveWorkoutEntryToSupabase(supabase, entry)
+                  await saveWorkoutEntryToSupabase(supabase, baseEntry)
                   clearActiveWorkoutDraft()
                   notify('Тренировка сохранена в базе')
                 } catch {
@@ -121,10 +115,6 @@ export function useWorkoutSave({
                 notify('Тренировка сохранена')
               }
               setActiveExerciseIndex(0)
-              // Issue #161: rating lives in App state and survives navigation —
-              // without this reset the next workout inherits the previous
-              // rating and saves it silently, poisoning the #88 dataset.
-              setUserRating?.(0)
               const updatedTargets = buildNextTargets(nextHistory.filter((workout) => workout.userId === activeUserId))
               setLogs(createInitialLogs(activeWorkoutDay, updatedTargets))
               navigate('home', { allowReviewExit: true })
