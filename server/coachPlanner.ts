@@ -106,7 +106,6 @@ interface BuildSafeCoachPlanInput {
   now?: Date
   coachState?: CoachState | Partial<CoachState> | null
   exerciseLibrary?: ExerciseInput[]
-  workoutQualityScore?: number | null
 }
 
 export interface CoachPlanChange {
@@ -185,7 +184,6 @@ export function buildSafeCoachPlan({
   now = new Date(),
   coachState = null,
   exerciseLibrary = [],
-  workoutQualityScore = null,
 }: BuildSafeCoachPlanInput): SafeCoachPlan {
   const nextWorkoutDay = chooseNextWorkoutDay({ workoutDays, completedWorkout, now, profile })
   if (!nextWorkoutDay) {
@@ -213,14 +211,6 @@ export function buildSafeCoachPlan({
     const hadPain = Boolean(recent?.pain)
     const hardRecent = (recent?.sets ?? []).some((set) => set.completed && Number(set.rpe) >= 9)
     let setsCount = daysUntilNext !== null && daysUntilNext <= 0 ? Math.max(2, Math.min(Number(exercise.setsCount ?? 0), 2)) : Number(exercise.setsCount ?? 0)
-    if (workoutQualityScore !== null && workoutQualityScore < 40) {
-      setsCount = Math.min(setsCount, 2)
-    } else if (workoutQualityScore !== null && workoutQualityScore < 60) {
-      setsCount = Math.min(setsCount, 3)
-    }
-    const qualityNote = workoutQualityScore !== null && workoutQualityScore < 60
-      ? 'Качество прошлой тренировки низкое — снижаем объём и держим технику. '
-      : ''
 
     let muscleGroupSetsLast7Days = 0
     // Issue #171: передаём профиль целиком — из него берётся возраст. Раньше
@@ -318,7 +308,7 @@ export function buildSafeCoachPlan({
         ? `${exercise.name}: была боль в истории — вес не повышаем, техника и амплитуда важнее.`
         : hardRecent
           ? `${exercise.name}: после тяжёлой прошлой работы держим качество, без отказа.`
-          : `${qualityNote}${volumeNote}${repProgressNote}${exercise.name}: ${recoveryNote}.`,
+          : `${volumeNote}${repProgressNote}${exercise.name}: ${recoveryNote}.`,
     }
 
     const replacement = findReplacementForFatigue(

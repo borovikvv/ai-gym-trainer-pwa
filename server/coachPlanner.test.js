@@ -376,6 +376,27 @@ describe('buildSafeCoachPlan — volume landmark clamping', () => {
 
     expect(plan.changes[0].setsCount).toBe(4)
   })
+
+  it('ignores workoutQualityScore: volume clamp result is the same with or without it (issue #249)', () => {
+    // Issue #249: quality_score больше не влияет на объём плана. 14 sets
+    // (above MAV) триггерят клэмп по volume landmarks до 3. Если бы клэмп по
+    // качеству вернули, передача workoutQualityScore: 10 дала бы 2, а не 3.
+    const history = makeHistoryWithChestVolume(14)
+    const base = {
+      profile: profileAdult,
+      workoutDays: [workoutDayWithBench],
+      completedWorkout: null,
+      history,
+      coachState: null,
+      exerciseLibrary: [],
+      now: new Date('2026-06-22T12:00:00.000Z'), // Monday — not a training day (trainingDays: Tue/Thu/Sat)
+    }
+    const withQuality = buildSafeCoachPlan({ ...base, workoutQualityScore: 10 })
+    const withoutQuality = buildSafeCoachPlan(base)
+
+    expect(withQuality.changes[0].setsCount).toBe(3)
+    expect(withoutQuality.changes[0].setsCount).toBe(withQuality.changes[0].setsCount)
+  })
 })
 
 // ---------------------------------------------------------------------------
