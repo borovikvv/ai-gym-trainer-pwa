@@ -465,6 +465,8 @@ function App() {
     reloadProgramDataForUser,
     setActiveExerciseIndex,
     setLogs,
+    setReadinessCheckIn,
+    setReadinessTouched,
     navigate,
     notify,
   })

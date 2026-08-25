@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useWorkoutSave } from './useWorkoutSave'
+import { defaultReadinessCheckIn } from '../domain/readinessCheckIn'
 import type { WorkoutDay } from '../../shared/types'
 
 vi.mock('./useProgramData', () => ({ saveHistory: vi.fn() }))
@@ -34,6 +35,8 @@ function makeOptions(overrides: Partial<Parameters<typeof useWorkoutSave>[0]> = 
     reloadProgramDataForUser: vi.fn().mockResolvedValue(undefined),
     setActiveExerciseIndex: vi.fn(),
     setLogs: vi.fn(),
+    setReadinessCheckIn: vi.fn(),
+    setReadinessTouched: vi.fn(),
     navigate: vi.fn(),
     notify: vi.fn(),
     ...overrides,
@@ -59,5 +62,20 @@ describe('useWorkoutSave — issue #249: user rating removed', () => {
     // @ts-expect-error — userRating не входит в UseWorkoutSaveOptions
     const rejectedOptions = makeOptions({ userRating: 4 })
     expect(rejectedOptions).toBeDefined()
+  })
+})
+
+describe('useWorkoutSave — issue #255: readiness check-in reset between workouts', () => {
+  it('resets readinessCheckIn and readinessTouched after saving', async () => {
+    const setReadinessCheckIn = vi.fn()
+    const setReadinessTouched = vi.fn()
+    const { result } = renderHook(() =>
+      useWorkoutSave(makeOptions({ setReadinessCheckIn, setReadinessTouched })),
+    )
+
+    await act(async () => { await result.current.saveWorkoutAndExit() })
+
+    expect(setReadinessCheckIn).toHaveBeenCalledWith(defaultReadinessCheckIn)
+    expect(setReadinessTouched).toHaveBeenCalledWith(false)
   })
 })
