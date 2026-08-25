@@ -310,8 +310,9 @@ function buildWeekBuckets(history: WorkoutHistoryEntry[], now: Date): WeekBucket
  * the position inside the CURRENT (most recent) cycle.
  *
  * New approach: walk oldest-to-newest, maintaining running weekInCycle.
- * When a cycle boundary is crossed (gap > 21d OR weekInCycle > cycleLength),
- * reset to week 1. After processing ALL weeks, the final weekInCycle is
+ * When a cycle boundary is crossed (gap > 21d OR ≥2 missing weeks
+ * OR weekInCycle > cycleLength), reset to week 1. After processing ALL
+ * weeks, the final weekInCycle is
  * the position in the current cycle — which is what we want.
  *
  * Workouts/planned counters are computed only for the current (final) cycle:
@@ -361,8 +362,10 @@ function findCyclePosition(
       const weekDiff = Math.round(weekDiffMs / (7 * 86_400_000))
       const missingWeeks = Math.max(0, weekDiff - 1)
 
-      if (gapDays > 21) {
-        // Issue #96: extended break — this week starts a new cycle
+      if (gapDays > 21 || missingWeeks >= 2) {
+        // Issue #96: extended break — this week starts a new cycle.
+        // Issue #261: ≥2 missing weeks (детренированность после перерыва ~2 недели)
+        // также начинают новый цикл, даже если gapDays ≤ 21.
         startNewCycle(i)
       } else if (prevWasDeload) {
         // Issue #138: предыдущая неделя была разгрузочной — мезоцикл завершён,
