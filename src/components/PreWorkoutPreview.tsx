@@ -232,7 +232,7 @@ export function PreWorkoutPreview({
         </div>
       </div>
 
-      <button className="primary" onClick={onBegin}>Начать тренировку</button>
+      <button className="primary" aria-label="Начать тренировку" onClick={onBegin}>Начать тренировку</button>
     </section>
   )
 }
