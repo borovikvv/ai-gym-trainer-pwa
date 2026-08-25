@@ -35,7 +35,7 @@ function exercise(muscleGroup, setCount, extras = {}) {
 }
 
 function facts(overrides = {}) {
-  return { sets: 10, avgRpe: 7, painSessions: 0, soreSessions: 0, sessions: 2, ...overrides }
+  return { sets: 10, avgRepDeviation: null, painSessions: 0, soreSessions: 0, sessions: 2, ...overrides }
 }
 
 // ---------------------------------------------------------------------------
@@ -74,17 +74,27 @@ describe('buildWeeklyMuscleFacts', () => {
     expect(result.legs.soreSessions).toBe(2)
   })
 
-  it('считает средний RPE по группе', () => {
+  it('считает среднее отклонение повторов по группе', () => {
+    // Две базовые сессии до недели задают ожидание (10 повторов на весе 60),
+    // сессия внутри недели делает 8 — отклонение каждого подхода -2.
     const result = buildWeeklyMuscleFacts([
-      session('2026-07-21', [exercise('Ноги', 2, { rpe: 8 })]),
-      session('2026-07-23', [exercise('Ноги', 2, { rpe: 9 })]),
+      session('2026-07-14', [exercise('Ноги', 3, { reps: 10 })]),
+      session('2026-07-17', [exercise('Ноги', 3, { reps: 10 })]),
+      session('2026-07-22', [exercise('Ноги', 3, { reps: 8 })]),
     ], WEEK_START, '2026-07-26')
-    expect(result.legs.avgRpe).toBe(8.5)
+    expect(result.legs.avgRepDeviation).toBe(-2)
+  })
+
+  it('нет истории для ожидания — отклонение null', () => {
+    const result = buildWeeklyMuscleFacts([
+      session('2026-07-21', [exercise('Ноги', 3)]),
+    ], WEEK_START, '2026-07-26')
+    expect(result.legs.avgRepDeviation).toBeNull()
   })
 
   it('пустая история — нули по всем группам', () => {
     const result = buildWeeklyMuscleFacts([], WEEK_START, '2026-07-26')
-    expect(result.legs).toEqual({ sets: 0, avgRpe: null, painSessions: 0, soreSessions: 0, sessions: 0 })
+    expect(result.legs).toEqual({ sets: 0, avgRepDeviation: null, painSessions: 0, soreSessions: 0, sessions: 0 })
   })
 })
 
@@ -99,7 +109,6 @@ describe('decideWeeklyVolumeTarget', () => {
       landmarks: LANDMARKS,
       previousTarget: 12,
       lastWeek: facts({ sets: 12 }),
-      priorWeek: facts({ sets: 11 }),
       e1rmTrend: 'up',
     })
     expect(decision.action).toBe('add')
@@ -151,13 +160,36 @@ describe('decideWeeklyVolumeTarget', () => {
       muscleKey: 'legs',
       landmarks: LANDMARKS,
       previousTarget: 14,
-      lastWeek: facts({ sets: 14, avgRpe: 9 }),
-      priorWeek: facts({ sets: 14, avgRpe: 7.5 }),
+      lastWeek: facts({ sets: 14, avgRepDeviation: -1.5 }),
       e1rmTrend: 'down',
     })
     expect(decision.action).toBe('cut')
     expect(decision.ceilingSignals).toContain('производительность падает')
     expect(decision.ceilingSignals).toContain('усилие выросло на тех же весах')
+  })
+
+  it('снимает подход по e1RM вниз и росту усилия без боли и крепатуры', () => {
+    const decision = decideWeeklyVolumeTarget({
+      muscleKey: 'legs',
+      landmarks: LANDMARKS,
+      previousTarget: 14,
+      lastWeek: facts({ sets: 14, avgRepDeviation: -1.2 }),
+      e1rmTrend: 'down',
+    })
+    expect(decision.action).toBe('cut')
+    expect(decision.targetSets).toBe(13)
+  })
+
+  it('null отклонения не считается ни сработавшим, ни «сигнала нет»', () => {
+    const decision = decideWeeklyVolumeTarget({
+      muscleKey: 'legs',
+      landmarks: LANDMARKS,
+      previousTarget: 14,
+      lastWeek: facts({ sets: 14, avgRepDeviation: null }),
+      e1rmTrend: 'down',
+    })
+    expect(decision.ceilingSignals).toEqual(['производительность падает'])
+    expect(decision.action).toBe('hold')
   })
 
   it('не добавляет, пока прошлая цель не выполнена', () => {

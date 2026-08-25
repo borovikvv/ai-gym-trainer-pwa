@@ -21,6 +21,7 @@ import type { CoachState, VolumeLandmark, WorkoutHistoryEntry } from '../shared/
 import type { DbClient } from './dbClient.js'
 import { CANONICAL_MUSCLE_KEYS, labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { countCompletedSets } from './buildVolumeSnapshot.js'
+import { computeSessionRepDeviation, EFFORT_RISE_DEVIATION } from '../src/domain/repExpectation.js'
 import { dateToDateOnly, startOfWeek } from './utils.js'
 
 export type VolumeAction = 'add' | 'hold' | 'cut'
@@ -44,7 +45,8 @@ export interface WeeklyVolumeTarget {
 /** Факт по группе за одну календарную неделю. */
 export interface MuscleWeekFacts {
   sets: number
-  avgRpe: number | null
+  /** Среднее отклонение повторов от ожидания по сессиям недели; null — истории не хватает. */
+  avgRepDeviation: number | null
   /** Тренировок с отметкой боли на этой группе. */
   painSessions: number
   /** Чек-инов, где группа отмечена как забитая. */
@@ -59,8 +61,9 @@ export type WeeklyMuscleFacts = Record<string, MuscleWeekFacts>
 // ---------------------------------------------------------------------------
 
 /**
- * Рабочие подходы, средний RPE, боль и крепатура по группам за календарную
- * неделю [weekStart, weekEnd] (обе границы — даты YYYY-MM-DD, включительно).
+ * Рабочие подходы, среднее отклонение повторов от ожидания, боль и крепатура
+ * по группам за календарную неделю [weekStart, weekEnd] (обе границы — даты
+ * YYYY-MM-DD, включительно).
  */
 export function buildWeeklyMuscleFacts(
   history: WorkoutHistoryEntry[],
@@ -69,9 +72,9 @@ export function buildWeeklyMuscleFacts(
 ): WeeklyMuscleFacts {
   const facts: WeeklyMuscleFacts = {}
   for (const key of CANONICAL_MUSCLE_KEYS) {
-    facts[key] = { sets: 0, avgRpe: null, painSessions: 0, soreSessions: 0, sessions: 0 }
+    facts[key] = { sets: 0, avgRepDeviation: null, painSessions: 0, soreSessions: 0, sessions: 0 }
   }
-  const rpeSums: Record<string, { sum: number; count: number }> = {}
+  const repDevSums: Record<string, { sum: number; count: number }> = {}
 
   for (const session of history ?? []) {
     const day = String(session?.completedAt ?? '').slice(0, 10)
@@ -84,15 +87,23 @@ export function buildWeeklyMuscleFacts(
       touched.add(key)
       facts[key].sets += countCompletedSets(exercise)
       if (exercise.pain) facts[key].painSessions += 1
-      for (const set of exercise.sets ?? []) {
-        const rpe = Number(set?.rpe)
-        if (set?.completed === false || !Number.isFinite(rpe) || rpe <= 0) continue
-        rpeSums[key] = rpeSums[key] ?? { sum: 0, count: 0 }
-        rpeSums[key].sum += rpe
-        rpeSums[key].count += 1
-      }
     }
     for (const key of touched) facts[key].sessions += 1
+
+    // Отклонение повторов — из ВСЕЙ истории (ожидание строится по сессиям до
+    // текущей внутри computeSessionRepDeviation), а не только по неделе.
+    const deviation = computeSessionRepDeviation(session, history)
+    const byExercise = new Map(deviation.exercises.map((exercise) => [exercise.exerciseId, exercise]))
+    for (const exercise of session.exercises ?? []) {
+      const key = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.exerciseName ?? '')
+      if (!facts[key]) continue
+      for (const set of byExercise.get(exercise.exerciseId)?.sets ?? []) {
+        if (set.deviation === null) continue
+        repDevSums[key] = repDevSums[key] ?? { sum: 0, count: 0 }
+        repDevSums[key].sum += set.deviation
+        repDevSums[key].count += 1
+      }
+    }
 
     // Крепатура — из чек-ина готовности перед тренировкой.
     for (const sore of session.readinessCheckIn?.soreMuscleGroups ?? []) {
@@ -101,8 +112,8 @@ export function buildWeeklyMuscleFacts(
     }
   }
 
-  for (const [key, rpe] of Object.entries(rpeSums)) {
-    if (rpe.count > 0) facts[key].avgRpe = Math.round((rpe.sum / rpe.count) * 10) / 10
+  for (const [key, dev] of Object.entries(repDevSums)) {
+    if (dev.count > 0) facts[key].avgRepDeviation = Math.round((dev.sum / dev.count) * 10) / 10
   }
   return facts
 }
@@ -129,17 +140,12 @@ interface DecideInput {
   previousTarget: number | null
   /** Факт прошлой недели — на нём строится решение. */
   lastWeek: MuscleWeekFacts
-  /** Факт позапрошлой недели — нужен для «усилие растёт на том же весе». */
-  priorWeek?: MuscleWeekFacts | null
   /** Тренд e1RM по группе (coachState.volumeSnapshots). */
   e1rmTrend?: 'up' | 'down' | 'flat' | 'insufficient_data'
 }
 
 /** Крепатура держится, если группа отмечена забитой в двух чек-инах и более. */
 const LINGERING_SORENESS_SESSIONS = 2
-
-/** Рост среднего RPE на столько считаем ростом усилия на том же весе. */
-const RPE_RISE = 1
 
 /** Доля цели, ниже которой неделя считается недобранной — добавлять нечего. */
 const UNDERSHOOT_RATIO = 0.9
@@ -153,7 +159,6 @@ export function decideWeeklyVolumeTarget({
   landmarks,
   previousTarget,
   lastWeek,
-  priorWeek = null,
   e1rmTrend = 'insufficient_data',
 }: DecideInput): VolumeTargetDecision {
   const mev = landmarks?.mev ?? 0
@@ -168,14 +173,20 @@ export function decideWeeklyVolumeTarget({
   if (e1rmTrend === 'down') ceilingSignals.push('производительность падает')
   if (lastWeek.soreSessions >= LINGERING_SORENESS_SESSIONS) ceilingSignals.push('крепатура не уходит')
   if (lastWeek.painSessions > 0) ceilingSignals.push('появилась боль')
-  if (
-    priorWeek?.avgRpe !== null && priorWeek?.avgRpe !== undefined
-    && lastWeek.avgRpe !== null
-    && lastWeek.avgRpe - priorWeek.avgRpe >= RPE_RISE
-  ) {
+  // «Усилие выросло» — через отклонение повторов от ожидания (#167), как в
+  // effortRising на уровне блока: RPE-шкала вырождена (#168), один источник
+  // для обоих уровней (#248).
+  if (lastWeek.avgRepDeviation !== null && lastWeek.avgRepDeviation <= EFFORT_RISE_DEVIATION) {
     ceilingSignals.push('усилие выросло на тех же весах')
   }
 
+  // Решение по порогу (#248): «≥2 из 4» фиксировано, не пересчитывается от
+  // числа доступных сигналов. painSessions/soreSessions — реальные измерения,
+  // а не пропуски (ноль подходов с болью — тоже факт); их недостоверность
+  // (крепатура всегда «light») — баг дефолтов чек-ина готовности, отдельный
+  // issue, лечить его подменой порога здесь — маскировать баг. При двух живых
+  // независимых сигналах (e1RM вниз и «усилие выросло») «2 из 4» означает
+  // «совпали оба живых сигнала» — исходный замысел порога.
   if (ceilingSignals.length >= 2) {
     const target = clamp(base - 1, mev, mrv)
     return decision({
@@ -316,9 +327,7 @@ export async function syncWeeklyVolumeTargets(client: DbClient, userId: string, 
   let targets = await loadWeeklyVolumeTargets(client, userId, weekStart)
   if (Object.keys(targets).length === 0) {
     const lastWeekStart = shiftDays(weekStart, -7)
-    const priorWeekStart = shiftDays(weekStart, -14)
     const lastWeek = buildWeeklyMuscleFacts(input.history, lastWeekStart, shiftDays(weekStart, -1))
-    const priorWeek = buildWeeklyMuscleFacts(input.history, priorWeekStart, shiftDays(lastWeekStart, -1))
     const previousTargets = await loadWeeklyVolumeTargets(client, userId, lastWeekStart)
     for (const muscleKey of CANONICAL_MUSCLE_KEYS) {
       const decided = decideWeeklyVolumeTarget({
@@ -326,7 +335,6 @@ export async function syncWeeklyVolumeTargets(client: DbClient, userId: string, 
         landmarks: landmarks[muscleKey] ?? null,
         previousTarget: previousTargets[muscleKey]?.targetSets ?? null,
         lastWeek: lastWeek[muscleKey],
-        priorWeek: priorWeek[muscleKey],
         e1rmTrend: snapshots[muscleKey]?.e1rmTrend,
       })
       await client.query(

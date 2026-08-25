@@ -80,7 +80,8 @@ export const MIN_SESSIONS_FOR_EXPECTATION = 2
 /**
  * Порог среднего отклонения повторов от ожидания, ниже которого считаем, что
  * усилие выросло: на том же весе человек стабильно недобирает повтор.
- * Общий для effortRising (mesocycle, #175) и progression-guard (#247).
+ * Единый источник сигнала для всех уровней: effortRising (mesocycle, #175),
+ * progression-guard (#247) и недельный объём (weeklyVolumeTargets, #248).
  */
 export const EFFORT_RISE_DEVIATION = -1
 
