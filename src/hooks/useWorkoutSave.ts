@@ -68,8 +68,9 @@ export function useWorkoutSave({
       exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
       logs,
       readinessCheckIn,
-      // Issue #247: история только этого пользователя — сигнал отклонения повторов.
-      history: history.filter((workout) => workout.userId === activeUserId),
+      // Issue #245/#247: история уходит в previousFailureCount и в отклонение
+      // повторов; по userId её фильтрует сам createWorkoutHistoryEntry.
+      history,
     })
     // Issue #161: attach user rating if selected (0 = not rated → omit)
     const entry: WorkoutHistoryEntry = userRating > 0

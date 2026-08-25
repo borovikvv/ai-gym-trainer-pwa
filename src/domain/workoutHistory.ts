@@ -1,6 +1,6 @@
 import type { ExercisePlan, WorkoutHistoryEntry } from '../../shared/types'
 import type { ReadinessCheckIn } from './readinessCheckIn'
-import { calculateProgression, type WorkoutSetInput } from './progression'
+import { calculateProgression, countPreviousFailures, type WorkoutSetInput } from './progression'
 import { computeSessionRepDeviation } from './repExpectation'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import { buildWorkoutDebrief } from './workoutDebrief'
@@ -27,12 +27,15 @@ export type CreateWorkoutHistoryEntryInput = {
   logs: Record<string, ExerciseLog>
   readinessCheckIn?: ReadinessCheckIn | null
   completedAt?: string
-  /** История прошлых сессий — вход отклонения повторов (#247); дефолт [] — сигнала нет. */
+  // Issue #245/#247: предыдущие сессии — из них считаются previousFailureCount
+  // (второй провал подряд ниже repMin → deload) и отклонение повторов.
+  // Фильтруются по userId здесь, вызывающим этого делать не надо.
   history?: WorkoutHistoryEntry[]
 }
 
 export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput): WorkoutHistoryEntry {
   const completedAt = input.completedAt ?? new Date().toISOString()
+  const userHistory = (input.history ?? []).filter((workout) => workout.userId === input.userId)
   const exercises = input.exercises.map((exercise) => {
     const log = input.logs[exercise.id] ?? { exerciseId: exercise.id, pain: false, sets: [] }
     const volume = log.sets.reduce((sum, set) => sum + (set.completed ? set.weight * set.reps : 0), 0)
@@ -44,7 +47,7 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
         completedAt,
         exercises: [{ exerciseId: exercise.id, canonicalExerciseId: getCanonicalExerciseId(exercise), sets: log.sets }],
       },
-      input.history ?? [],
+      userHistory,
     ).avgDeviation
     const progression = calculateProgression({
       exerciseName: exercise.name,
@@ -55,6 +58,10 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       sets: log.sets,
       pain: log.pain,
       avgRepDeviation,
+      previousFailureCount: countPreviousFailures(userHistory, {
+        canonicalExerciseId: getCanonicalExerciseId(exercise),
+        repMin: exercise.repMin,
+      }),
     })
 
     return {
