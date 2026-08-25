@@ -432,6 +432,47 @@ describe('Coach Timeline workout flow', () => {
     expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 2, energy: 2 }))
   })
 
+  it('resets the readiness check-in between workouts saved from the same App mount (#255)', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /мало спал/i }))
+    await user.click(screen.getByRole('button', { name: /мало энергии/i }))
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+
+    for (const index of [1, 2, 3]) {
+      const reps = screen.getByLabelText('Повторы')
+      await user.clear(reps)
+      await user.type(reps, '10')
+      await recordCurrentSet(user, index)
+    }
+
+    await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
+
+    let savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
+    expect(savedHistory[0].readinessCheckIn).toEqual(expect.objectContaining({ sleepQuality: 2, energy: 2 }))
+
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+    expect(screen.getByRole('button', { name: /мало спал/i })).not.toHaveClass('active')
+    expect(screen.getByRole('button', { name: /мало энергии/i })).not.toHaveClass('active')
+    await user.click(screen.getByRole('button', { name: /начать тренировку/i }))
+
+    for (const index of [1, 2, 3]) {
+      const reps = screen.getByLabelText('Повторы')
+      await user.clear(reps)
+      await user.type(reps, '10')
+      await recordCurrentSet(user, index)
+    }
+
+    await user.click(screen.getByRole('button', { name: /завершить всю тренировку/i }))
+    await user.click(screen.getByRole('button', { name: /сохранить и на главную/i }))
+
+    savedHistory = JSON.parse(window.localStorage.getItem('ai-gym-trainer:v0.1:history') ?? '[]')
+    expect(savedHistory[0].readinessCheckIn).toBeNull()
+  })
+
   it('shows the progress tab as a trainer dashboard instead of a mock bench-only chart', async () => {
     const user = userEvent.setup()
     // Use a fixed ISO date 5 days ago — inside the dashboard's 14-day window,

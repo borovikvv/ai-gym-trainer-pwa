@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { WorkoutDay, Screen } from '../../shared/types'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
+import { defaultReadinessCheckIn } from '../domain/readinessCheckIn'
 import {
   createWorkoutHistoryEntry,
   buildNextTargets,
@@ -29,6 +30,8 @@ type UseWorkoutSaveOptions = {
   reloadProgramDataForUser: (userId: string, toastMessage?: string) => Promise<void>
   setActiveExerciseIndex: Dispatch<SetStateAction<number>>
   setLogs: Dispatch<SetStateAction<Record<string, ExerciseLog>>>
+  setReadinessCheckIn: Dispatch<SetStateAction<ReadinessCheckIn>>
+  setReadinessTouched: Dispatch<SetStateAction<boolean>>
   navigate: (screen: Screen, options?: { allowReviewExit?: boolean }) => void
   notify: (message: string) => void
 }
@@ -46,6 +49,8 @@ export function useWorkoutSave({
   reloadProgramDataForUser,
   setActiveExerciseIndex,
   setLogs,
+  setReadinessCheckIn,
+  setReadinessTouched,
   navigate,
   notify,
 }: UseWorkoutSaveOptions) {
@@ -117,6 +122,8 @@ export function useWorkoutSave({
               setActiveExerciseIndex(0)
               const updatedTargets = buildNextTargets(nextHistory.filter((workout) => workout.userId === activeUserId))
               setLogs(createInitialLogs(activeWorkoutDay, updatedTargets))
+              setReadinessCheckIn(defaultReadinessCheckIn)
+              setReadinessTouched(false)
               navigate('home', { allowReviewExit: true })
             } finally {
               savingRef.current = false
