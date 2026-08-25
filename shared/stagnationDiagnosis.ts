@@ -149,6 +149,10 @@ export function diagnoseStagnation(signals: StagnationSignals, today: string): S
     return verdict('insufficient_stimulus', 'add_volume', `${stall}; усилие низкое, самочувствие нормальное, боли нет`)
   }
 
+  if (ceilingSignals.length === 0 && signals.energyLow === null) {
+    return verdict('insufficient_stimulus', 'hold', `${stall}; данных о самочувствии нет — добавлять объём вслепую нельзя`)
+  }
+
   // Картина неоднозначна — проверяем более вероятную гипотезу одной неделей.
   return verdict('insufficient_stimulus', 'add_volume', `${stall}; ${ambiguity(signals, ceilingSignals)}`, today)
 }
