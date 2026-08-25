@@ -112,6 +112,14 @@ describe('правило неопределённости', () => {
     expect(verdict?.note).toContain('не хватает данных')
   })
 
+  it('без данных о самочувствии объём не добавляется — hold, а не add_volume', () => {
+    const verdict = diagnoseStagnation(signals({ energyLow: null }), TODAY)
+    expect(verdict?.diagnosis).toBe('insufficient_stimulus')
+    expect(verdict?.action).toBe('hold')
+    expect(verdict?.hypothesis).toBe(false)
+    expect(verdict?.reviewOn).toBeNull()
+  })
+
   it('у продвинутого стагнация сначала проверяется как гипотеза о стимуле', () => {
     const verdict = diagnoseStagnation(signals({ advanced: true, weeksStalled: SLOWDOWN_STALL_WEEKS - 1 }), TODAY)
     expect(verdict?.diagnosis).toBe('insufficient_stimulus')
