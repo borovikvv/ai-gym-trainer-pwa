@@ -28,7 +28,8 @@ describe('WorkoutReviewScreen', () => {
       />,
     )
 
-    const saveButton = screen.getByRole('button', { name: /сохраняем/i })
+    const saveButton = screen.getByRole('button', { name: /сохранить и на главную/i })
+    expect(saveButton).toHaveTextContent(/сохраняем/i)
     expect(saveButton).toBeDisabled()
     expect(screen.getByRole('status')).toHaveTextContent(/сохраняем тренировку и обновляем следующий план/i)
     expect(screen.getByText(/не нажимай повторно/i)).toBeInTheDocument()

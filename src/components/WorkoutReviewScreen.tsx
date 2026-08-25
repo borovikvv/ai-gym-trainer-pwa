@@ -157,7 +157,7 @@ export function WorkoutReviewScreen({
 
       {/* Issue #125: action buttons */}
       <div className="review-actions">
-        <button className="primary" disabled={isSaving} onClick={onSaveAndExit}>
+        <button className="primary" aria-label="Сохранить и на главную" disabled={isSaving} onClick={onSaveAndExit}>
           {isSaving ? 'Сохраняем…' : 'Сохранить и на главную'}
         </button>
         <button className="secondary wide" disabled={isSaving} onClick={onBackToWorkout}>
