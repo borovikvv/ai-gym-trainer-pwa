@@ -47,6 +47,25 @@ describe('nextPlannedDatesFromProfile — не возвращает сегодн
   })
 })
 
+// Issue #262: после паузы/пересборки, когда на сегодня строки нет вовсе, автоплан
+// должен стартовать с сегодняшнего дня, а не пропускать его (dayOffset=1 из #204
+// относится только к случаю, когда сегодняшняя тренировка уже существует).
+describe('nextPlannedDatesFromProfile — включает сегодня при includeToday (#262)', () => {
+  it('включает сегодняшнюю дату когда includeToday=true и сегодня тренировочный день', () => {
+    const today = new Date()
+    const weekday = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][today.getDay()]
+    const todayIso = today.toISOString().slice(0, 10)
+    const profile = {
+      trainingDays: [weekday],
+      workoutsPerWeek: 3,
+    }
+    const dates = nextPlannedDatesFromProfile(profile, 3, { includeToday: true })
+
+    expect(dates).toContain(todayIso)
+    expect(dates).toHaveLength(3)
+  })
+})
+
 describe('cascadeRegenerateFutureWorkouts — сужение до ближайшей (#169)', () => {
   const futureRows = [
     { id: 'planned-1', scheduled_date: new Date('2026-08-03T00:00:00Z'), source: 'coach' },
