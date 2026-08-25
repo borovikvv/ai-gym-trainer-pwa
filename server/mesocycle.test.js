@@ -550,6 +550,46 @@ describe('computeMesocycleState — cycle reset on extended break', () => {
     expect(result.weekInCycle).toBe(1)
     expect(result.phase).toBe('loading')
   })
+
+  it('resets the cycle after 2 missing weeks even when gap is within 21 days (Issue #261)', () => {
+    // Тренировка в неделю 2026-06-01 (W23), затем 2 пустые недели (W24, W25),
+    // затем тренировка в неделю 2026-06-22 (W26). gapDays = 15 (< 21),
+    // missingWeeks = 2. adult (cycleLength=5): без фикса weekInCycle = 1 + (missingWeeks+1) = 4
+    // (intensification) — воспроизводит баг Олега. С фиксом — новый цикл, weekInCycle = 1.
+    const history = [
+      session('2026-06-22T12:00:00Z'),
+      session('2026-06-01T12:00:00Z'),
+    ]
+
+    const result = computeMesocycleState({
+      profile: { workoutsPerWeek: 3, age: 25 }, // adult: cycleLength=5, loadingWeeks=4
+      history,
+      now: '2026-06-22T18:00:00Z',
+    })
+
+    expect(result.weekInCycle).toBe(1)
+    expect(result.phase).toBe('loading')
+  })
+
+  it('does NOT reset the cycle after only 1 missing week within a 21-day gap (Issue #261)', () => {
+    // Тренировка в неделю 2026-06-08 (W24), одна пустая неделя (W25),
+    // затем тренировка в неделю 2026-06-22 (W26). gapDays = 15 (< 21),
+    // missingWeeks = 1. Отпускная неделя не должна запускать новый цикл.
+    const history = [
+      session('2026-06-22T12:00:00Z'),
+      session('2026-06-08T12:00:00Z'),
+    ]
+
+    const result = computeMesocycleState({
+      profile: { workoutsPerWeek: 3, age: 25 }, // adult: cycleLength=5
+      history,
+      now: '2026-06-22T18:00:00Z',
+    })
+
+    // W24=1, W25 phantom=2, W26=3 → цикл продолжается (нет сброса по missingWeeks=1)
+    expect(result.weekInCycle).toBe(3)
+    expect(result.phase).toBe('accumulation')
+  })
 })
 
 // ---------------------------------------------------------------------------
