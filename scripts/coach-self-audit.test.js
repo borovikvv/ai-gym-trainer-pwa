@@ -7,6 +7,7 @@ import {
   isDegenerate,
   isUndersampled,
   readClamped,
+  totalObservations,
   unobservedBranches,
   VOLUME_ACTIONS,
 } from './coach-self-audit.ts'
@@ -119,6 +120,12 @@ describe('unobservedBranches', () => {
       ['hold', 16],
     ])
     expect(unobservedBranches(VOLUME_ACTIONS, counts)).toContain('cut')
+    expect(totalObservations(counts)).toBe(36)
+  })
+
+  it('знаменатель для суждения о ветках — сумма, а не число ключей', () => {
+    expect(totalObservations(new Map())).toBe(0)
+    expect(totalObservations(new Map([['add', 3], ['hold', 2]]))).toBe(5)
   })
 })
 

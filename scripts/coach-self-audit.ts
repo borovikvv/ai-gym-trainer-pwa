@@ -58,6 +58,13 @@ export const DEGENERATE_MIN_FILL = 0.3
  */
 export const DEGENERATE_MIN_SAMPLE = 10
 
+/**
+ * Столько решений должно набраться, чтобы «ветка не наблюдалась» что-то
+ * значила. На пяти решениях большинство веток не наблюдается просто потому,
+ * что решений мало, — и отчёт превращается в шум.
+ */
+export const BRANCH_MIN_SAMPLE = 10
+
 // --- Чистая арифметика (проверяется в coach-self-audit.test.js) -------------
 
 export interface SignalStats {
@@ -147,6 +154,13 @@ export function degeneracyReasons(stats: SignalStats): string[] {
  */
 export function unobservedBranches(known: readonly string[], counts: Map<string, number>): string[] {
   return known.filter((branch) => (counts.get(branch) ?? 0) === 0)
+}
+
+/** Сколько решений всего наблюдалось — знаменатель для суждения о ветках. */
+export function totalObservations(counts: Map<string, number>): number {
+  let total = 0
+  for (const n of counts.values()) total += n
+  return total
 }
 
 function fmtShare(value: number): string {
@@ -268,10 +282,13 @@ async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<stri
     push(values, 'quality_score', row.quality_score ?? null)
   }
 
-  // У подходов своего completed_at нет — строки пишутся в той же транзакции,
-  // что и сессия, поэтому окно берётся по created_at.
+  // У подходов своего completed_at нет, поэтому окно берётся от сессии:
+  // created_at подхода — это момент вставки строки, а не время тренировки.
   const rpe = await pool.query(
-    `select w.rpe from public.workout_sets w where w.created_at >= ${since}`,
+    `select w.rpe
+       from public.workout_sets w
+       join public.workout_sessions s on s.id = w.session_id
+      where s.completed_at >= ${since}`,
     [weeks],
   )
   for (const row of rpe.rows as Array<{ rpe: number | null }>) {
@@ -346,6 +363,20 @@ function statsLine(label: string, stats: SignalStats): string[] {
   ]
 }
 
+/**
+ * Строки тревоги по веткам. На малой выборке молчим: «ветка не наблюдалась»
+ * при пяти решениях означает только то, что решений было пять.
+ */
+function branchAlarms(known: readonly string[], counts: Map<string, number>, field: string): string[] {
+  const total = totalObservations(counts)
+  if (total < BRANCH_MIN_SAMPLE) {
+    return [`  мало решений за 12 недель: ${total} < ${BRANCH_MIN_SAMPLE}, о непройденных ветках не судим`]
+  }
+  return unobservedBranches(known, counts).map(
+    (branch) => `  ВЕТКА НЕ НАБЛЮДАЛАСЬ: ${field} = '${branch}' за 12 недель (всего решений ${total})`,
+  )
+}
+
 function fmtCounts(counts: Map<string, number>): string {
   if (counts.size === 0) return '(пусто)'
   return [...counts.entries()].map(([key, n]) => `${key}: ${n}`).join(', ')
@@ -379,21 +410,16 @@ async function main(): Promise<void> {
       const actions = await loadActionCounts(pool, weeks)
       lines.push(`### weekly_volume_targets.action`)
       lines.push(`  ${fmtCounts(actions)}`)
-      if (weeks === 12) {
-        for (const branch of unobservedBranches(VOLUME_ACTIONS, actions)) {
-          lines.push(`  ВЕТКА НЕ НАБЛЮДАЛАСЬ: action = '${branch}' за 12 недель`)
-        }
-      }
+      if (weeks === 12) lines.push(...branchAlarms(VOLUME_ACTIONS, actions, 'action'))
       lines.push('')
 
       const diagnoses = await loadDiagnosisCounts(pool, weeks)
       lines.push(`### mesocycle_block_goals.diagnosis (шесть картин стагнации)`)
+      lines.push('  Оговорка: истории диагнозов в базе нет. Таблица держит одну')
+      lines.push('  строку на блок, диагноз в ней перезаписывается, поэтому здесь')
+      lines.push('  видно последнее значение каждого блока, а не все срабатывания.')
       lines.push(`  ${fmtCounts(diagnoses)}`)
-      if (weeks === 12) {
-        for (const branch of unobservedBranches(STAGNATION_PICTURES, diagnoses)) {
-          lines.push(`  ВЕТКА НЕ НАБЛЮДАЛАСЬ: diagnosis = '${branch}' за 12 недель`)
-        }
-      }
+      if (weeks === 12) lines.push(...branchAlarms(STAGNATION_PICTURES, diagnoses, 'diagnosis'))
       lines.push('')
 
       const decisionLogs = await loadDecisionLogCounts(pool, weeks)
