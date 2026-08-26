@@ -47,6 +47,17 @@ export const DEGENERATE_MAX_MODAL_SHARE = 0.8
 export const DEGENERATE_MAX_DISTINCT = 2
 export const DEGENERATE_MIN_FILL = 0.3
 
+/**
+ * Ниже этого числа заполненных значений о вырожденности не судим: на выборке
+ * из трёх значений условие «различных ≤ 2» выполняется почти всегда, и окно в
+ * 4 недели при двух пользователях кричало бы на каждый сигнал. Отчёт, который
+ * кричит всегда, перестают читать — а это и есть отказ инструмента.
+ *
+ * «Мало данных» и «сигнал не различает» — разные состояния, и путать их здесь
+ * нельзя ровно по той причине, ради которой заведён #266.
+ */
+export const DEGENERATE_MIN_SAMPLE = 10
+
 // --- Чистая арифметика (проверяется в coach-self-audit.test.js) -------------
 
 export interface SignalStats {
@@ -102,11 +113,17 @@ export function analyzeSignal(values: Array<number | string | null>): SignalStat
  * Мода ≥ 80 % значений, ИЛИ различных значений ≤ 2, ИЛИ заполненность < 30 %.
  */
 export function isDegenerate(stats: SignalStats): boolean {
+  if (isUndersampled(stats)) return false
   return (
     stats.modeShare >= DEGENERATE_MAX_MODAL_SHARE ||
     stats.distinct <= DEGENERATE_MAX_DISTINCT ||
     stats.fillRate < DEGENERATE_MIN_FILL
   )
+}
+
+/** Заполненных значений слишком мало, чтобы судить о вырожденности. */
+export function isUndersampled(stats: SignalStats): boolean {
+  return stats.filled < DEGENERATE_MIN_SAMPLE
 }
 
 /** Причина вырожденности для отчёта (может быть несколько). */
@@ -168,35 +185,55 @@ async function loadDiagnosisCounts(pool: PoolLike, weeks: number): Promise<Map<s
   return counts
 }
 
-interface DecisionLogCount {
-  decisionType: string
-  source: string
-  clamped: boolean
-  n: number
-}
-
+/**
+ * Вид решения в БД отдельной колонкой НЕ хранится: storeCoachDecisionLog
+ * (server/coachDecisionLog.ts:67) кладёт в recommendations только
+ * user_id/session_id/recommendation_type/title/body/source, а decisionType
+ * доходит лишь как один из трёх фиксированных заголовков. Поэтому группируем
+ * по title. Отдельная колонка — тема отдельной задачи, здесь схему не трогаем.
+ *
+ * body — колонка типа text, а не jsonb (supabase/schema.sql), поэтому оператор
+ * `->>` к ней неприменим: JSON разбирается на стороне JS.
+ */
 async function loadDecisionLogCounts(pool: PoolLike, weeks: number): Promise<Map<string, number>> {
   const { rows } = await pool.query(
-    `select decision_type, source,
-            (coalesce(body ->> 'clamped', 'false') = 'true'
-              or coalesce(body->'decision' ->> 'clamped', 'false') = 'true') as clamped,
-            count(*)::int as n
+    `select title, source, body
        from public.recommendations
       where recommendation_type = 'coach_decision_log'
-        and created_at >= now() - ($1 || ' weeks')::interval
-      group by decision_type, source, clamped`,
+        and created_at >= now() - ($1 || ' weeks')::interval`,
     [weeks],
   )
   const counts = new Map<string, number>()
-  for (const row of rows as DecisionLogCount[]) {
-    const key = clampedKey(row.decisionType, row.source, row.clamped)
-    counts.set(key, row.n)
+  for (const row of rows as Array<{ title: string; source: string; body: string | null }>) {
+    const key = clampedKey(row.title, row.source, readClamped(row.body))
+    counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   return counts
 }
 
-function clampedKey(decisionType: string, source: string, clamped: boolean): string {
-  return `${decisionType} × ${source}${clamped ? ' (кламп)' : ''}`
+/**
+ * Кламп из payload решения. Отсутствие признака — не «клампа не было», а
+ * «не записано»: третье состояние, и в ключ оно попадает отдельной пометкой.
+ * Ровно та ошибка, ради которой заведён #266, — не схлопывать «нет данных» в
+ * «нет события».
+ */
+export function readClamped(bodyJson: string | null): boolean | null {
+  if (!bodyJson) return null
+  try {
+    const body = JSON.parse(bodyJson) as {
+      clamped?: unknown
+      decision?: { clamped?: unknown }
+    }
+    const flag = body.clamped ?? body.decision?.clamped
+    return typeof flag === 'boolean' ? flag : null
+  } catch {
+    return null
+  }
+}
+
+export function clampedKey(title: string, source: string, clamped: boolean | null): string {
+  const mark = clamped === null ? ' (кламп не записан)' : clamped ? ' (кламп)' : ''
+  return `${title} × ${source}${mark}`
 }
 
 async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<string, Array<number | string | null>>> {
@@ -207,11 +244,11 @@ async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<stri
   const readiness = await pool.query(
     `select
        readiness_check_in ->> 'energy'        as energy,
-       readiness_check_in ->> 'sleepQuality'  as sleepQuality,
+       readiness_check_in ->> 'sleepQuality'  as "sleepQuality",
        readiness_check_in ->> 'stress'        as stress,
        readiness_check_in ->> 'soreness'      as soreness
        from public.workout_sessions
-      where created_at >= ${since}`,
+      where completed_at >= ${since}`,
     [weeks],
   )
   for (const row of readiness.rows as Array<Record<string, string | null>>) {
@@ -224,13 +261,15 @@ async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<stri
   }
 
   const quality = await pool.query(
-    `select quality_score from public.workout_sessions where created_at >= ${since}`,
+    `select quality_score from public.workout_sessions where completed_at >= ${since}`,
     [weeks],
   )
   for (const row of quality.rows as Array<{ quality_score: number | null }>) {
     push(values, 'quality_score', row.quality_score ?? null)
   }
 
+  // У подходов своего completed_at нет — строки пишутся в той же транзакции,
+  // что и сессия, поэтому окно берётся по created_at.
   const rpe = await pool.query(
     `select w.rpe from public.workout_sets w where w.created_at >= ${since}`,
     [weeks],
@@ -240,13 +279,13 @@ async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<stri
   }
 
   const repDev = await pool.query(
-    `select body ->> 'outcome' as outcome_json
+    `select body
        from public.recommendations
       where recommendation_type = 'training_record' and created_at >= ${since}`,
     [weeks],
   )
-  for (const row of repDev.rows as Array<{ outcome_json: string | null }>) {
-    push(values, 'avgRepDeviation', readAvgRepDeviation(row.outcome_json))
+  for (const row of repDev.rows as Array<{ body: string | null }>) {
+    push(values, 'avgRepDeviation', readAvgRepDeviation(row.body))
   }
 
   const e1rm = await pool.query(
@@ -316,7 +355,10 @@ async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL
   if (!connectionString) throw new Error('DATABASE_URL не задан (нужен --env-file=.env.local и живой туннель)')
 
-  const outDir = process.env.SELF_AUDIT_OUT_DIR ?? '/root/coach-self-audit'
+  // На сервере задаётся через SELF_AUDIT_OUT_DIR, как у check-training-records.sh.
+  // Дефолт — рабочий каталог: скрипт проверяют прогоном через туннель с ноутбука,
+  // где /root недоступен и mkdir падает раньше первого запроса к БД.
+  const outDir = process.env.SELF_AUDIT_OUT_DIR ?? process.cwd()
   mkdirSync(outDir, { recursive: true })
 
   const pool = new Pool({ connectionString })
@@ -355,20 +397,23 @@ async function main(): Promise<void> {
       lines.push('')
 
       const decisionLogs = await loadDecisionLogCounts(pool, weeks)
-      lines.push(`### coach_decision_log.decision_type × source`)
+      lines.push(`### coach_decision_log: вид решения (title) × source`)
       lines.push(`  ${fmtCounts(decisionLogs)}`)
       lines.push('')
 
       // 2. Вырожденность сигналов
       lines.push('## 2. Вырожденность сигналов')
       lines.push(`Порог: мода ≥ ${fmtShare(DEGENERATE_MAX_MODAL_SHARE)} ИЛИ различных ≤ ${DEGENERATE_MAX_DISTINCT} ИЛИ заполненность < ${fmtShare(DEGENERATE_MIN_FILL)}`)
+      lines.push(`Судим начиная с ${DEGENERATE_MIN_SAMPLE} заполненных значений; меньше — «мало данных».`)
       lines.push('')
 
       const signals = await loadSignalValues(pool, weeks)
       for (const [name, rawValues] of signals) {
         const stats = analyzeSignal(rawValues)
         lines.push(...statsLine(name, stats))
-        if (isDegenerate(stats)) {
+        if (isUndersampled(stats)) {
+          lines.push(`  мало данных: ${stats.filled} < ${DEGENERATE_MIN_SAMPLE}, о вырожденности не судим`)
+        } else if (isDegenerate(stats)) {
           lines.push(`  !!! СИГНАЛ ВЫРОЖДЕН: ${degeneracyReasons(stats).join('; ')}`)
         }
       }
