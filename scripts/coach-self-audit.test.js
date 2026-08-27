@@ -6,6 +6,7 @@ import {
   DEGENERATE_MIN_SAMPLE,
   isDegenerate,
   isUndersampled,
+  readAvgRepDeviation,
   readClamped,
   totalObservations,
   unobservedBranches,
@@ -151,5 +152,51 @@ describe('кламп из payload решения', () => {
     expect(clampedKey('Решение тренера', 'rules', true)).toContain('(кламп)')
     expect(clampedKey('Решение тренера', 'rules', false)).not.toContain('кламп')
     expect(clampedKey('Решение тренера', 'llm', null)).toContain('не записан')
+  })
+})
+
+describe('readAvgRepDeviation', () => {
+  // body в recommendations — весь JSON записи training_record
+  // (server/coachTrainingRecord.ts:162-217): { userId, sessionId, createdAt,
+  // input, decision, outcome }. avgDeviation лежит в outcome.repDeviation.
+  const baseRecord = {
+    userId: 'u1',
+    sessionId: 's1',
+    createdAt: '2026-08-27T18:00:00.000Z',
+    input: { readinessScore: 70, recoveryStatus: 'unknown', weeklyLoadStatus: 'unknown' },
+    decision: { exercises: [], lowReadiness: false, loadPolicy: 'hold', source: 'rules', changes: [] },
+    outcome: {
+      completedReps: 10,
+      avgRpe: 7,
+      painCount: 0,
+      totalVolume: 1000,
+      qualityScore: 8,
+    },
+  }
+
+  it('читает avgDeviation из outcome.repDeviation (форма записи training_record)', () => {
+    const record = {
+      ...baseRecord,
+      outcome: {
+        ...baseRecord.outcome,
+        repDeviation: { avgDeviation: -1.5, setsWithExpectation: 4, setsWithoutExpectation: 0, exercises: [] },
+      },
+    }
+    expect(readAvgRepDeviation(JSON.stringify(record))).toBe(-1.5)
+  })
+
+  it('avgDeviation: null (ожидание не построилось) — null', () => {
+    const record = {
+      ...baseRecord,
+      outcome: {
+        ...baseRecord.outcome,
+        repDeviation: { avgDeviation: null, setsWithExpectation: 0, setsWithoutExpectation: 4, exercises: [] },
+      },
+    }
+    expect(readAvgRepDeviation(JSON.stringify(record))).toBeNull()
+  })
+
+  it('пустой body — null без исключения', () => {
+    expect(readAvgRepDeviation(null)).toBeNull()
   })
 })
