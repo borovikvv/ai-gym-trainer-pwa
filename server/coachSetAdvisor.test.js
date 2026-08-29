@@ -421,6 +421,19 @@ describe('clampNextSetDecision (direct)', () => {
       { userId: 'vyacheslav', lastSet: { weight: 60, reps: 8, rpe: 7 }, weightStep: 2.5, pain: false },
     )
     expect(clamped.nextSet.weight).toBe(55)
+    expect(clamped.wasClamped).toBe(true)
+  })
+
+  it('does not flag a clamp when the proposal is already within bounds', () => {
+    const clamped = clampNextSetDecision(
+      {
+        nextSet: { weight: 60, reps: 8, restSeconds: 90, targetRpe: 7 },
+        strategyAction: { type: 'hold' },
+        reason: 'x',
+      },
+      { userId: 'vyacheslav', lastSet: { weight: 60, reps: 8, rpe: 7 }, weightStep: 2.5, pain: false },
+    )
+    expect(clamped.wasClamped).toBe(false)
   })
 
   it('pain forces suggest_replacement and clears the next set', () => {

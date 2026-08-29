@@ -69,6 +69,8 @@ interface LiveStrategyDecision {
   actions: LiveStrategyAction[]
   constraints: LiveStrategyConstraints
   warnings: string[]
+  /** Issue #272: фиксируем факт клампа — правила молча правят LLM или нет. */
+  clamped: boolean
 }
 
 interface ClampLiveStrategyInput {
@@ -160,19 +162,27 @@ export function clampLiveStrategyDecision(
     }))
 
   const rawConstraints = (rawDecision as RawLlmDecision)?.constraints ?? {}
+  const constraints: LiveStrategyConstraints = {
+    maxRpe: policy?.allowFailureSets === false ? 8 : Math.min(10, Number(rawConstraints.maxRpe ?? 9)),
+    allowFailure: Boolean(policy?.allowFailureSets && rawConstraints.allowFailure !== false),
+    maxAdditionalExercises: Math.min(1, Math.max(0, Number(rawConstraints.maxAdditionalExercises ?? 1))),
+  }
+  // Issue #272: фиксируем факт клампа — сравнение raw-значений LLM с финальными.
+  const maxRpeClamped = Number.isFinite(rawConstraints.maxRpe) && rawConstraints.maxRpe !== constraints.maxRpe
+  const allowFailureClamped = typeof rawConstraints.allowFailure === 'boolean' && rawConstraints.allowFailure !== constraints.allowFailure
+  const maxAdditionalClamped =
+    Number.isFinite(rawConstraints.maxAdditionalExercises) && rawConstraints.maxAdditionalExercises !== constraints.maxAdditionalExercises
+  const actionsClamped = rawActions.length !== actions.length
   return {
     source: rawDecision?.source === 'llm' ? 'llm' : 'rules',
     decisionType: 'live_strategy',
     summary: String(rawDecision?.summary ?? 'Держим текущую стратегию.').slice(0, 400),
     actions: actions.length ? actions : [{ type: 'hold_strategy', reason: 'Нет безопасных изменений.' }],
-    constraints: {
-      maxRpe: policy?.allowFailureSets === false ? 8 : Math.min(10, Number(rawConstraints.maxRpe ?? 9)),
-      allowFailure: Boolean(policy?.allowFailureSets && rawConstraints.allowFailure !== false),
-      maxAdditionalExercises: Math.min(1, Math.max(0, Number(rawConstraints.maxAdditionalExercises ?? 1))),
-    },
+    constraints,
     warnings: Array.isArray((rawDecision as RawLlmDecision)?.warnings)
       ? ((rawDecision as RawLlmDecision).warnings as unknown[]).slice(0, 3).map((item) => String(item).slice(0, 200))
       : [],
+    clamped: actionsClamped || maxRpeClamped || allowFailureClamped || maxAdditionalClamped,
   }
 }
 
@@ -237,6 +247,7 @@ function buildRulesLiveStrategy({
         maxAdditionalExercises: 0,
       },
       warnings: [],
+      clamped: false,
     }
   }
 
@@ -251,5 +262,6 @@ function buildRulesLiveStrategy({
       maxAdditionalExercises: 1,
     },
     warnings: [],
+    clamped: false,
   }
 }

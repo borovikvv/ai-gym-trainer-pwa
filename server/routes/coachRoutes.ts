@@ -114,7 +114,7 @@ coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res) => {
         targetRpe: decision.targetRpe ?? null,
         detail: decision.detail ?? null,
         prompt,
-        clamped,
+        clamped: clamped?.wasClamped ?? false,
       },
     })
     await storeCoachDecisionLog(pool, logEntry)

@@ -19,6 +19,7 @@ describe('coach brain', () => {
     expect(decision.source).toBe('rules')
     expect(decision.decisionType).toBe('live_strategy')
     expect(decision.actions[0].type).toBe('reduce_remaining_volume')
+    expect(decision.clamped).toBe(false)
   })
 
   it('removes unsafe or unknown LLM actions', () => {
@@ -38,6 +39,20 @@ describe('coach brain', () => {
     expect(decision.constraints.maxRpe).toBe(8)
     expect(decision.constraints.allowFailure).toBe(false)
     expect(decision.constraints.maxAdditionalExercises).toBe(1)
+    expect(decision.clamped).toBe(true)
+  })
+
+  it('does not flag a clamp when the LLM proposal is already within policy bounds', () => {
+    const decision = clampLiveStrategyDecision({
+      source: 'llm',
+      decisionType: 'live_strategy',
+      summary: 'ok',
+      actions: [{ type: 'hold_strategy', reason: 'ok' }],
+      constraints: { maxRpe: 8, allowFailure: false, maxAdditionalExercises: 1 },
+      warnings: [],
+    }, { userId: 'oleg' })
+
+    expect(decision.clamped).toBe(false)
   })
 
   it('builds an LLM live strategy and clamps it for Oleg', async () => {
