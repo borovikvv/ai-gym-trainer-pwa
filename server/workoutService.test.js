@@ -943,6 +943,94 @@ describe('Issue #268: training record captures net rest', () => {
   })
 })
 
+// Issue #267: расхождение «назначено vs выполнено» по весу попадает в
+// обучающую запись. Источник назначения — planned_workout_exercises.target_weight.
+describe('Issue #267: training record captures weight deviation', () => {
+  const defaultCoachState = {
+    readinessScore: 78,
+    recoveryStatus: 'ready',
+    weeklyLoadStatus: 'on_plan',
+    mesocycle: { phase: 'accumulation', weekInCycle: 2, cycleLength: 4 },
+  }
+
+  it('передаёт расхождение по весу в saveTrainingRecord, когда план есть', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadCoachStateForUser, loadRecentHistory } = await import('./services/programService.js')
+
+    vi.mocked(saveTrainingRecord).mockClear()
+    vi.mocked(loadCoachStateForUser).mockResolvedValue(defaultCoachState)
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+
+    const client = {
+      query: vi.fn().mockImplementation(async (text) => {
+        // План есть: коуч назначил 20 кг на присед.
+        if (text.includes('planned_workout_exercises')) {
+          return { rows: [{ exercise_id: 'squat', sets_count: 3, rep_min: 5, rep_max: 8, target_weight: 20 }], rowCount: 1 }
+        }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-267',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-08-25T18:00:00.000Z',
+      totalVolume: 175,
+      exercises: [{
+        exerciseId: 'squat',
+        exerciseName: 'Присед',
+        pain: false,
+        nextRecommendedWeight: 35,
+        progressionType: 'increase',
+        progressionReason: 'ok',
+        sets: [{ weight: 35, reps: 5, rpe: 8, completed: true }],
+      }],
+    })
+
+    const [, entryArg] = vi.mocked(saveTrainingRecord).mock.calls[0]
+    expect(entryArg.weightDeviation.avgDeviation).toBe(15)
+    expect(entryArg.weightDeviation.setsWithAssignment).toBe(1)
+    expect(entryArg.weightDeviation.setsWithoutAssignment).toBe(0)
+    expect(entryArg.weightDeviation.exercises[0].exerciseId).toBe('squat')
+  })
+
+  it('без плана расхождение null, а не 0', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const { loadCoachStateForUser, loadRecentHistory } = await import('./services/programService.js')
+
+    vi.mocked(saveTrainingRecord).mockClear()
+    vi.mocked(loadCoachStateForUser).mockResolvedValue(defaultCoachState)
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-267b',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-08-25T18:00:00.000Z',
+      totalVolume: 300,
+      exercises: [{
+        exerciseId: 'squat',
+        exerciseName: 'Присед',
+        pain: false,
+        nextRecommendedWeight: 60,
+        progressionType: 'hold',
+        progressionReason: 'ok',
+        sets: [{ weight: 60, reps: 5, rpe: 8, completed: true }],
+      }],
+    })
+
+    const [, entryArg] = vi.mocked(saveTrainingRecord).mock.calls[0]
+    expect(entryArg.weightDeviation.avgDeviation).toBeNull()
+    expect(entryArg.weightDeviation.setsWithAssignment).toBe(0)
+    expect(entryArg.weightDeviation.setsWithoutAssignment).toBe(1)
+  })
+})
+
 // Issue #169: сохранение тренировки перестраивает только ближайшую
 // запланированную. Раньше пересобирались все на две недели вперёд: между
 // двумя тренировками менялись веса, состав и группы во всех будущих сессиях

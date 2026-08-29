@@ -21,6 +21,8 @@ import type { PainLog, PainLogEntry } from '../shared/painChannel.js'
 import type { ProgressAnalysis } from './coachProgressAnalysis.js'
 // Issue #167: объективная величина исполнения — повторы против ожидания
 import type { SessionRepDeviation } from '../src/domain/repExpectation.js'
+// Issue #267: расхождение «назначено vs выполнено» по весу
+import type { SessionWeightDeviation } from '../src/domain/weightAdherence.js'
 
 export interface TrainingRecordChange {
   exerciseId: string
@@ -87,6 +89,15 @@ export interface TrainingRecord {
       setsWithoutExpectation: number
       exercises: Array<{ exerciseId: string; avgDeviation: number | null; setsWithExpectation: number }>
     } | null
+    // Issue #267: расхождение «назначено vs выполнено» по весу. Копится, чтобы
+    // понять, есть ли в нём сигнал о качестве рекомендаций; на решения тренера
+    // пока не влияет.
+    weightDeviation?: {
+      avgDeviation: number | null
+      setsWithAssignment: number
+      setsWithoutAssignment: number
+      exercises: Array<{ exerciseId: string; avgDeviation: number | null; setsWithAssignment: number }>
+    } | null
     // Issue #268: чистый отдых между подходами («начало текущего − конец
     // предыдущего»). Агрегат на сессию; null — данных нет вовсе. На решения
     // тренера пока не влияет (фаза 1 — сбор величины).
@@ -116,6 +127,8 @@ export async function saveTrainingRecord(
     exercises: WorkoutHistoryEntry['exercises']
     // Issue #167: считается вызывающим (нужна история до этой сессии)
     repDeviation?: SessionRepDeviation | null
+    // Issue #267: считается вызывающим из назначенного веса плана
+    weightDeviation?: SessionWeightDeviation | null
     // Issue #268: чистый отдых между подходами (агрегат на сессию)
     netRest?: { avgNetRestSeconds: number | null; setsWithData: number; setsWithoutData: number } | null
   },
@@ -220,6 +233,19 @@ export async function saveTrainingRecord(
             exerciseId: exercise.exerciseId,
             avgDeviation: exercise.avgDeviation,
             setsWithExpectation: exercise.setsWithExpectation,
+          })),
+        }
+        : null,
+      // Issue #267: те же агрегаты для расхождения по весу.
+      weightDeviation: entry.weightDeviation
+        ? {
+          avgDeviation: entry.weightDeviation.avgDeviation,
+          setsWithAssignment: entry.weightDeviation.setsWithAssignment,
+          setsWithoutAssignment: entry.weightDeviation.setsWithoutAssignment,
+          exercises: entry.weightDeviation.exercises.map((exercise) => ({
+            exerciseId: exercise.exerciseId,
+            avgDeviation: exercise.avgDeviation,
+            setsWithAssignment: exercise.setsWithAssignment,
           })),
         }
         : null,
