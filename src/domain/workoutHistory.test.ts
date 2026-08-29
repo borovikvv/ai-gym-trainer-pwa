@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNextTargets, computeSetIntervals, createWorkoutHistoryEntry } from './workoutHistory'
+import { buildNextTargets, computeNetRestSeconds, computeSetIntervals, createWorkoutHistoryEntry } from './workoutHistory'
 import type { ExercisePlan  } from '../../shared/types'
 
 const bench: ExercisePlan = {
@@ -203,6 +203,32 @@ describe('workout history', () => {
 
     it('returns empty array for empty input', () => {
       expect(computeSetIntervals([])).toEqual([])
+    })
+  })
+
+  // Issue #268: чистый отдых — «начало текущего подхода − конец предыдущего».
+  // В отличие от computeSetIntervals сюда не входит работа следующего подхода.
+  // Подход без записанного начала даёт null, а не 0 — отсутствие данных не
+  // измерение (старые записи, критерий готовности).
+  describe('computeNetRestSeconds — чистый отдых (#268)', () => {
+    it('возвращает null, когда у пары нет ни performedAt, ни startedAt', () => {
+      expect(computeNetRestSeconds([{}, {}])).toEqual([null])
+    })
+
+    it('считает секунды от конца предыдущего до начала текущего подхода', () => {
+      const result = computeNetRestSeconds([
+        { performedAt: '2026-07-29T12:00:00.000Z' },
+        { startedAt: '2026-07-29T12:02:30.000Z' },
+      ])
+      expect(result).toEqual([150])
+    })
+
+    it('даёт null, а не 0, для пары с performedAt, но без startedAt — старые данные', () => {
+      const result = computeNetRestSeconds([
+        { performedAt: '2026-07-29T12:00:00.000Z' },
+        { performedAt: '2026-07-29T12:02:30.000Z' },
+      ])
+      expect(result).toEqual([null])
     })
   })
 
