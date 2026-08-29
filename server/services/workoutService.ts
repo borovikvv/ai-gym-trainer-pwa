@@ -20,6 +20,8 @@ import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 // Issue #167: повторы против ожидания на том же весе — считаем и записываем
 import { computeSessionRepDeviation } from '../../src/domain/repExpectation.js'
+// Issue #267: расхождение «назначено vs выполнено» по весу — считаем и записываем
+import { computeSessionWeightDeviation } from '../../src/domain/weightAdherence.js'
 import type { TrainingRecordChange } from '../coachTrainingRecord.js'
 
 interface WorkoutSetInput {
@@ -46,6 +48,9 @@ interface ExerciseEntryInput {
   // Issue #162: предписание из плана — опора оценки качества (выполнение
   // плана, а не только RPE). Заполняется best-effort перед расчётом дебрифа.
   planned?: QualityPrescription | null
+  // Issue #267: назначенный вес из плана (planned_workout_exercises.target_weight).
+  // Проставляется в attachPlannedPrescriptions; null — числового назначения нет.
+  assignedWeight?: number | null
 }
 
 interface WorkoutHistoryEntryInput {
@@ -344,6 +349,13 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
       recentHistory as unknown as Parameters<typeof computeSessionRepDeviation>[1],
     )
 
+    // Issue #267: расхождение «назначено vs выполнено» по весу. Назначение
+    // (exercise.assignedWeight) проставлено в attachPlannedPrescriptions из
+    // planned_workout_exercises.target_weight; на решения коуча не влияет.
+    const weightDeviation = computeSessionWeightDeviation(
+      sanitizedEntry as unknown as Parameters<typeof computeSessionWeightDeviation>[0],
+    )
+
     await saveTrainingRecord(
       client,
       {
@@ -356,6 +368,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
         painLog,
         readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
         repDeviation,
+        weightDeviation,
         exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
           exerciseId: e.exerciseId ?? '',
           exerciseName: e.exerciseName ?? '',
@@ -543,7 +556,7 @@ async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntr
 
   try {
     const result = await client.query(
-      `select pwe.exercise_id, pwe.sets_count, pwe.rep_min, pwe.rep_max
+      `select pwe.exercise_id, pwe.sets_count, pwe.rep_min, pwe.rep_max, pwe.target_weight
        from public.planned_workout_exercises pwe
        join public.planned_workouts pw on pw.id = pwe.planned_workout_id
        where pw.user_id = $1
@@ -552,7 +565,10 @@ async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntr
     )
     const rows = (result as { rows?: Array<Record<string, unknown>> }).rows ?? []
     if (rows.length === 0) return
-    const byCanonicalId = new Map<string, QualityPrescription>()
+    // Issue #267: targetWeight хранится здесь же (не в QualityPrescription —
+    // тип shared/workoutQuality.ts не расширяем), чтобы расхождение весов
+    // считалось из того же плана, что и предписания качества.
+    const byCanonicalId = new Map<string, QualityPrescription & { targetWeight: number | null }>()
     for (const row of rows) {
       const key = canonicalExerciseId(String(row.exercise_id ?? ''))
       if (!key || byCanonicalId.has(key)) continue
@@ -560,11 +576,15 @@ async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntr
         setsCount: Number(row.sets_count),
         repMin: Number(row.rep_min),
         repMax: Number(row.rep_max),
+        targetWeight: Number(row.target_weight) > 0 ? Number(row.target_weight) : null,
       })
     }
     for (const exercise of exercises) {
       const planned = byCanonicalId.get(canonicalExerciseId(String(exercise.exerciseId ?? '')))
-      if (planned) exercise.planned = planned
+      if (planned) {
+        exercise.planned = planned
+        exercise.assignedWeight = planned.targetWeight
+      }
     }
   } catch (err) {
     // Не фатально — счёт качества деградирует до оценки по усилию.
