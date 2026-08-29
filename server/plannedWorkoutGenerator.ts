@@ -926,8 +926,18 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
     || hasActivePainFlag(exercise.id, coachState, coachMemory)
     || isDeloadSession
   const resolveCandidates = invariantSuspended ? easierOf : strongerOf
-  const baseWeight = weightCandidates.length > 0
-    ? weightCandidates.reduce((best, weight) => resolveCandidates(best, weight, direction))
+  // Issue #263: приостановка инварианта означает «легче реального рабочего», а
+  // не «легче чего угодно». programWeight для упражнения вне программы — это
+  // статичный default_target_weight справочника (у skull-crusher 20 при рабочих
+  // 35), и как кандидат «полегче» он назначал дефолт новичка вместо шага вниз.
+  // Поэтому при приостановке пул — только реальные сигналы. Направление здесь
+  // не различается: для assistance easierOf = max, и дефолт справочника
+  // завышал помощь ровно так же (#173). Нет ни одного реального сигнала —
+  // остаётся прежний полный пул, поведение для новых упражнений не меняется.
+  const realWeightCandidates = [historicWeight, coachWorkingWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
+  const candidatePool = invariantSuspended && realWeightCandidates.length > 0 ? realWeightCandidates : weightCandidates
+  const baseWeight = candidatePool.length > 0
+    ? candidatePool.reduce((best, weight) => resolveCandidates(best, weight, direction))
     : exercise.targetWeight
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
