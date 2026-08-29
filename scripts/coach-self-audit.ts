@@ -327,11 +327,11 @@ function push(values: Map<string, Array<number | string | null>>, key: string, v
 }
 
 /** avgDeviation из outcome.repDeviation записи training_record. */
-function readAvgRepDeviation(outcomeJson: string | null): number | null {
-  if (!outcomeJson) return null
+export function readAvgRepDeviation(bodyJson: string | null): number | null {
+  if (!bodyJson) return null
   try {
-    const outcome = JSON.parse(outcomeJson) as { repDeviation?: { avgDeviation?: number | null } | null }
-    const avg = outcome.repDeviation?.avgDeviation
+    const body = JSON.parse(bodyJson) as { outcome?: { repDeviation?: { avgDeviation?: number | null } | null } | null }
+    const avg = body.outcome?.repDeviation?.avgDeviation
     return typeof avg === 'number' && Number.isFinite(avg) ? avg : null
   } catch {
     return null
