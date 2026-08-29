@@ -922,7 +922,8 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   // перегруженной на невосстановленном организме — травма. Поэтому инвариант
   // не отменяется, а приостанавливается: в трёх ситуациях ниже из тех же
   // кандидатов берётся самый лёгкий, и вес свободно опускается.
-  const invariantSuspended = isLongBreakBeforeSession(coachState, weeklyContext)
+  const isLongBreak = isLongBreakBeforeSession(coachState, weeklyContext)
+  const invariantSuspended = isLongBreak
     || hasActivePainFlag(exercise.id, coachState, coachMemory)
     || isDeloadSession
   const resolveCandidates = invariantSuspended ? easierOf : strongerOf
@@ -936,9 +937,20 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
   // остаётся прежний полный пул, поведение для новых упражнений не меняется.
   const realWeightCandidates = [historicWeight, coachWorkingWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
   const candidatePool = invariantSuspended && realWeightCandidates.length > 0 ? realWeightCandidates : weightCandidates
-  const baseWeight = candidatePool.length > 0
+  let baseWeight = candidatePool.length > 0
     ? candidatePool.reduce((best, weight) => resolveCandidates(best, weight, direction))
     : exercise.targetWeight
+  // Issue #283: приостановка инварианта после перерыва означает «самый лёгкий
+  // из реальных кандидатов», а не «рабочий минус шаг». Когда оба реальных
+  // сигнала совпадают, опускаться вниз некуда, и план выдаёт ровно
+  // доперерывный рабочий вес, взятый на RPE 10. Поэтому при совпадении базы
+  // с сильнейшим реальным кандидатом снимается один шаг через easierWeight.
+  // Правило завязано именно на isLongBreak, а не на invariantSuspended: боль и
+  // разгрузка не меняются (у разгрузки свой шаг вниз — второй дал бы −2 шага).
+  if (isLongBreak && realWeightCandidates.length > 0) {
+    const strongestReal = realWeightCandidates.reduce((best, weight) => strongerOf(best, weight, direction))
+    if (baseWeight === strongestReal) baseWeight = roundWeight(easierWeight(baseWeight, exercise.weightStep, direction))
+  }
   const baseSetsCount = preferences.sessionStyle === 'volume_light'
     ? clamp(exercise.setsCount + 1, 2, 4)
     : clamp(exercise.setsCount, 2, preferences.sessionStyle === 'heavy_short' ? 3 : 4)
