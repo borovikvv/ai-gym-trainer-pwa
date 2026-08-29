@@ -800,7 +800,7 @@ describe('computeMesocycleState — edge cases', () => {
     expect(result.phaseDescription).toBe('Загрузка — первую неделю мезоцикла, умеренный объём')
   })
 
-  it('exercises outside 90-day window are ignored', () => {
+  it('старая сессия с разрывом >21 дня не подмешивается в текущий цикл (не через cutoff, а через #96 gap-detection)', () => {
     const veryOld = new Date('2026-01-01T12:00:00Z')
     const recent = new Date('2026-06-15T12:00:00Z')
     const history = [
@@ -813,8 +813,37 @@ describe('computeMesocycleState — edge cases', () => {
       now: '2026-06-15T18:00:00Z',
     })
 
-    // Only the recent workout should count
+    // The old session is separated from the recent one by a >21-day gap,
+    // so it belongs to a previous cycle and must not count (Issue #96).
     expect(result.workoutsThisCycle).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #280: cycleStartedOn стабилен во времени, не плывёт с now
+// ---------------------------------------------------------------------------
+
+describe('computeMesocycleState — cycleStartedOn стабилен во времени (issue #280)', () => {
+  // 16 непрерывных недель без перерывов и разгрузок (3 сессии/неделю, adult
+  // cycleLength=5). Раньше 90-дневный cutoff в buildWeekBuckets резал старую
+  // неделю при каждом вызове, и самая старая неделя окна становилась новым
+  // якорем цикла — cycleStartedOn ехал на 7 дней вместе с now (issue #280).
+  const baseDate = '2026-08-24T12:00:00Z'
+  const history = generateWeeklySessions(baseDate, 16, 3)
+  const profile = { workoutsPerWeek: 3, age: 30 }
+
+  it('неизменная история → один и тот же cycleStartedOn при now через неделю', () => {
+    const result1 = computeMesocycleState({ profile, history, now: baseDate })
+    expect(result1.weekInCycle).toBe(1)
+    expect(result1.cycleStartedOn).toBe('2026-08-24')
+
+    const now2 = new Date(new Date(baseDate).getTime() + 7 * 86_400_000).toISOString()
+    const result2 = computeMesocycleState({ profile, history, now: now2 })
+    expect(result2.weekInCycle).toBe(2)
+    expect(result2.cycleStartedOn).toBe('2026-08-24')
+
+    // Главная проверка: старт блока не зависит от момента вызова функции.
+    expect(result2.cycleStartedOn).toBe(result1.cycleStartedOn)
   })
 })
 // ---------------------------------------------------------------------------

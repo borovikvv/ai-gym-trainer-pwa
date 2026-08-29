@@ -275,10 +275,12 @@ function buildWeekBuckets(history: WorkoutHistoryEntry[], now: Date): WeekBucket
     weekMap.get(isoWeek)!.workouts.push(session)
   }
 
-  // Return most-recent-week-first, only weeks within last 90 days
-  const cutoff = new Date(nowDate.getTime() - 90 * 86_400_000)
+  // Return most-recent-week-first. The window is determined entirely by the
+  // history passed in by the caller (in production — loadRecentHistory's
+  // `limit 16`), not by trimming on `now` here. A sliding cutoff made the
+  // oldest week in the window drift with `now`, which re-anchored the cycle
+  // and shifted cycleStartedOn by 7 days each week (issue #280).
   const buckets = [...weekMap.values()]
-    .filter((w) => w.start >= cutoff)
     .sort((a, b) => b.start.getTime() - a.start.getTime())
 
   // Issue: deload stuck — if the current ISO week has no workouts yet,
@@ -288,14 +290,12 @@ function buildWeekBuckets(history: WorkoutHistoryEntry[], now: Date): WeekBucket
   const currentWeekKey = isoWeekKey(nowDate)
   if (buckets.length > 0 && buckets[0].weekKey !== currentWeekKey) {
     const currentWeekStart = startOfWeek(nowDate)
-    if (currentWeekStart >= cutoff) {
-      buckets.unshift({
-        weekKey: currentWeekKey,
-        start: currentWeekStart,
-        end: endOfWeek(nowDate),
-        workouts: [],
-      })
-    }
+    buckets.unshift({
+      weekKey: currentWeekKey,
+      start: currentWeekStart,
+      end: endOfWeek(nowDate),
+      workouts: [],
+    })
   }
 
   return buckets
