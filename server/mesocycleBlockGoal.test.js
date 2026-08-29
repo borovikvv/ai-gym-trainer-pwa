@@ -11,6 +11,8 @@ import {
   syncBlockGoal,
   weeksWithoutGain,
 } from './mesocycleBlockGoal.js'
+import { computeMesocycleState } from './mesocycle.js'
+import { buildAllExerciseE1RMHistories } from '../src/domain/estimatedOneRepMax.ts'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -658,5 +660,169 @@ describe('syncBlockGoal: диагноз стагнации', () => {
 
     expect(result.stagnation.diagnosis).toBe('overload')
     expect(result.stagnation.action).toBe('deload')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Интеграционный репродюсер (#271): диагноз на растущей истории
+// ---------------------------------------------------------------------------
+//
+// Существующие тесты диагноза собирают mesocycle() вручную и зовут
+// syncBlockGoal один раз. В проде (programService.syncBlockGoalForUser)
+// mesocycle считается функцией computeMesocycleState из реальной истории, а
+// syncBlockGoal бежит после каждой сессии подряд. Этот репродюсер повторяет
+// продовый путь: stateful «таблица» целей + мезоцикл и e1RM из одной истории.
+// Вызов не обёрнут в try/catch намеренно: nonFatal в проде проглатывает
+// исключение из buildStagnationSignals вместе со всеми записями вызова — здесь
+// падение обязано упасть тестом со стектрейсом.
+
+/** Stateful in-memory аналог public.mesocycle_block_goals: строки живут между вызовами. */
+function statefulBlockGoalClient() {
+  const rows = []
+  let idSeq = 0
+  const client = {
+    async query(text, params) {
+      if (text.includes('closed_at is null')) {
+        const row = [...rows]
+          .filter((r) => !r.closedAt)
+          .sort((a, b) => String(b.block_started_on).localeCompare(String(a.block_started_on)))[0]
+        return { rows: row ? [row] : [] }
+      }
+      if (text.includes('block_started_on = $2')) {
+        const row = rows.find((r) => r.user_id === params[0] && String(r.block_started_on) === String(params[1]))
+        return { rows: row ? [row] : [] }
+      }
+      if (text.includes('insert into public.mesocycle_block_goals')) {
+        if (rows.some((r) => r.user_id === params[0] && String(r.block_started_on) === String(params[1]))) {
+          return { rows: [] }
+        }
+        const row = {
+          id: `goal-${++idSeq}`,
+          user_id: params[0],
+          block_started_on: params[1],
+          exercise_id: params[2],
+          exercise_name: params[3],
+          title: params[4],
+          baseline_value: params[5],
+          target_value: params[6],
+          expected_rate_per_week: params[7],
+          regain_to_value: params[8],
+          horizon_weeks: params[9],
+          failure_drop_value: params[10],
+          failure_pain_sessions: params[11],
+          status: 'active',
+          progress_note: null,
+          progress_verdict: null,
+          outcome_note: null,
+          diagnosis: null,
+          diagnosis_note: null,
+          hypothesis_review_on: null,
+          closedAt: null,
+        }
+        rows.push(row)
+        return { rows: [row] }
+      }
+      if (text.includes('set status = $3')) {
+        const row = rows.find((r) => r.id === params[0])
+        if (row) {
+          row.status = params[2]
+          row.outcome_note = params[3]
+          row.progress_note = params[4]
+          row.progress_verdict = params[5]
+          row.closedAt = new Date()
+        }
+        return { rows: [] }
+      }
+      if (text.includes('set progress_note = $3')) {
+        const row = rows.find((r) => r.id === params[0])
+        if (row) {
+          row.progress_note = params[2]
+          row.progress_verdict = params[3]
+          row.status = params[4]
+        }
+        return { rows: [] }
+      }
+      if (text.includes('set diagnosis = $3')) {
+        const row = rows.find((r) => r.id === params[0])
+        if (row) {
+          row.diagnosis = params[2]
+          row.diagnosis_note = params[3]
+          row.hypothesis_review_on = params[4]
+        }
+        return { rows: [] }
+      }
+      return { rows: [] }
+    },
+  }
+  return { client, rows }
+}
+
+describe('syncBlockGoal: диагноз на растущей истории (#271)', () => {
+  // Полностью плоский e1RM: одинаковый вес × повторы на каждой сессии — самый
+  // однозначный случай стагнации, без шума от шкалы оценки.
+  const FLAT_SET = { weight: 60, reps: 8 }
+  // Intermediate × 35 лет: ожидаемый темп INTERMEDIATE_RATE × AGE_FACTOR.adult = 0.35 кг/нед.
+  const PROFILE = { level: 'intermediate', age: 35, workoutsPerWeek: 3 }
+  const START = '2026-07-06'
+
+  function sessionAt(completedAt) {
+    return {
+      id: `s-${completedAt}`,
+      userId: 'u1',
+      workoutDayId: 'day-1',
+      workoutDayName: 'Силовая',
+      completedAt,
+      totalVolume: 0,
+      readinessCheckIn: {
+        sleepQuality: 4,
+        energy: 4,
+        stress: 2,
+        soreness: 'low',
+        soreMuscleGroups: [],
+        painAreas: [],
+        availableMinutes: 60,
+        notes: '',
+      },
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        muscleGroup: 'chest',
+        sets: [{ ...FLAT_SET, rpe: 8, completed: true, pain: false }],
+      }],
+    }
+  }
+
+  it('16 недель плоского e1RM: диагноз считается и доезжает до записи в БД', async () => {
+    const { client, rows } = statefulBlockGoalClient()
+    const sessions = []
+    for (let week = 0; week < 16; week++) {
+      for (const offset of [0, 2, 4]) {
+        const at = new Date(new Date(`${START}T00:00:00.000Z`).getTime() + (week * 7 + offset) * 86_400_000).toISOString()
+        sessions.push(sessionAt(at))
+      }
+    }
+
+    let sawDiagnosis = false
+    for (let i = 0; i < sessions.length; i++) {
+      const history = sessions.slice(0, i + 1)
+      const now = new Date(sessions[i].completedAt)
+      const mesocycle = computeMesocycleState({ profile: PROFILE, history, now })
+      const e1rmHistories = buildAllExerciseE1RMHistories(history)
+      const result = await syncBlockGoal(client, 'u1', {
+        profile: PROFILE,
+        mesocycle,
+        e1rmHistories,
+        history,
+        preferredExerciseId: null,
+        bodyWeightLog: [],
+        now,
+      })
+      if (result.stagnation?.diagnosis === 'insufficient_stimulus') sawDiagnosis = true
+    }
+
+    // Машинерия работает: на заведомо стагнирующем профиле диагноз появляется.
+    expect(sawDiagnosis).toBe(true)
+    // И доезжает до записи — та самая колонка diagnosis, пустая в отчёте #266.
+    expect(rows.some((row) => row.diagnosis === 'insufficient_stimulus')).toBe(true)
   })
 })
