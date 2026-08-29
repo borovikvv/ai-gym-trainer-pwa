@@ -128,6 +128,8 @@ export interface SafeCoachPlan {
   nextWorkoutDayId: string | null
   changes: CoachPlanChange[]
   warnings: string[]
+  /** Issue #272: фиксируем факт клампа — правила молча правят LLM или нет. */
+  clamped: boolean
 }
 
 interface ClampCoachPlanInput {
@@ -193,6 +195,7 @@ export function buildSafeCoachPlan({
       nextWorkoutDayId: null,
       changes: [],
       warnings: ['Нет активных тренировочных дней.'],
+      clamped: false,
     }
   }
 
@@ -343,6 +346,7 @@ export function buildSafeCoachPlan({
     nextWorkoutDayId: nextWorkoutDay.id ?? null,
     changes,
     warnings: [],
+    clamped: false,
   }
 }
 
@@ -355,6 +359,7 @@ export function clampCoachPlanToNextWorkout({
   const allowedById = new Map((nextWorkoutDay?.exercises ?? []).map((exercise) => [exercise.programExerciseId, exercise]))
   const library = normalizeExerciseLibrary(exerciseLibrary)
   const changes: CoachPlanChange[] = []
+  let clamped = false
 
   for (const rawChange of Array.isArray(plan?.changes) ? plan.changes : []) {
     const base = allowedById.get(rawChange?.programExerciseId)
@@ -392,13 +397,22 @@ export function clampCoachPlanToNextWorkout({
         ? BODYWEIGHT_REP_CEILING
         : 15
     const clampedRepMin = Math.round(clampNumber(Number(rawChange?.repMin), repFloor, repCeiling, Number(base.repMin ?? 0)))
+    const clampedRepMax = Math.round(clampNumber(Number(rawChange?.repMax), repFloor, repCeiling, Number(base.repMax ?? 0)))
+    const clampedRestSeconds = Math.round(clampNumber(Number(rawChange?.restSeconds), 45, 240, Number(base.restSeconds ?? 0)))
+    clamped =
+      clamped ||
+      wasFieldClamped(Number(rawChange?.targetWeight), clampedTargetWeight) ||
+      wasFieldClamped(Number(rawChange?.setsCount), clampedSetsCount) ||
+      wasFieldClamped(Number(rawChange?.repMin), clampedRepMin) ||
+      wasFieldClamped(Number(rawChange?.repMax), clampedRepMax) ||
+      wasFieldClamped(Number(rawChange?.restSeconds), clampedRestSeconds)
     const change: CoachPlanChange = {
       programExerciseId: base.programExerciseId,
       targetWeight: clampedTargetWeight,
       setsCount: clampedSetsCount,
       repMin: clampedRepMin,
-      repMax: Math.round(clampNumber(Number(rawChange?.repMax), repFloor, repCeiling, Number(base.repMax ?? 0))),
-      restSeconds: Math.round(clampNumber(Number(rawChange?.restSeconds), 45, 240, Number(base.restSeconds ?? 0))),
+      repMax: clampedRepMax,
+      restSeconds: clampedRestSeconds,
       todayGoal: formatTodayGoal(clampedTargetWeight, clampedSetsCount, clampedRepMin).slice(0, 140),
       coachFocus: String(rawChange?.coachFocus || `${base.name}: держим технику и не работаем в отказ.`).slice(0, 500),
     }
@@ -410,7 +424,10 @@ export function clampCoachPlanToNextWorkout({
   }
 
   for (const change of changes) {
-    if (change.repMax < change.repMin) change.repMax = change.repMin
+    if (change.repMax < change.repMin) {
+      change.repMax = change.repMin
+      clamped = true
+    }
   }
 
   return {
@@ -419,6 +436,7 @@ export function clampCoachPlanToNextWorkout({
     nextWorkoutDayId: nextWorkoutDay?.id ?? plan?.nextWorkoutDayId ?? null,
     changes,
     warnings,
+    clamped,
   }
 }
 
@@ -529,4 +547,9 @@ function harderAlternative(
 function clampNumber(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback
   return Math.max(min, Math.min(max, value))
+}
+
+/** Issue #272: было ли поле зажато клампом (NaN/отсутствие значения клампом не считается). */
+function wasFieldClamped(raw: number, clampedValue: number): boolean {
+  return Number.isFinite(raw) && raw !== clampedValue
 }

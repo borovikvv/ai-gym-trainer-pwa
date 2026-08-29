@@ -150,6 +150,8 @@ export interface ClampedNextSetDecision {
   strategyAction: { type: string; exerciseId: string | null }
   reason: string
   detail: string
+  /** Issue #272: факт клампа — LLM предложил что-то, что правила зажали. */
+  wasClamped: boolean
 }
 
 export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNextSetInput): ClampedNextSetDecision {
@@ -219,6 +221,25 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
     nextSet = { weight: Math.round(weight * 100) / 100, reps, restSeconds: rest, targetRpe }
   }
 
+  // Issue #272: фиксируем факт клампа — сравниваем предложение LLM с тем, что
+  // реально вышло после клампа. Только конечные числа; NaN/отсутствие поля
+  // клампом не считается.
+  const actionClamped = rawAction !== actionType
+  const nextSetDropped = rawNextSet != null && nextSet === null
+  let nextSetClamped = false
+  if (nextSet !== null && rawNextSet != null) {
+    const rawWeight = Number(rawNextSet.weight)
+    const rawReps = Number(rawNextSet.reps)
+    const rawRestSeconds = Number(rawNextSet.restSeconds)
+    const rawTargetRpe = Number(rawNextSet.targetRpe)
+    nextSetClamped =
+      (Number.isFinite(rawWeight) && rawWeight !== nextSet.weight) ||
+      (Number.isFinite(rawReps) && Math.round(rawReps) !== nextSet.reps) ||
+      (Number.isFinite(rawRestSeconds) && Math.round(rawRestSeconds) !== nextSet.restSeconds) ||
+      (Number.isFinite(rawTargetRpe) && Math.round(rawTargetRpe) !== nextSet.targetRpe)
+  }
+  const wasClamped = actionClamped || nextSetDropped || nextSetClamped
+
   return {
     nextSet,
     strategyAction: {
@@ -227,6 +248,7 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
     },
     reason: String(proposal.reason ?? '').slice(0, 240),
     detail: String(proposal.detail ?? '').slice(0, 600),
+    wasClamped,
   }
 }
 

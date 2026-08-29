@@ -112,6 +112,7 @@ describe('post-workout coach planner', () => {
     expect(safe.changes[0].repMax).toBe(15)
     expect(safe.changes[0].restSeconds).toBe(45)
     expect(safe.warnings.join(' ')).toContain('отклонено')
+    expect(safe.clamped).toBe(true)
   })
 
   it('uses Coach State and the full exercise library to replace highly fatigued muscle groups in the next workout', () => {
@@ -238,6 +239,7 @@ describe('post-workout coach planner', () => {
     const change = safe.changes[0]
     expect(change.targetWeight).toBe(15)
     expect(change.todayGoal).toBe('15×9/15×9')
+    expect(safe.clamped).toBe(false)
   })
 })
 
