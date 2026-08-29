@@ -6,6 +6,8 @@ import {
   DEGENERATE_MIN_SAMPLE,
   isDegenerate,
   isUndersampled,
+  loadSignalValues,
+  normalizeE1rmTrendValue,
   readAvgRepDeviation,
   readClamped,
   totalObservations,
@@ -198,5 +200,38 @@ describe('readAvgRepDeviation', () => {
 
   it('пустой body — null без исключения', () => {
     expect(readAvgRepDeviation(null)).toBeNull()
+  })
+})
+
+describe('normalizeE1rmTrendValue', () => {
+  it('реальное значение тренда возвращается как есть', () => {
+    expect(normalizeE1rmTrendValue('up')).toBe('up')
+    expect(normalizeE1rmTrendValue('flat')).toBe('flat')
+  })
+
+  it('insufficient_data — sentinel домена, а не заполненное значение', () => {
+    expect(normalizeE1rmTrendValue('insufficient_data')).toBeNull()
+  })
+
+  it('пустые значения — null', () => {
+    expect(normalizeE1rmTrendValue(null)).toBeNull()
+    expect(normalizeE1rmTrendValue(undefined)).toBeNull()
+  })
+})
+
+describe('e1rmTrend вне лога решений (issue #273)', () => {
+  it('loadSignalValues не кладёт e1rmTrend и не читает coach_decision_log', async () => {
+    const queries = []
+    const fakePool = {
+      async query(text) {
+        queries.push(text)
+        return { rows: [] }
+      },
+    }
+
+    const values = await loadSignalValues(fakePool, 4)
+
+    expect(values.has('e1rmTrend')).toBe(false)
+    expect(queries.some((sql) => sql.includes('coach_decision_log'))).toBe(false)
   })
 })

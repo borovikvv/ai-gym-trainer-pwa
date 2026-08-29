@@ -18,6 +18,11 @@
 import { Pool } from 'pg'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
+import type { DbClient } from '../server/dbClient.js'
+import { buildAllMuscleVolumeSnapshots } from '../server/buildVolumeSnapshot.js'
+import { loadRecentHistory, loadUserProfile } from '../server/services/programService.js'
+import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../src/domain/estimatedOneRepMax.js'
+import { CANONICAL_MUSCLE_KEYS } from '../shared/muscleGroups.js'
 
 // --- Окна отчёта -------------------------------------------------------------
 
@@ -113,6 +118,18 @@ export function analyzeSignal(values: Array<number | string | null>): SignalStat
     mode,
     modeShare: filled.length > 0 ? best / filled.length : 0,
   }
+}
+
+/**
+ * e1rmTrend из снимка объёма. insufficient_data — sentinel домена
+ * (src/domain/estimatedOneRepMax.ts), а не реальное значение тренда: если
+ * считать его заполненным, заполненность и мода сигнала будут врать про то,
+ * сколько данных реально есть.
+ */
+export function normalizeE1rmTrendValue(trend: string | null | undefined): string | null {
+  if (trend === null || trend === undefined || trend === '') return null
+  if (trend === 'insufficient_data') return null
+  return trend
 }
 
 /**
@@ -250,7 +267,7 @@ export function clampedKey(title: string, source: string, clamped: boolean | nul
   return `${title} × ${source}${mark}`
 }
 
-async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<string, Array<number | string | null>>> {
+export async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<string, Array<number | string | null>>> {
   const since = `now() - ($1 || ' weeks')::interval`
 
   const values = new Map<string, Array<number | string | null>>()
@@ -305,18 +322,6 @@ async function loadSignalValues(pool: PoolLike, weeks: number): Promise<Map<stri
     push(values, 'avgRepDeviation', readAvgRepDeviation(row.body))
   }
 
-  const e1rm = await pool.query(
-    `select body as body_json
-       from public.recommendations
-      where recommendation_type = 'coach_decision_log' and created_at >= ${since}`,
-    [weeks],
-  )
-  for (const row of e1rm.rows as Array<{ body_json: string | null }>) {
-    for (const trend of readE1rmTrends(row.body_json)) {
-      push(values, 'e1rmTrend', trend)
-    }
-  }
-
   return values
 }
 
@@ -338,18 +343,31 @@ export function readAvgRepDeviation(bodyJson: string | null): number | null {
   }
 }
 
-/** e1rmTrend из payload решения: inputs.coachState.volumeSnapshots.<группа>.e1rmTrend. */
-function readE1rmTrends(bodyJson: string | null): Array<string | null> {
-  if (!bodyJson) return []
-  try {
-    const body = JSON.parse(bodyJson) as {
-      inputs?: { coachState?: { volumeSnapshots?: Record<string, { e1rmTrend?: string | null }> } }
+/**
+ * Текущий срез e1rmTrend — без окна. Выбор по issue #273 — вариант 2: убрать
+ * величину из раздела вырожденности, а не дедуплицировать её.
+ *
+ * Раньше знаменатель раздувался числом обращений к коучу: значение читалось из
+ * body каждой строки coach_decision_log, и 2988 = 582 строки лога × ~5 групп
+ * мышц на снимок в среднем. При этом величина не оконная — buildMuscleVolumeSnapshot
+ * пересчитывает её из полной истории при каждом обращении, хранимого тренда в
+ * базе нет. Поэтому окно не подделываем: считаем текущий срез теми же
+ * прод-функциями напрямую, один раз на пользователя × группу мышц, вне цикла
+ * по окнам 4 и 12 недель.
+ */
+async function loadCurrentE1rmTrendSnapshot(pool: DbClient): Promise<Array<string | null>> {
+  const { rows } = await pool.query('select distinct user_id from public.workout_sessions')
+  const values: Array<string | null> = []
+  for (const row of rows as Array<{ user_id: string }>) {
+    const userId = String(row.user_id)
+    const [profile, history] = await Promise.all([loadUserProfile(pool, userId), loadRecentHistory(pool, userId)])
+    const e1rmHistories = buildAllExerciseE1RMHistories(history, e1rmOptionsForProfile(profile))
+    const snapshots = buildAllMuscleVolumeSnapshots(history, e1rmHistories)
+    for (const key of CANONICAL_MUSCLE_KEYS) {
+      values.push(normalizeE1rmTrendValue(snapshots[key].e1rmTrend))
     }
-    const snapshots = body.inputs?.coachState?.volumeSnapshots ?? {}
-    return Object.values(snapshots).map((snapshot) => snapshot.e1rmTrend ?? null)
-  } catch {
-    return []
   }
+  return values
 }
 
 // --- Отчёт -------------------------------------------------------------------
@@ -397,6 +415,17 @@ async function main(): Promise<void> {
   try {
     lines.push(`=== Недельный самоаудит коуча: ${new Date().toISOString().slice(0, 10)} ===`)
     lines.push('Ничего не меняет — только читает. Найденное заводит issue человек.')
+    lines.push('')
+
+    // e1rmTrend — не оконная величина: хранимого тренда в базе нет, снимок
+    // пересчитывается из полной истории при каждом обращении. Поэтому он не
+    // участвует в разделе вырожденности сигналов по окнам 4/12 недель ниже,
+    // а печатается текущим срезом один раз (issue #273).
+    const e1rmTrend = await loadCurrentE1rmTrendSnapshot(pool)
+    lines.push('## e1rmTrend — текущий срез, без окна')
+    lines.push('Величина не хранит историю и не привязана к числу обращений к')
+    lines.push('коучу; о вырожденности по ней не судим (issue #273).')
+    lines.push(...statsLine('e1rmTrend', analyzeSignal(e1rmTrend)))
     lines.push('')
 
     for (const weeks of WINDOWS_WEEKS) {
