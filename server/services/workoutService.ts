@@ -22,6 +22,8 @@ import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/
 import { computeSessionRepDeviation } from '../../src/domain/repExpectation.js'
 // Issue #267: расхождение «назначено vs выполнено» по весу — считаем и записываем
 import { computeSessionWeightDeviation } from '../../src/domain/weightAdherence.js'
+// Issue #268: чистый отдых — начало текущего подхода минус конец предыдущего
+import { computeNetRestSeconds } from '../../src/domain/workoutHistory.js'
 import type { TrainingRecordChange } from '../coachTrainingRecord.js'
 
 interface WorkoutSetInput {
@@ -31,6 +33,8 @@ interface WorkoutSetInput {
   completed?: boolean
   // Issue #165: client-side ISO timestamp when the set was performed
   performedAt?: string
+  // Issue #268: client-side ISO timestamp when the set started
+  startedAt?: string
 }
 
 interface ExerciseEntryInput {
@@ -74,6 +78,7 @@ interface SanitizedSet {
   rpe: number
   completed: true
   performedAt?: string
+  startedAt?: string
 }
 
 interface SanitizedExercise extends ExerciseEntryInput {
@@ -356,6 +361,21 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
       sanitizedEntry as unknown as Parameters<typeof computeSessionWeightDeviation>[0],
     )
 
+    // Issue #268: чистый отдых по всей сессии — агрегат, без разбивки по
+    // упражнениям (фаза 1: на решения тренера не влияет). Подход без
+    // записанного начала даёт null, а не 0 — отсутствие данных не измерение.
+    const netRestValues = (sanitizedEntry.exercises ?? []).flatMap((exercise) => computeNetRestSeconds(exercise.sets ?? []))
+    const netRestWithData = netRestValues.filter((value) => value !== null)
+    const netRest = netRestValues.length > 0
+      ? {
+          avgNetRestSeconds: netRestWithData.length > 0
+            ? Math.round(netRestWithData.reduce((sum, value) => sum + value, 0) / netRestWithData.length)
+            : null,
+          setsWithData: netRestWithData.length,
+          setsWithoutData: netRestValues.length - netRestWithData.length,
+        }
+      : null
+
     await saveTrainingRecord(
       client,
       {
@@ -369,6 +389,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
         readinessCheckIn: sanitizedEntry.readinessCheckIn ?? null,
         repDeviation,
         weightDeviation,
+        netRest,
         exercises: (sanitizedEntry.exercises ?? []).map((e) => ({
           exerciseId: e.exerciseId ?? '',
           exerciseName: e.exerciseName ?? '',
@@ -457,6 +478,8 @@ export function sanitizeWorkoutHistoryEntry(entry: WorkoutHistoryEntryInput): Wo
           completed: true as const,
           // Issue #165: validate client-side timestamp — invalid ISO → undefined
           performedAt: typeof set.performedAt === 'string' && !Number.isNaN(Date.parse(set.performedAt)) ? set.performedAt : undefined,
+          // Issue #268: validate the same way — invalid ISO → undefined
+          startedAt: typeof set.startedAt === 'string' && !Number.isNaN(Date.parse(set.startedAt)) ? set.startedAt : undefined,
         }))
       droppedSets += Math.max(0, beforeSetCount - sets.length)
       const volume = roundGuardrailNumber(sets.reduce((sum, set) => sum + set.weight * set.reps, 0))

@@ -139,3 +139,24 @@ export function computeSetIntervals(sets: Array<{ performedAt?: string | null }>
   }
   return intervals
 }
+
+// Issue #268: чистый отдых — «начало текущего подхода − конец предыдущего».
+// В отличие от computeSetIntervals (завершение→завершение) тут не входит работа
+// следующего подхода. Один элемент на пару соседних сетов; на месте пары, где
+// у предыдущего нет performedAt или у текущего нет startedAt, кладём null, а
+// не сокращаем массив и не подставляем 0 — отсутствие данных не измерение
+// (как в #246/#248).
+export function computeNetRestSeconds(sets: Array<{ performedAt?: string | null; startedAt?: string | null }>): Array<number | null> {
+  const result: Array<number | null> = []
+  for (let i = 1; i < sets.length; i++) {
+    const prevPerformedAt = sets[i - 1]?.performedAt
+    const currStartedAt = sets[i]?.startedAt
+    if (!prevPerformedAt || !currStartedAt) {
+      result.push(null)
+      continue
+    }
+    const ms = new Date(currStartedAt).getTime() - new Date(prevPerformedAt).getTime()
+    result.push(Number.isFinite(ms) ? Math.round(ms / 1000) : null)
+  }
+  return result
+}

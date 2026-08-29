@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { createSets, useWorkoutNavigation, useWorkoutSetActions } from './useWorkoutSession'
 import type { ExercisePlan, WorkoutDay } from '../../shared/types'
+import type { ExerciseLog } from '../domain/workoutHistory'
 
 const bench: ExercisePlan = {
   id: 'bench-press',
@@ -61,6 +62,38 @@ describe('markSetDone — таймстемп подхода (#165)', () => {
 
     const nextLogs = setLogs.mock.calls[0][0]
     expect(nextLogs[bench.id].sets[1].performedAt).toBeUndefined()
+  })
+})
+
+// Issue #268: начало подхода — момент окончания отдыха. Отдельный таймстемп
+// позволяет посчитать чистый отдых («начало текущего − конец предыдущего»).
+// Функция идемпотентна: уже стоящий startedAt не перезаписывается.
+describe('markSetStarted — начало подхода (#268)', () => {
+  it('записывает startedAt в подход через reducer', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-29T12:34:56.000Z'))
+    const setLogs = vi.fn()
+    const { result } = renderHook(() => useWorkoutSetActions(makeOptions(setLogs)))
+
+    await act(async () => { result.current.markSetStarted(0) })
+
+    const reducer = setLogs.mock.calls[0][0] as (current: Record<string, ExerciseLog>) => Record<string, ExerciseLog>
+    const nextLogs = reducer(makeOptions(setLogs).logs)
+    expect(nextLogs[bench.id].sets[0].startedAt).toBe('2026-07-29T12:34:56.000Z')
+    vi.useRealTimers()
+  })
+
+  it('не перезаписывает уже стоящий startedAt (идемпотентность)', async () => {
+    const setLogs = vi.fn()
+    const options = makeOptions(setLogs)
+    options.activeLog.sets[0] = { ...options.activeLog.sets[0], startedAt: '2026-07-29T12:00:00.000Z' }
+    const { result } = renderHook(() => useWorkoutSetActions(options))
+
+    await act(async () => { result.current.markSetStarted(0) })
+
+    const reducer = setLogs.mock.calls[0][0] as (current: Record<string, ExerciseLog>) => Record<string, ExerciseLog>
+    const nextLogs = reducer(options.logs)
+    expect(nextLogs[bench.id].sets[0].startedAt).toBe('2026-07-29T12:00:00.000Z')
   })
 })
 

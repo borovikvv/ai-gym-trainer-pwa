@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { ProgramExerciseEditor } from './components/ProgramExerciseEditor'
 import { CoachHomePage } from './pages/CoachHomePage'
@@ -276,6 +276,7 @@ function App() {
     addSet,
     removeSet,
     markSetDone,
+    markSetStarted,
     updateExercisePain,
   } = useWorkoutSetActions({
     activeExercise,
@@ -291,6 +292,19 @@ function App() {
     persistWorkoutDraft,
     notify,
   })
+  // Issue #268: начало подхода — момент окончания отдыха (переход
+  // restRemainingSeconds >0 → 0, естественный или по «Пропустить»). Первое
+  // взаимодействие с полями подхода не годится: степперы и RIR-кружки
+  // пользователь трогает ПОСЛЕ физического подхода, до «Готово», — такой
+  // таймстемп лёг бы рядом с performedAt и не отделил бы чистый отдых.
+  const prevRestRemainingRef = useRef(restRemainingSeconds)
+  useEffect(() => {
+    const prevRemaining = prevRestRemainingRef.current
+    prevRestRemainingRef.current = restRemainingSeconds
+    if (prevRemaining > 0 && restRemainingSeconds === 0) {
+      markSetStarted(activeSetIndex)
+    }
+  }, [restRemainingSeconds, activeSetIndex, markSetStarted])
   const {
     selectWorkoutDay,
             startWorkout,

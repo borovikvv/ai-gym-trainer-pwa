@@ -98,6 +98,14 @@ export interface TrainingRecord {
       setsWithoutAssignment: number
       exercises: Array<{ exerciseId: string; avgDeviation: number | null; setsWithAssignment: number }>
     } | null
+    // Issue #268: чистый отдых между подходами («начало текущего − конец
+    // предыдущего»). Агрегат на сессию; null — данных нет вовсе. На решения
+    // тренера пока не влияет (фаза 1 — сбор величины).
+    netRest?: {
+      avgNetRestSeconds: number | null
+      setsWithData: number
+      setsWithoutData: number
+    } | null
   } | null
 }
 
@@ -121,6 +129,8 @@ export async function saveTrainingRecord(
     repDeviation?: SessionRepDeviation | null
     // Issue #267: считается вызывающим из назначенного веса плана
     weightDeviation?: SessionWeightDeviation | null
+    // Issue #268: чистый отдых между подходами (агрегат на сессию)
+    netRest?: { avgNetRestSeconds: number | null; setsWithData: number; setsWithoutData: number } | null
   },
   coachState: {
     readinessScore?: number
@@ -237,6 +247,14 @@ export async function saveTrainingRecord(
             avgDeviation: exercise.avgDeviation,
             setsWithAssignment: exercise.setsWithAssignment,
           })),
+        }
+        : null,
+      // Issue #268: чистый отдых — null, когда данных нет (не подставляем 0).
+      netRest: entry.netRest
+        ? {
+          avgNetRestSeconds: entry.netRest.avgNetRestSeconds,
+          setsWithData: entry.netRest.setsWithData,
+          setsWithoutData: entry.netRest.setsWithoutData,
         }
         : null,
     },

@@ -65,6 +65,9 @@ export interface WorkoutSet {
   completed: boolean
   // Issue #165: client-side timestamp when the set was performed
   performedAt?: string
+  // Issue #268: client-side timestamp when the set started — distinguishes
+  // net rest from the completion-to-completion interval (#165)
+  startedAt?: string
 }
 
 // Issue #98 PR3: WorkoutDebrief moved from src/domain/workoutDebrief.ts
