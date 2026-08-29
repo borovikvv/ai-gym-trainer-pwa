@@ -902,6 +902,47 @@ describe('Issue #167: training record captures rep deviation', () => {
   })
 })
 
+// Issue #268: чистый отдых — начало текущего подхода минус конец предыдущего —
+// попадает в обучающую запись агрегатом на сессию. Подход без записанного
+// начала даёт null, а не 0 (старые данные не должны выглядеть как измерение).
+describe('Issue #268: training record captures net rest', () => {
+  it('передаёт агрегат чистого отдыха в saveTrainingRecord', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+
+    vi.mocked(saveTrainingRecord).mockClear()
+
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-268',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-07-15T18:00:00.000Z',
+      totalVolume: 3600,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 62.5,
+        progressionType: 'increase',
+        progressionReason: 'ok',
+        // performedAt у всех, startedAt — только у второго подхода:
+        // пара 1→2 даёт 12:00:00→12:02:30 = 150 с, пара 2→3 — null.
+        sets: [
+          { weight: 60, reps: 8, rpe: 8, completed: true, performedAt: '2026-07-15T12:00:00.000Z' },
+          { weight: 60, reps: 8, rpe: 8, completed: true, performedAt: '2026-07-15T12:02:30.000Z', startedAt: '2026-07-15T12:02:30.000Z' },
+          { weight: 60, reps: 8, rpe: 8, completed: true, performedAt: '2026-07-15T12:04:00.000Z' },
+        ],
+      }],
+    })
+
+    const [, entryArg] = vi.mocked(saveTrainingRecord).mock.calls[0]
+    expect(entryArg.netRest.avgNetRestSeconds).toBe(150)
+    expect(entryArg.netRest.setsWithData).toBe(1)
+    expect(entryArg.netRest.setsWithoutData).toBe(1)
+  })
+})
+
 // Issue #169: сохранение тренировки перестраивает только ближайшую
 // запланированную. Раньше пересобирались все на две недели вперёд: между
 // двумя тренировками менялись веса, состав и группы во всех будущих сессиях

@@ -257,6 +257,22 @@ export function useWorkoutSetActions({
       })
   }
 
+  // Issue #268: начало подхода — момент окончания отдыха (restRemainingSeconds
+  // дошёл до 0). Отдельный таймстемп позволяет посчитать чистый отдых
+  // («начало текущего − конец предыдущего»). Идемпотентна: если startedAt уже
+  // стоит, лог и черновик не трогаем.
+  function markSetStarted(setIndex: number) {
+    setLogs((current) => {
+      const existing = current[activeExercise.id] ?? createExerciseLog(activeExercise)
+      const target = existing.sets[setIndex]
+      if (!target || target.startedAt) return current
+      const sets = existing.sets.map((set, index) => (index === setIndex ? { ...set, startedAt: new Date().toISOString() } : set))
+      const nextLogs = { ...current, [activeExercise.id]: { ...existing, sets } }
+      persistWorkoutDraft(nextLogs)
+      return nextLogs
+    })
+  }
+
   function adjustWeight(delta: number) {
     setLogs((current) => {
       const existing = current[activeExercise.id] ?? createExerciseLog(activeExercise)
@@ -313,6 +329,7 @@ export function useWorkoutSetActions({
     addSet,
     removeSet,
     markSetDone,
+    markSetStarted,
     adjustWeight,
     copyPrevious,
     updateExercisePain,

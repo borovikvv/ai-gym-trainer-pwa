@@ -13,6 +13,8 @@ export type WorkoutSetInput = {
   completed: boolean
   // Issue #165: client-side timestamp when the set was performed
   performedAt?: string
+  // Issue #268: client-side timestamp when the set started — for net rest
+  startedAt?: string
 }
 
 export type ProgressionInput = {
