@@ -2138,11 +2138,13 @@ describe('Issue #173: weight direction for assisted exercises (gravitron)', () =
       history: gravitronHistory(30),
     })
 
-    // Issue #170: на разгрузке инвариант #136 приостановлен, поэтому из
-    // кандидатов (рекомендация 30, программа 32.5) берётся самый лёгкий —
-    // для гравитрона это МАКСИМУМ помощи, 32.5. Разгрузка добавляет ещё шаг:
-    // 32.5 + 2.5 = 35 (легче = больше помощи).
-    expect(findGravitron(plan)?.targetWeight).toBe(35)
+    // Issue #263: на разгрузке инвариант #136 приостановлен, но пул кандидатов
+    // при этом — только реальные сигналы. Дефолт справочника (программа 32.5)
+    // из него исключён: для assistance easierOf = МАКСИМУМ помощи, и раньше
+    // дефолт выигрывал как «самый лёгкий», назначая помощи больше, чем следует
+    // из истории. Реальный сигнал один — 30. Разгрузка добавляет шаг:
+    // 30 + 2.5 = 32.5 (легче = больше помощи).
+    expect(findGravitron(plan)?.targetWeight).toBe(32.5)
   })
 
   it('низкая готовность без истории для assisted увеличивает помощь на шаг', async () => {
@@ -2345,6 +2347,56 @@ describe('Issue #170: область действия инварианта ра�
     expect(benchOf(plan)?.workingFloorSuspended).toBe(true)
     // База — самый лёгкий кандидат (45), разгрузка снимает ещё шаг: 42.5.
     expect(benchOf(plan)?.targetWeight).toBe(42.5)
+  })
+
+  // Issue #263: у упражнения вне программы targetWeight — статичный
+  // default_target_weight справочника (20 у французского жима), а рабочий вес
+  // пользователя 35. При перерыве он попадал в пул как «самый лёгкий»
+  // кандидат и назначался вместо шага вниз от рабочего — сильный получал
+  // меньше слабого.
+  const armsProfile = { ...profile, preferences: { focusAreas: ['руки'], sessionStyle: 'moderate_stable' } }
+  const skullLibrary = [
+    { id: 'skull-crusher', name: 'Французский жим лёжа', muscleGroup: 'Руки · трицепс', setsCount: 3, repMin: 10, repMax: 12, targetWeight: 20, weightStep: 2.5, restSeconds: 75, instruction: 'трицепс' },
+  ]
+  const skullHistory = (completedAt) => [{
+    completedAt,
+    exercises: [
+      { exerciseId: 'skull-crusher', nextRecommendedWeight: 35, sets: [{ completed: true, weight: 35, reps: 9, rpe: 10 }] },
+    ],
+  }]
+  const skullMemory = () => ({
+    exerciseProfiles: { 'skull-crusher': { id: 'skull-crusher', currentWorkingWeight: 35 } },
+  })
+  const skullOf = (plan) => plan.exercises.find((exercise) => exercise.exerciseId === 'skull-crusher')
+
+  it('после перерыва вес не падает до дефолта справочника (#263)', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: armsProfile,
+      scheduledDate: '2026-08-25',
+      coachState: readyState({ daysSinceLastWorkout: 15 }),
+      coachMemory: skullMemory(),
+      exerciseLibrary: skullLibrary,
+      history: skullHistory('2026-08-10T20:00:00.000Z'),
+    })
+
+    expect(skullOf(plan)?.workingFloorSuspended).toBe(true)
+    // Инвариант приостановлен, но пул — только реальные сигналы (оба 35).
+    // Дефолт справочника (20) кандидатом «полегче» больше не является.
+    expect(skullOf(plan)?.targetWeight).toBe(35)
+  })
+
+  it('без перерыва дефолт справочника не тянет вес вниз (регрессия #136)', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: armsProfile,
+      scheduledDate: '2026-08-13',
+      coachState: readyState({ daysSinceLastWorkout: 3 }),
+      coachMemory: skullMemory(),
+      exerciseLibrary: skullLibrary,
+      history: skullHistory('2026-08-10T20:00:00.000Z'),
+    })
+
+    expect(skullOf(plan)?.workingFloorSuspended).toBe(false)
+    expect(skullOf(plan)?.targetWeight).toBe(35)
   })
 })
 
