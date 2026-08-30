@@ -2382,7 +2382,27 @@ describe('Issue #170: область действия инварианта ра�
     expect(skullOf(plan)?.workingFloorSuspended).toBe(true)
     // Инвариант приостановлен, но пул — только реальные сигналы (оба 35).
     // Дефолт справочника (20) кандидатом «полегче» больше не является.
-    expect(skullOf(plan)?.targetWeight).toBe(35)
+    // При совпадении обоих реальных сигналов приостановка дополнительно
+    // снимает один шаг: рабочий вес перерыва — 35 − шаг 2.5 = 32.5.
+    expect(skullOf(plan)?.targetWeight).toBe(32.5)
+  })
+
+  it('новое упражнение при перерыве не снимает шаг с дефолта справочника (#283)', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: armsProfile,
+      scheduledDate: '2026-08-25',
+      coachState: readyState({ daysSinceLastWorkout: 15 }),
+      // Упражнение ни разу не выполнялось: historicWeight = NaN (нет истории),
+      // а coachMemory (ветка no_data) кладёт в currentWorkingWeight библиотечный
+      // дефолт 20. Это единственный «реальный» кандидат — совпасть он может
+      // только с собой, поэтому шаг вниз с него не снимается.
+      coachMemory: { exerciseProfiles: { 'skull-crusher': { id: 'skull-crusher', currentWorkingWeight: 20 } } },
+      exerciseLibrary: skullLibrary,
+      history: [],
+    })
+
+    expect(skullOf(plan)?.workingFloorSuspended).toBe(true)
+    expect(skullOf(plan)?.targetWeight).toBe(20)
   })
 
   it('без перерыва дефолт справочника не тянет вес вниз (регрессия #136)', async () => {
