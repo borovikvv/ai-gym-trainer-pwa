@@ -39,6 +39,8 @@ export interface NormalizedProgramExercise {
   coachFocus: string
   /** Issue #173: 'load' | 'assistance' из exercise_library.weight_direction. */
   weightDirection: string | null
+  /** Issue #294: признак собственного веса из exercise_library.equipment. */
+  equipment: string | null
 }
 
 export interface NormalizedLibraryExercise {
@@ -159,6 +161,9 @@ export function normalizeProgramExercise(row: DbRow): NormalizedProgramExercise 
     // Issue #173: направление веса из справочника должно доезжать до клиента —
     // иначе он вынужден определять его разбором названия.
     weightDirection: (row.weight_direction as string | null) ?? null,
+    // Issue #294: признак собственного веса — как weightDirection, доезжает
+    // от справочника через тот же провод.
+    equipment: (row.equipment as string | null) ?? null,
   }
 }
 

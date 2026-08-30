@@ -887,7 +887,10 @@ function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemo
 
 function applyPrescription({ exercise, profile, coachState, coachMemory = null, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null, exerciseFlag = null }: ApplyPrescriptionParams): GeneratedExercise {
   const recent = latestExerciseHistory(history, exercise.id)
-  const historicWeight = Number(recent?.nextRecommendedWeight ?? NaN)
+  // Issue #294: для bodyweight-упражнений «исторический» вес не участвует —
+  // старые фиктивные записи (вес 0 + шаг 2.5 → рекомендация 2.5) не должны
+  // назначаться плану как реальный кандидат. Прогрессия у них по повторам.
+  const historicWeight = exercise.equipment === 'bodyweight' ? NaN : Number(recent?.nextRecommendedWeight ?? NaN)
   // Разгрузка нужна дважды: она снимает инвариант рабочего веса (#170) и
   // переписывает предписание в самом конце — считаем один раз.
   const mesocycleState = coachState?.mesocycle

@@ -153,6 +153,7 @@ export function useActiveWorkoutContext({
           repMin: exercise.repMin,
           repMax: exercise.repMax,
           weightStep: exercise.weightStep,
+          equipment: exercise.equipment,
           sets: log.sets,
           pain: log.pain,
           avgRepDeviation,

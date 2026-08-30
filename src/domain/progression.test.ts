@@ -192,6 +192,42 @@ describe('calculateProgression', () => {
   })
 })
 
+// Issue #294: у bodyweight-упражнений с ненулевым шагом (брусья: вес 0, шаг
+// 2.5) прогрессия должна идти повторами, а не «+2.5 кг» — раньше фиктивный
+// шаг создавал фиктивный исторический вес, который накатывался на план.
+describe('Issue #294: bodyweight progression is rep-based, not weight-based', () => {
+  const barDipsAtTop = {
+    exerciseName: 'Отжимания на брусьях',
+    currentWeight: 0,
+    repMin: 10,
+    repMax: 12,
+    weightStep: 2.5,
+    equipment: 'bodyweight',
+    sets: [
+      { weight: 0, reps: 12, rpe: 7, completed: true },
+      { weight: 0, reps: 12, rpe: 8, completed: true },
+      { weight: 0, reps: 12, rpe: 8, completed: true },
+    ],
+    pain: false,
+  }
+
+  it('на верхней границе обещает повторы, а не +шаг кг', () => {
+    const result = calculateProgression(barDipsAtTop)
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(0)
+    expect(result.reason).toContain('11–13 повторов')
+    expect(result.reason).not.toMatch(/кг/)
+  })
+
+  it('регрессия: без признака bodyweight поведение прежнее — вес растёт с нуля', () => {
+    const result = calculateProgression({ ...barDipsAtTop, equipment: 'barbell' })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(2.5)
+  })
+})
+
 // Issue #245: previousFailureCount не передавался ни одним вызывающим — ветка
 // deload была недостижима. Счётчик считается из истории: самая свежая прошлая
 // сессия с упражнением, в которой два и больше выполненных подхода ниже repMin.
