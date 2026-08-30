@@ -28,6 +28,10 @@ export type ProgressionInput = {
   previousFailureCount?: number
   /** Отклонение факта от ожидания по истории на этом весе (#167); null/undefined — сигнала нет. */
   avgRepDeviation?: number | null
+  /** Issue #294: признак собственного веса из справочника (equipment ===
+   * 'bodyweight'). Основной сигнал «безвесовой» прогрессии — у брусьев/отжиманий
+   * вес 0, но шаг 2.5, и пара (0, шаг>0) раньше ошибочно включала весовую ветку. */
+  equipment?: string | null
 }
 
 export type ProgressionResult = {
@@ -61,7 +65,9 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
   const assisted = direction === 'assistance'
   // Issue #192: ни веса, ни шага — прогрессия идёт по повторам (у планки — по
   // секундам), и все тексты ниже говорят о них, а не о нулевых килограммах.
-  const weightless = isWeightlessProgression(input.currentWeight, input.weightStep)
+  // Issue #294: для bodyweight-упражнений (equipment из справочника) весовая
+  // ветка не включается даже при ненулевом шаге — прогрессия по повторам.
+  const weightless = input.equipment === 'bodyweight' || isWeightlessProgression(input.currentWeight, input.weightStep)
   const timed = isTimedExerciseName(input.exerciseName)
   const unit = timed ? 'сек' : 'повторов'
 
@@ -107,7 +113,9 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
       ? nextRepRange({ repMin: input.repMin, repMax: input.repMax, timed })
       : null
     return {
-      recommendedWeight: nextWeight,
+      // Issue #294: для bodyweight рост — по повторам, вес не меняется
+      // (harderWeight(0, step) создавал фиктивные +шаг кг).
+      recommendedWeight: weightless ? input.currentWeight : nextWeight,
       type: 'increase',
       reason: next
         ? next.atCeiling

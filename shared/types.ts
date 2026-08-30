@@ -373,6 +373,10 @@ export type ExercisePlan = {
    * Сервер отдаёт его в normalizeProgramExercise; клиент опирается на поле
    * справочника, а не на разбор названия строкой. */
   weightDirection?: string | null
+  /** Issue #294: сигнал из exercise_library.equipment для распознавания
+   * bodyweight-упражнений с ненулевым weightStep (например, отжимания на
+   * брусьях): у них прогрессия идёт повторами, а не килограммами. */
+  equipment?: string | null
   prescription: string
   setsCount: number
   repMin: number

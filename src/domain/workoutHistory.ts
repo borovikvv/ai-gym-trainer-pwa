@@ -55,6 +55,7 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       repMin: exercise.repMin,
       repMax: exercise.repMax,
       weightStep: exercise.weightStep,
+      equipment: exercise.equipment,
       sets: log.sets,
       pain: log.pain,
       avgRepDeviation,

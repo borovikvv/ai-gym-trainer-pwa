@@ -2609,3 +2609,59 @@ describe('Issue #293: под-мышечный штраф в слоте legs', ()
     expect(exerciseIds).not.toContain('leg-curl')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #294: bar-dips (equipment bodyweight, weightStep 2.5) не получают
+// фиктивные +2.5 кг из старых progression_events. Исторический вес для
+// bodyweight-упражнений исключается из кандидатов назначения.
+// ---------------------------------------------------------------------------
+
+describe('Issue #294: bodyweight exercises ignore fake historic weight', () => {
+  const barDipsLibrary = [
+    { id: 'bar-dips', name: 'Отжимания на брусьях', muscleGroup: 'Грудь', setsCount: 3, repMin: 10, repMax: 12, targetWeight: 0, weightStep: 2.5, restSeconds: 90, equipment: 'bodyweight' },
+  ]
+  const readyState = {
+    recoveryStatus: 'ready',
+    readinessScore: 85,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'high' },
+      legs: { fatigue: 'high' },
+      shoulders: { fatigue: 'high' },
+      arms: { fatigue: 'high' },
+      core: { fatigue: 'high' },
+    },
+    exercises: {},
+  }
+  // Старая фиктивная запись от 19.07: bar-dips выполнен как bar-dips-extra-...,
+  // прогрессия посчитала +2.5 кг от нуля и сохранила recommended_weight 2.5.
+  // Канонизация id срезает суффикс, поэтому запись числится за bar-dips.
+  const history = [{
+    completedAt: '2026-07-19T18:00:00Z',
+    exercises: [{
+      exerciseId: 'bar-dips-extra-1784478504638',
+      exerciseName: 'Отжимания на брусьях',
+      muscleGroup: 'Грудь',
+      nextRecommendedWeight: 2.5,
+      progressionType: 'increase',
+      progressionReason: 'все подходы на верхней границе — следующий раз +2.5 кг',
+      sets: [{ weight: 0, reps: 12, rpe: 7, completed: true }],
+    }],
+  }]
+
+  it('план не берёт фиктивные +2.5 кг для bodyweight-упражнения', async () => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile,
+      scheduledDate: '2026-08-13',
+      coachState: readyState,
+      coachMemory: { exerciseProfiles: {} },
+      exerciseLibrary: barDipsLibrary,
+      history,
+    })
+
+    const dips = plan.exercises.find((e) => e.exerciseId === 'bar-dips')
+    expect(dips).toBeDefined()
+    expect(dips.targetWeight).toBe(0)
+  })
+})
