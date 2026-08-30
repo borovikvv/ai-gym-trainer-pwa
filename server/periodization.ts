@@ -53,6 +53,9 @@ export interface PeriodizationAdjustment {
  * @param weightDirection — issue #173: 'load' (default) | 'assistance'.
  *   For assisted machines "heavier" means LESS counterweight, so the
  *   intensification weight delta flips sign.
+ * @param equipment — issue #287: the exercise's equipment from the library
+ *   ('bodyweight' etc.). The primary bodyweight signal; `weightStep === 0`
+ *   remains as a fallback for entries without equipment in the DB.
  * @returns PeriodizationAdjustment (deltas, all 0 for idle/deload)
  */
 // Issue #233: 0 — валидный шаг веса для bodyweight-упражнений («прогрессии
@@ -68,11 +71,14 @@ export function getPeriodizationAdjustment(
   phase: string | null | undefined,
   weightStep: number,
   weightDirection: WeightDirection = 'load',
+  equipment?: string | null,
 ): PeriodizationAdjustment {
   const step = resolveWeightStep(weightStep)
-  // Issue #241: шаг 0 — единственный признак «вес добавить нельзя» (упражнения
-  // с собственным весом). Невалидный шаг уже ушёл в дефолтные 2.5 кг выше.
-  const isBodyweight = step === 0
+  // Issue #287: bodyweight определяется по справочнику — `equipment ===
+  // 'bodyweight'` (например, bar-dips: шаг 2.5, но вес собственный). Шаг 0
+  // остаётся запасным сигналом для записей без `equipment` в БД (#241).
+  // Невалидный шаг уже ушёл в дефолтные 2.5 кг выше.
+  const isBodyweight = equipment === 'bodyweight' || step === 0
 
   switch (phase) {
     case 'loading':
@@ -99,6 +105,8 @@ export function getPeriodizationAdjustment(
       // Issue #241: для bodyweight (шаг веса 0) вес добавить нельзя, поэтому
       // рецепт «тяжелее весом, меньше повторов» вырождается в «меньше работы
       // при той же нагрузке». Прогрессируем повторами вместо веса.
+      // Issue #287: то же для `equipment === 'bodyweight'` с ненулевым шагом
+      // (bar-dips: default_weight_step 2.5 при собственном весе).
       if (isBodyweight) {
         return {
           weightDelta: 0,
@@ -147,6 +155,7 @@ export function applyPeriodization(
     setsCount: number
     intensityTarget: string
     weightStep: number
+    equipment?: string | null
   },
   phase: string | null | undefined,
   weightDirection: WeightDirection = 'load',
@@ -158,7 +167,7 @@ export function applyPeriodization(
   intensityTarget: string
   periodizationNote: string
 } {
-  const adj = getPeriodizationAdjustment(phase, base.weightStep, weightDirection)
+  const adj = getPeriodizationAdjustment(phase, base.weightStep, weightDirection, base.equipment)
 
   return {
     targetWeight: Math.max(0, base.targetWeight + adj.weightDelta),

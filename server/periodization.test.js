@@ -94,6 +94,22 @@ describe('getPeriodizationAdjustment', () => {
     expect(getPeriodizationAdjustment('intensification', null).repMaxDelta).toBe(-1)
     expect(getPeriodizationAdjustment('intensification', NaN).repMaxDelta).toBe(-1)
   })
+
+  // Issue #287: «Отжимания на брусьях» — equipment bodyweight при weight_step 2.5.
+  // Признак bodyweight теперь equipment, а не только шаг: вес не прибавляется.
+  it('intensification: equipment bodyweight with nonzero step adds no weight (issue #287)', () => {
+    const adj = getPeriodizationAdjustment('intensification', 2.5, 'load', 'bodyweight')
+    expect(adj.weightDelta).toBe(0)
+    expect(adj.repMaxDelta).toBe(2)
+    expect(adj.intensityShift).toBe('harder')
+  })
+
+  it('intensification: weighted exercise keeps weight increase despite equipment flag (regression, issue #287)', () => {
+    const adj = getPeriodizationAdjustment('intensification', 2.5, 'load', 'barbell')
+    expect(adj.weightDelta).toBe(2.5)
+    expect(adj.repMaxDelta).toBe(-1)
+    expect(adj.intensityShift).toBe('harder')
+  })
 })
 
 describe('applyPeriodization', () => {
@@ -203,6 +219,28 @@ describe('applyPeriodization', () => {
       'intensification',
     )
     expect(result.repMax).toBeGreaterThanOrEqual(libraryRepMax)
+  })
+
+  // Issue #287: bar-dips — equipment bodyweight, но default_weight_step 2.5.
+  // Раньше periodization безусловно прибавлял 2.5 кг «из ниоткуда».
+  it('intensification: bar-dips (equipment bodyweight, step 2.5) stays at targetWeight 0 (issue #287)', () => {
+    const result = applyPeriodization(
+      {
+        targetWeight: 0,
+        repMin: 8,
+        repMax: 10,
+        setsCount: 3,
+        intensityTarget: 'controlled',
+        weightStep: 2.5,
+        equipment: 'bodyweight',
+      },
+      'intensification',
+    )
+    expect(result.targetWeight).toBe(0) // no invented +2.5 kg
+    expect(result.repMax).toBe(12)      // +2 reps, progression by volume
+    expect(result.repMin).toBe(8)       // unchanged
+    expect(result.periodizationNote).toContain('Интенсификация')
+    expect(result.periodizationNote).not.toContain('0 кг')
   })
 
   it('prevents repMin from going below 1', () => {
