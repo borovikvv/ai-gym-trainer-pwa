@@ -450,3 +450,44 @@ describe('Issue #232: упражнения вне программы класс�
     expect(state.muscleGroups.arms).toMatchObject({ fatigue: 'high', recentMaxEffortSets: 2 })
   })
 })
+
+// Issue #288: возвращение после перерыва >= 14 дней не должно давать ложный
+// above_plan. Отпускная неделя-две размывали оценку частоты вниз, и обычные
+// две сессии недели превращались в «перегрузку» (ratio >= 1.35).
+describe('Issue #288: перерыв не даёт ложный above_plan', () => {
+  const minimalSession = (id, completedAt) => ({ id, completedAt, exercises: [] })
+
+  it('две сессии после 15-дневного перерыва при расписании 2/нед — on_plan', () => {
+    const state = computeCoachState({
+      profile,
+      history: [
+        minimalSession('s1', '2026-08-10T18:00:00.000Z'),
+        minimalSession('s2', '2026-08-25T18:00:00.000Z'),
+        minimalSession('s3', '2026-08-27T18:00:00.000Z'),
+      ],
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.plannedWorkoutsPerWeek).toBe(2)
+    expect(state.weeklyLoadStatus).not.toBe('above_plan')
+    expect(state.weeklyLoadStatus).toBe('on_plan')
+    expect(state.daysSinceLastWorkout).toBe(3)
+  })
+
+  it('реальный перегруз без перерыва остаётся above_plan', () => {
+    const overloadHistory = [
+      '2026-08-03', '2026-08-06', '2026-08-10', '2026-08-13',
+      '2026-08-17', '2026-08-20', '2026-08-24', '2026-08-27', '2026-08-29',
+    ].map((date, index) => minimalSession(`s${index}`, `${date}T18:00:00.000Z`))
+
+    const state = computeCoachState({
+      profile,
+      history: overloadHistory,
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.plannedWorkoutsPerWeek).toBe(2)
+    expect(state.actualWorkoutsLast7Days).toBe(3)
+    expect(state.weeklyLoadStatus).toBe('above_plan')
+  })
+})

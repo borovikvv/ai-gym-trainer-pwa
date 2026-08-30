@@ -112,7 +112,14 @@ export function buildCoachDecision({
       avoidMuscleGroups.add('legs')
       reasons.push('Готовность снижена, ноги ещё не восстановились — сегодня их не грузим.')
     }
-    reasons.push('Готовность снижена — тренировка должна быть умеренной, без отказа.')
+    // Issue #288: above_plan — это недельный объём выше плана, а не низкая
+    // готовность. Текст причины должен отражать реальный триггер.
+    const readinessOrRecoveryLow = readinessScore < 55 || coachState?.recoveryStatus === 'low'
+    reasons.push(
+      readinessOrRecoveryLow
+        ? 'Готовность снижена — тренировка должна быть умеренной, без отказа.'
+        : 'Недельная нагрузка выше плана — тренировка должна быть умеренной, без отказа.',
+    )
   }
 
   const exerciseProfiles = coachMemory?.exerciseProfiles ?? {}

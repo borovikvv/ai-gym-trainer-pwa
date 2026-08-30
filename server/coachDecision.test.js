@@ -96,3 +96,34 @@ describe('coach decision — низкая готовность и свежие �
     expect(decisionFor('high').avoidMuscleGroups).toContain('legs')
   })
 })
+
+// Issue #288: триггер above_plan — недельный объём выше плана, а не низкая
+// готовность. Причина в решении не должна путать эти сценарии.
+describe('coach decision — причина above_plan не путается с низкой готовностью (#288)', () => {
+  const decisionProfile = {
+    userId: 'vyacheslav',
+    level: 'intermediate',
+    workoutsPerWeek: 3,
+    preferences: { intensityTolerance: 'normal' },
+  }
+  const decisionFor = (coachState) => buildCoachDecision({
+    profile: decisionProfile,
+    scheduledDate: '2026-08-30',
+    coachState,
+    coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+  })
+
+  it('above_plan при готовности в норме — причина про недельную нагрузку', () => {
+    const decision = decisionFor({ readinessScore: 68, recoveryStatus: 'ready', weeklyLoadStatus: 'above_plan' })
+
+    expect(decision.reasons.join(' ')).toContain('Недельная нагрузка выше плана')
+    expect(decision.reasons.join(' ')).not.toContain('Готовность снижена')
+    expect(decision.loadPolicy).toBe('moderate_no_failure')
+  })
+
+  it('низкая готовность по-прежнему даёт причину про готовность', () => {
+    const decision = decisionFor({ readinessScore: 42, recoveryStatus: 'low', weeklyLoadStatus: 'on_plan' })
+
+    expect(decision.reasons.join(' ')).toContain('Готовность снижена')
+  })
+})

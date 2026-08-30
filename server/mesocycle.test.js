@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeMesocycleState, isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
+import { computeMesocycleState, isDeloadWeek, applyDeloadReduction, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -996,5 +996,57 @@ describe('issue #77: effective workouts per week from actual history', () => {
     expect(withProfile2.plannedWorkoutsThisCycle).toBe(withProfile3.plannedWorkoutsThisCycle)
     expect(withProfile3.plannedWorkoutsThisCycle).toBe(withProfile5.plannedWorkoutsThisCycle)
     expect(withProfile2.completionRatio).toBeCloseTo(1.0, 1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #288: перерыв >= 14 дней не должен занижать эффективную частоту.
+// Перерыв между соседними сессиями исключается из окна расчёта, иначе
+// возвращение к обычному расписанию читалось бы как перегрузка.
+// ---------------------------------------------------------------------------
+
+describe('issue #288: перерыв не должен занижать эффективную частоту', () => {
+  it('перерыв 15 дней + возвращение 2 сессиями за 3 дня → частота 2, а не 1', () => {
+    const history = [
+      session('2026-08-10T18:00:00.000Z'),
+      session('2026-08-25T18:00:00.000Z'),
+      session('2026-08-27T18:00:00.000Z'),
+    ]
+    const now = new Date('2026-08-27T18:00:00.000Z')
+
+    // До фикса: 2 сессии за 14 дней → round(2/2) = 1.
+    expect(computeEffectiveWorkoutsPerWeek(history, now, 3)).toBe(2)
+  })
+
+  it('3 сессии до перерыва + 2 после (окно 28 дней) → частота 3, а не 1', () => {
+    const history = [
+      session('2026-08-01T18:00:00.000Z'),
+      session('2026-08-04T18:00:00.000Z'),
+      session('2026-08-07T18:00:00.000Z'),
+      session('2026-08-22T18:00:00.000Z'),
+      session('2026-08-24T18:00:00.000Z'),
+    ]
+    const now = new Date('2026-08-24T18:00:00.000Z')
+
+    // До фикса: 5 сессий за 28 дней → round(5/4) = 1.
+    expect(computeEffectiveWorkoutsPerWeek(history, now, 3)).toBe(3)
+  })
+
+  it('без перерывов (все разрывы < 14 дней) результат не меняется', () => {
+    const history = [
+      session('2026-08-03T18:00:00.000Z'),
+      session('2026-08-06T18:00:00.000Z'),
+      session('2026-08-10T18:00:00.000Z'),
+      session('2026-08-13T18:00:00.000Z'),
+      session('2026-08-17T18:00:00.000Z'),
+      session('2026-08-20T18:00:00.000Z'),
+      session('2026-08-24T18:00:00.000Z'),
+      session('2026-08-27T18:00:00.000Z'),
+      session('2026-08-29T18:00:00.000Z'),
+    ]
+    const now = new Date('2026-08-30T18:00:00.000Z')
+
+    // 9 сессий за 28 дней → round(9/4) = 2, как и по старой формуле.
+    expect(computeEffectiveWorkoutsPerWeek(history, now, 3)).toBe(2)
   })
 })

@@ -511,6 +511,35 @@ function isTimedExerciseName(name: string): boolean {
   return lower.includes('планк') || lower.includes('plank') || lower.includes('dead bug') || lower.includes('дед баг')
 }
 
+const BREAK_GAP_DAYS = 14
+const MIN_ACTIVE_DAYS = 7
+
+/**
+ * Считает для окна [now - windowDays, now] количество сессий внутри окна и
+ * «активные дни» окна за вычетом пересечения окна с перерывами >= BREAK_GAP_DAYS
+ * между СОСЕДНИМИ сессиями из полной истории (не только внутри окна — перерыв
+ * может начинаться до границы окна).
+ */
+function activeWindowStats(
+  sortedSessionsMs: number[],
+  windowDays: number,
+  nowMs: number,
+): { count: number; activeDays: number } {
+  const windowStartMs = nowMs - windowDays * 86_400_000
+  const count = sortedSessionsMs.filter((ms) => ms >= windowStartMs).length
+
+  let excludedDays = 0
+  for (let i = 1; i < sortedSessionsMs.length; i++) {
+    const gapDays = (sortedSessionsMs[i] - sortedSessionsMs[i - 1]) / 86_400_000
+    if (gapDays < BREAK_GAP_DAYS) continue
+    const overlapStart = Math.max(sortedSessionsMs[i - 1], windowStartMs)
+    const overlapEnd = Math.min(sortedSessionsMs[i], nowMs)
+    if (overlapEnd > overlapStart) excludedDays += (overlapEnd - overlapStart) / 86_400_000
+  }
+
+  return { count, activeDays: Math.max(MIN_ACTIVE_DAYS, windowDays - excludedDays) }
+}
+
 /**
  * Issue #77: Compute effective workouts-per-week from actual history.
  *
@@ -519,6 +548,9 @@ function isTimedExerciseName(name: string): boolean {
  * (profile.workoutsPerWeek). This ensures the mesocycle and coachState
  * reflect what the user ACTUALLY does, not what they INTENDED to do when
  * filling out the questionnaire.
+ *
+ * Issue #288: перерывы >= 14 дней между соседними сессиями исключаются из
+ * окна расчёта — отпускная неделя-две не занижают частоту после возвращения.
  *
  * Exported so coachState.ts can use the same computation for
  * plannedWorkoutsPerWeek / weeklyLoadRatio.
@@ -529,26 +561,20 @@ export function computeEffectiveWorkoutsPerWeek(
   profileWorkoutsPerWeek?: number,
 ): number {
   const nowMs = now.getTime()
-  const workoutsLast28Days = (history ?? []).filter((s) => {
-    const sessionMs = new Date(s.completedAt).getTime()
-    return Number.isFinite(sessionMs) && nowMs - sessionMs <= 28 * 86_400_000
-  }).length
+  const sortedMs = (history ?? [])
+    .map((s) => new Date(s.completedAt).getTime())
+    .filter((ms) => Number.isFinite(ms) && ms <= nowMs)
+    .sort((a, b) => a - b)
 
-  // Need at least 4 workouts in 28 days to compute a reliable average
-  if (workoutsLast28Days >= 4) {
-    return Math.max(1, Math.min(7, Math.round(workoutsLast28Days / 4)))
+  const w28 = activeWindowStats(sortedMs, 28, nowMs)
+  if (w28.count >= 4) {
+    return Math.max(1, Math.min(7, Math.round(w28.count / (w28.activeDays / 7))))
   }
 
-  // Fallback: check last 14 days (2 workouts minimum)
-  const workoutsLast14Days = (history ?? []).filter((s) => {
-    const sessionMs = new Date(s.completedAt).getTime()
-    return Number.isFinite(sessionMs) && nowMs - sessionMs <= 14 * 86_400_000
-  }).length
-
-  if (workoutsLast14Days >= 2) {
-    return Math.max(1, Math.min(7, Math.round(workoutsLast14Days / 2)))
+  const w14 = activeWindowStats(sortedMs, 14, nowMs)
+  if (w14.count >= 2) {
+    return Math.max(1, Math.min(7, Math.round(w14.count / (w14.activeDays / 7))))
   }
 
-  // Final fallback: questionnaire value
   return clampNumber(profileWorkoutsPerWeek, 1, 7, 3)
 }
