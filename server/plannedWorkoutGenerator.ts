@@ -1026,6 +1026,7 @@ function applyPrescription({ exercise, profile, coachState, coachMemory = null, 
       setsCount,
       intensityTarget,
       weightStep: exercise.weightStep,
+      equipment: exercise.equipment,
     }, mesocyclePhase, direction)
     targetWeight = roundWeight(periodized.targetWeight)
     repMin = periodized.repMin
