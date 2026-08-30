@@ -230,14 +230,15 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
   return { ...parsed, source: 'llm', nextWorkoutDayId: nextWorkoutDay?.id }
 }
 
+// Issue #299: the deterministic cascade regenerator (regeneratePlannedWorkout)
+// picks the next workout's composition by its own scoring, so the itemized
+// changes of this plan would not match what actually lands in the calendar.
+// We no longer publish exercise/weight composition in the recommendation text —
+// only a fixed anchor naming the next program day and explicitly excluding the
+// just-finished workout from the addressed target.
 function formatCoachPlanRecommendation(plan: SafeCoachPlan, nextWorkoutDay: WorkoutDayRef): string {
-  const changes = (plan.changes ?? [])
-    .map((change) => `• ${change.exerciseName ?? exerciseNameByProgramExerciseId(nextWorkoutDay, change.programExerciseId)}: ${change.setsCount}×${change.repMin}–${change.repMax}, ${change.targetWeight} кг. ${change.coachFocus}`)
-    .join('\n')
+  const dayName = nextWorkoutDay?.name ?? nextWorkoutDay?.label ?? 'не определена'
+  const anchor = `Корректировка относится к следующей тренировке по программе «${dayName}», не к той, что вы только что выполнили. Точный состав и веса — в календаре: ротация упражнений и недельный объём пересчитают их при сборке.`
   const warnings = (plan.warnings ?? []).length ? `\n\nОграничения: ${(plan.warnings ?? []).join('; ')}` : ''
-  return `${plan.summary}\n\n${changes}${warnings}`
-}
-
-function exerciseNameByProgramExerciseId(day: WorkoutDayRef, programExerciseId: string | undefined): string {
-  return day.exercises?.find((exercise) => exercise.programExerciseId === programExerciseId)?.name ?? programExerciseId ?? ''
+  return `${anchor}\n\n${plan.summary}${warnings}`
 }
