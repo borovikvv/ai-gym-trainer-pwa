@@ -144,9 +144,14 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
     name: input.exercise.name ?? '',
     muscleGroup: input.exercise.muscleGroup ?? '',
   })
+  // Issue #296: упражнение с собственным весом — по справочнику equipment,
+  // который роут уже подмешал в exercisePayload до вызова этой функции.
+  const bodyweight = !timed && input.exercise.equipment === 'bodyweight'
   const system = timed
     ? `${SYSTEM_PROMPT}\nВНИМАНИЕ: текущее упражнение — НА ВРЕМЯ. nextSet.reps — это СЕКУНДЫ удержания, nextSet.weight всегда 0.`
-    : SYSTEM_PROMPT
+    : bodyweight
+      ? `${SYSTEM_PROMPT}\nВНИМАНИЕ: текущее упражнение — С СОБСТВЕННЫМ ВЕСОМ. nextSet.weight всегда 0, не предлагай дополнительную нагрузку.`
+      : SYSTEM_PROMPT
 
   const proposal = await requestLlmJson<NextSetProposal>({
     tier: 'fast',
@@ -172,6 +177,7 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
     weightStep: input.exercise.weightStep,
     pain: input.pain,
     timed,
+    bodyweight,
     weightDirection: resolveWeightDirection({ name: input.exercise.name, weightDirection: input.exercise.weightDirection }),
   })
 
