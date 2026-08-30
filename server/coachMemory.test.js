@@ -501,3 +501,40 @@ describe('Issue #170: рабочий вес пересобирается пос�
     expect(weight).toBe(55)
   })
 })
+
+// Issue #286: сессия под суффиксным id (-replacement-/-extra-/-alternative-)
+// должна попадать в статистику весов coachMemory, а не ронять профиль в
+// ветку no_data с дефолтом справочника.
+describe('Issue #286: currentWorkingWeight по сессии под суффиксным id', () => {
+  it('видит подходы под составным суффиксным id и берёт реальный рабочий вес', () => {
+    const memory = computeCoachMemory({
+      profile: { userId: 'vyacheslav', workoutsPerWeek: 2 },
+      exerciseLibrary,
+      history: [{
+        id: 'session-alternative-bench',
+        userId: 'vyacheslav',
+        workoutDayId: 'generated-alternative',
+        workoutDayName: 'персональная тренировка',
+        completedAt: '2026-08-07T18:00:00.000Z',
+        totalVolume: 3900,
+        exercises: [{
+          exerciseId: 'bench-press-alternative-zhim-gantel-replacement-1786124420031',
+          exerciseName: 'Жим лёжа',
+          pain: false,
+          nextRecommendedWeight: 65,
+          progressionType: 'hold',
+          progressionReason: 'закрепить вес',
+          sets: [
+            { weight: 65, reps: 20, rpe: 7, completed: true },
+            { weight: 65, reps: 20, rpe: 7, completed: true },
+            { weight: 65, reps: 20, rpe: 7, completed: true },
+          ],
+        }],
+      }],
+      now: new Date('2026-08-30T12:00:00.000Z'),
+    })
+
+    expect(memory.exerciseProfiles['bench-press'].currentWorkingWeight).toBe(65)
+    expect(memory.exerciseProfiles['bench-press'].status).toBe('progress_possible')
+  })
+})

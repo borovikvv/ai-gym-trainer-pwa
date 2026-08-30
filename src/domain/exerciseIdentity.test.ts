@@ -11,4 +11,9 @@ describe('exercise identity', () => {
   it('uses explicit canonical ids before generated id cleanup', () => {
     expect(getCanonicalExerciseId({ id: 'custom-session-id', canonicalExerciseId: 'plank', name: 'Планка' })).toBe('plank')
   })
+
+  it('strips alternative suffixes before extra/replacement timestamps (issue #286)', () => {
+    expect(getCanonicalExerciseId({ id: 'seated-calf-raise-alternative-икры-в-жиме-ногами-replacement-1786124420031', name: 'Подъёмы на икры сидя' })).toBe('seated-calf-raise')
+    expect(getCanonicalExerciseId({ id: 'cable-fly-alternative-svedeniya-v-krossovere', name: 'Сведение в кроссовере' })).toBe('cable-fly')
+  })
 })

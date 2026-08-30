@@ -43,6 +43,7 @@ export const getCanonicalExerciseId = canonicalExerciseId
 
 function normalizeGeneratedExerciseId(id: string): string {
   return String(id ?? '')
+    .replace(/-alternative-.+$/u, '')
     .replace(/-(extra|replacement)-\d+$/u, '')
     .replace(/-(light|very_light|heavy)$/u, '')
 }
