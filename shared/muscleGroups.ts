@@ -93,6 +93,53 @@ export function isTimedExerciseName(text: string | null | undefined): boolean {
   return ['планк', 'plank', 'дед баг', 'дедбаг', 'dead bug', 'deadbug'].some((part) => normalized.includes(part))
 }
 
+// Issue #293: под-мышцы ног. Генератор планировал ноги как одну группу, и
+// односуставное движение на те же под-мышцы (выпады → BSS, оба квадрицепс+ягодицы)
+// занимало слот через день, хотя задняя цепь свежая. Канонизируем свободные
+// строки target_muscles в стабильные под-ключи ног.
+export const LEG_SUB_MUSCLE_KEYS = ['quads', 'hamstrings', 'glutes', 'calves'] as const
+
+export type LegSubMuscleKey = (typeof LEG_SUB_MUSCLE_KEYS)[number]
+
+const LEG_SUB_MUSCLE_ALIASES = [
+  {
+    key: 'quads',
+    match: ['квадриц'],
+  },
+  {
+    key: 'hamstrings',
+    match: ['задняя поверхность бедра', 'бицепс бедра'],
+  },
+  {
+    key: 'glutes',
+    match: ['ягодиц'],
+  },
+  {
+    key: 'calves',
+    match: ['икроножная', 'камбаловидная', 'икр'],
+  },
+] as const
+
+/**
+ * Issue #293: нормализация под-мышц ног. По каждой строке target_muscles
+ * ищет совпадение (includes, как в normalizeMuscleGroup) и возвращает
+ * уникальный список подошедших под-ключей. Строки вроде «поясница»/«кор»
+ * не матчатся — это ожидаемо, не под-мышцы ног.
+ */
+export function normalizeLegSubMuscles(targetMuscles: Array<string | null | undefined> | null | undefined): string[] {
+  const matched = new Set<string>()
+  for (const raw of targetMuscles ?? []) {
+    const normalized = String(raw ?? '').toLowerCase()
+    if (!normalized) continue
+    for (const alias of LEG_SUB_MUSCLE_ALIASES) {
+      if (alias.match.some((part) => normalized.includes(part))) {
+        matched.add(alias.key)
+      }
+    }
+  }
+  return [...matched]
+}
+
 export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey {
   const normalized = String(text ?? '').toLowerCase()
   for (const alias of MUSCLE_ALIASES) {

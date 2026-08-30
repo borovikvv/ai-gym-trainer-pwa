@@ -451,6 +451,79 @@ describe('Issue #232: упражнения вне программы класс�
   })
 })
 
+// Issue #293: состояние по под-мышцам ног. Генератор планировал ноги как одну
+// группу, и движение на те же под-мышцы (выпады → BSS, оба квадрицепс+ягодицы)
+// занимало слот через день. subMuscleGroups агрегирует усталость по под-ключам.
+describe('Issue #293: subMuscleGroups по под-мышцам ног', () => {
+  const legSubLibrary = [
+    { id: 'bulgarian-split-squat', name: 'Болгарский сплит-присед', muscleGroup: 'Ноги', targetMuscles: ['квадрицепс', 'ягодицы'], targetWeight: 40, repMin: 8, repMax: 10 },
+    { id: 'leg-curl', name: 'Сгибание ног', muscleGroup: 'Ноги', targetMuscles: ['задняя поверхность бедра'], targetWeight: 30, repMin: 10, repMax: 12 },
+    { id: 'lunge', name: 'Выпады с гантелями', muscleGroup: 'Ноги', targetMuscles: ['квадрицепс', 'ягодицы'], targetWeight: 20, repMin: 8, repMax: 10 },
+  ]
+
+  it('сессия 3 дня назад с выпадами даёт medium по quads и glutes, hamstrings не тронут', () => {
+    const state = computeCoachState({
+      profile,
+      workoutDays: [],
+      exerciseLibrary: legSubLibrary,
+      history: [
+        {
+          id: 'session-lunges',
+          userId: 'vyacheslav',
+          workoutDayId: 'day-a',
+          workoutDayName: 'Full Body A',
+          completedAt: '2026-08-27T18:00:00.000Z',
+          totalVolume: 600,
+          exercises: [{
+            exerciseId: 'lunge',
+            exerciseName: 'Выпады с гантелями',
+            pain: false,
+            sets: [
+              { weight: 20, reps: 10, rpe: 9, completed: true },
+              { weight: 20, reps: 10, rpe: 8, completed: true },
+            ],
+          }],
+        },
+      ],
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.muscleGroups.legs).toMatchObject({ lastTrainedDaysAgo: 3 })
+    expect(state.subMuscleGroups.quads).toMatchObject({ fatigue: 'medium', lastTrainedDaysAgo: 3 })
+    expect(state.subMuscleGroups.glutes).toMatchObject({ fatigue: 'medium', lastTrainedDaysAgo: 3 })
+    expect(state.subMuscleGroups.hamstrings).toBeUndefined()
+  })
+
+  it('лёгкие подходы 3 дня назад дают low, а не medium — окно тяжёлых подходов', () => {
+    const state = computeCoachState({
+      profile,
+      workoutDays: [],
+      exerciseLibrary: legSubLibrary,
+      history: [
+        {
+          id: 'session-lunges-easy',
+          userId: 'vyacheslav',
+          workoutDayId: 'day-a',
+          workoutDayName: 'Full Body A',
+          completedAt: '2026-08-27T18:00:00.000Z',
+          totalVolume: 400,
+          exercises: [{
+            exerciseId: 'lunge',
+            exerciseName: 'Выпады с гантелями',
+            pain: false,
+            sets: [
+              { weight: 20, reps: 10, rpe: 7, completed: true },
+            ],
+          }],
+        },
+      ],
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.subMuscleGroups.quads).toMatchObject({ fatigue: 'low' })
+  })
+})
+
 // Issue #288: перерыв (>= 14 дней) в истории не должен давать ложный
 // above_plan. Возвращение после перерыва по обычному расписанию — это
 // on_plan, а не перегрузка: отпускное окно исключается из оценки частоты.
