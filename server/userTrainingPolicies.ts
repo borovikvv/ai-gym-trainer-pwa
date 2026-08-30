@@ -138,6 +138,14 @@ export interface ClampNextSetInput {
    */
   timed?: boolean
   /**
+   * Issue #296: упражнение с собственным весом (equipment === 'bodyweight'
+   * в справочнике) — вес всегда 0, симметрично `timed`. Без этого флага
+   * граница веса строилась только от lastSet.weight, а на bodyweight-сетах
+   * lastSet.weight = 0 → ветка `lastWeight > 0` не срабатывала, и вес,
+   * предложенный LLM, проходил кламп без ограничений.
+   */
+  bodyweight?: boolean
+  /**
    * Issue #171: текущее упражнение — осевое/свободновесное многосуставное
    * (см. isAxialFreeWeight). Для подросткового профиля включает нижнюю границу
    * повторов: LLM не может предложить подход на 1–4 повтора.
@@ -174,8 +182,8 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
   if (rawNextSet && !input.pain && actionType !== 'stop_exercise' && actionType !== 'suggest_replacement') {
     let weight = Number(rawNextSet.weight)
     if (!Number.isFinite(weight) || weight < 0) weight = Number.isFinite(lastWeight) ? lastWeight : 0
-    if (input.timed) {
-      // Упражнение на время: веса нет по определению.
+    if (input.timed || input.bodyweight) {
+      // Упражнение на время / с собственным весом: веса нет по определению.
       weight = 0
     } else if (Number.isFinite(lastWeight) && lastWeight > 0) {
       // Down: at most 2 steps below the last real set. Up: policy-limited

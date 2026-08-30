@@ -384,6 +384,70 @@ describe('timed exercises (планка): секунды ≠ килограмм�
   })
 })
 
+describe('Issue #296: bodyweight exercises (турник/брусья) — вес всегда 0', () => {
+  beforeEach(() => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  const BAR_DIPS = {
+    id: 'bar-dips',
+    name: 'Отжимания на брусьях',
+    muscleGroup: 'Грудь',
+    repMin: 7,
+    repMax: 12,
+    weightStep: 2.5,
+    restSeconds: 90,
+    targetWeight: 0,
+    equipment: 'bodyweight',
+  }
+
+  it('LLM предложил 60 кг для брусьев (собственный вес) — кламп обнуляет вес', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      // Воспроизводит баг из issue #296: LLM домыслил нагрузку от чисел жима
+      nextSet: { weight: 60, reps: 12, restSeconds: 90, targetRpe: 7 },
+      strategyAction: { type: 'hold' },
+      reason: 'Продолжаем в том же темпе.',
+    })))
+    const { decision } = await buildNextSetDecision({
+      client: fakeClient,
+      userId: 'vyacheslav',
+      exercise: BAR_DIPS,
+      completedSets: [{ weight: 0, reps: 12, rpe: 7, completed: true }],
+      remainingSets: 1,
+      pain: false,
+      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 12, recommendedRestSeconds: 90 },
+    })
+    expect(decision.source).toBe('llm')
+    expect(decision.recommendedWeight).toBe(0)
+    expect(decision.recommendedReps).toBe(12)
+  })
+
+  it('промпт для bodyweight не показывает шаг веса и явно говорит про собственный вес', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      nextSet: { weight: 0, reps: 12, restSeconds: 90, targetRpe: 7 },
+      strategyAction: { type: 'hold' },
+      reason: 'ok',
+    })))
+    const { prompt } = await buildNextSetDecision({
+      client: fakeClient,
+      userId: 'vyacheslav',
+      exercise: BAR_DIPS,
+      completedSets: [{ weight: 0, reps: 12, rpe: 7, completed: true }],
+      remainingSets: 1,
+      pain: false,
+      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 12, recommendedRestSeconds: 90 },
+    })
+    expect(prompt).toContain('СОБСТВЕННЫМ ВЕСОМ')
+    expect(prompt).not.toContain('шаг веса')
+  })
+})
+
 describe('clampNextSetDecision (direct)', () => {
   it('oleg (no-failure): targetRpe capped at 8, no weight increase after RPE≥8', () => {
     const clamped = clampNextSetDecision(
@@ -434,6 +498,19 @@ describe('clampNextSetDecision (direct)', () => {
       { userId: 'vyacheslav', lastSet: { weight: 60, reps: 8, rpe: 7 }, weightStep: 2.5, pain: false },
     )
     expect(clamped.wasClamped).toBe(false)
+  })
+
+  it('Issue #296: bodyweight — LLM предложил вес 60, кламп обнуляет', () => {
+    const clamped = clampNextSetDecision(
+      {
+        nextSet: { weight: 60, reps: 12, restSeconds: 90, targetRpe: 7 },
+        strategyAction: { type: 'hold' },
+        reason: 'x',
+      },
+      { userId: 'vyacheslav', lastSet: { weight: 0, reps: 12, rpe: 7 }, weightStep: 2.5, pain: false, bodyweight: true },
+    )
+    expect(clamped.nextSet.weight).toBe(0)
+    expect(clamped.wasClamped).toBe(true)
   })
 
   it('pain forces suggest_replacement and clears the next set', () => {

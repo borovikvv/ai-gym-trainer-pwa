@@ -106,6 +106,8 @@ export interface BuildLiveContextPromptInput {
     weightStep?: number
     restSeconds?: number
     targetWeight?: number
+    /** Issue #296: справочник упражнений (equipment === 'bodyweight' → собственный вес). */
+    equipment?: string | null
   }
   completedSets: SetLike[]
   remainingSets: number
@@ -223,11 +225,15 @@ function describeExercise(exercise: BuildLiveContextPromptInput['exercise']): st
   const parts: string[] = [exercise.name ?? exercise.id ?? 'упражнение']
   if (exercise.muscleGroup) parts.push(exercise.muscleGroup)
   const timed = isCurrentExerciseTimed(exercise)
+  const bodyweight = !timed && exercise.equipment === 'bodyweight'
   const repMin = Number(exercise.repMin ?? 0)
   const repMax = Number(exercise.repMax ?? 0)
   if (timed) {
     parts.push('УПРАЖНЕНИЕ НА ВРЕМЯ (без веса)')
     if (repMin > 0 && repMax > 0) parts.push(`план удержания ${repMin}–${repMax} секунд`)
+  } else if (bodyweight) {
+    parts.push('УПРАЖНЕНИЕ С СОБСТВЕННЫМ ВЕСОМ — nextSet.weight всегда 0')
+    if (repMin > 0 && repMax > 0) parts.push(`план ${repMin}–${repMax} повторов`)
   } else {
     if (repMin > 0 && repMax > 0) parts.push(`план ${repMin}–${repMax} повторов`)
     if (Number(exercise.targetWeight) > 0) parts.push(`плановый вес ${exercise.targetWeight} кг`)
