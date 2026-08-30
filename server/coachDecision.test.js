@@ -96,3 +96,27 @@ describe('coach decision — низкая готовность и свежие �
     expect(decisionFor('high').avoidMuscleGroups).toContain('legs')
   })
 })
+
+// Issue #288: вышестоящая причина (above_plan vs низкая готовность) должна
+// попадать в текст причины. Раньше при триггере above_plan с готовностью
+// ready писало «Готовность снижена» — вводило в заблуждение.
+describe('coach decision — причина above_plan не путается с низкой готовностью (#288)', () => {
+  const decisionFor = (state) => buildCoachDecision({
+    profile: { userId: 'vyacheslav', level: 'intermediate', workoutsPerWeek: 3, preferences: { intensityTolerance: 'normal' } },
+    scheduledDate: '2026-08-30',
+    coachState: state,
+    coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+  })
+
+  it('above_plan при готовности ready — причина про нагрузку, а не про готовность', () => {
+    const decision = decisionFor({ readinessScore: 68, recoveryStatus: 'ready', weeklyLoadStatus: 'above_plan' })
+    expect(decision.reasons.join(' ')).toContain('Недельная нагрузка выше плана')
+    expect(decision.reasons.join(' ')).not.toContain('Готовность снижена')
+    expect(decision.loadPolicy).toBe('moderate_no_failure')
+  })
+
+  it('низкая готовность с on_plan — причина про готовность (не регрессия)', () => {
+    const decision = decisionFor({ readinessScore: 42, recoveryStatus: 'low', weeklyLoadStatus: 'on_plan' })
+    expect(decision.reasons.join(' ')).toContain('Готовность снижена')
+  })
+})

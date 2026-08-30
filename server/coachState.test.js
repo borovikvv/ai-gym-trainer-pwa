@@ -450,3 +450,44 @@ describe('Issue #232: упражнения вне программы класс�
     expect(state.muscleGroups.arms).toMatchObject({ fatigue: 'high', recentMaxEffortSets: 2 })
   })
 })
+
+// Issue #288: перерыв (>= 14 дней) в истории не должен давать ложный
+// above_plan. Возвращение после перерыва по обычному расписанию — это
+// on_plan, а не перегрузка: отпускное окно исключается из оценки частоты.
+describe('Issue #288: возвращение после перерыва не даёт ложный above_plan', () => {
+  it('две сессии после перерыва 15 дней — on_plan (planned 2, а не 1)', () => {
+    const history = [
+      { id: 'session-before-break', completedAt: '2026-08-10T18:00:00.000Z', exercises: [] },
+      { id: 'session-return-1', completedAt: '2026-08-25T18:00:00.000Z', exercises: [] },
+      { id: 'session-return-2', completedAt: '2026-08-27T18:00:00.000Z', exercises: [] },
+    ]
+    const state = computeCoachState({
+      profile,
+      workoutDays,
+      history,
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.plannedWorkoutsPerWeek).toBe(2)
+    expect(state.weeklyLoadStatus).toBe('on_plan')
+    expect(state.weeklyLoadStatus).not.toBe('above_plan')
+    expect(state.daysSinceLastWorkout).toBe(3)
+  })
+
+  it('реальный перегруз без перерыва остаётся above_plan (регрессия)', () => {
+    // 2 сессии/нед (08-03, 06, 10, 13, 17, 20) + 3 сессии в последнюю неделю
+    // (08-24, 27, 29) — реальный перегруз. Разрывов >= 14 дней нет.
+    const dates = ['2026-08-03', '2026-08-06', '2026-08-10', '2026-08-13', '2026-08-17', '2026-08-20', '2026-08-24', '2026-08-27', '2026-08-29']
+    const history = dates.map((d) => ({ id: `session-${d}`, completedAt: `${d}T18:00:00.000Z`, exercises: [] }))
+    const state = computeCoachState({
+      profile,
+      workoutDays,
+      history,
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.plannedWorkoutsPerWeek).toBe(2)
+    expect(state.actualWorkoutsLast7Days).toBe(3)
+    expect(state.weeklyLoadStatus).toBe('above_plan')
+  })
+})

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeMesocycleState, isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
+import { computeMesocycleState, isDeloadWeek, applyDeloadReduction, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -996,5 +996,42 @@ describe('issue #77: effective workouts per week from actual history', () => {
     expect(withProfile2.plannedWorkoutsThisCycle).toBe(withProfile3.plannedWorkoutsThisCycle)
     expect(withProfile3.plannedWorkoutsThisCycle).toBe(withProfile5.plannedWorkoutsThisCycle)
     expect(withProfile2.completionRatio).toBeCloseTo(1.0, 1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #288: перерыв (>= 14 дней между сессиями) не должен занижать
+// эффективную частоту — отпуск/травма исключаются из окна расчёта.
+// ---------------------------------------------------------------------------
+
+describe('issue #288: перерыв не должен занижать эффективную частоту', () => {
+  // day(n) = базовая дата + n дней
+  const day = (n) => {
+    const d = new Date('2026-08-01T18:00:00.000Z')
+    d.setDate(d.getDate() + n)
+    return d
+  }
+
+  it('возвращение после перерыва 14+ дней не даёт частоту 1 (ветка 14 дней)', () => {
+    // Перерыв 15 дней между сессией day(0) и day(15), затем возвращение
+    // day(17). До фикса round(2/2) = 1; после фикса — round(2/1) = 2.
+    const history = [session(day(0).toISOString()), session(day(15).toISOString()), session(day(17).toISOString())]
+    const effective = computeEffectiveWorkoutsPerWeek(history, day(17))
+    expect(effective).toBe(2)
+  })
+
+  it('перерыв внутри 28-дневного окна не размывает частоту вниз (ветка 28 дней)', () => {
+    // Три сессии до перерыва day(0), day(3), day(6), перерыв 15 дней,
+    // возвращение day(21) и day(23). До фикса round(5/4) = 1;
+    // после фикса — round(5 / (13/7)) = 3.
+    const history = [
+      session(day(0).toISOString()),
+      session(day(3).toISOString()),
+      session(day(6).toISOString()),
+      session(day(21).toISOString()),
+      session(day(23).toISOString()),
+    ]
+    const effective = computeEffectiveWorkoutsPerWeek(history, day(23))
+    expect(effective).toBe(3)
   })
 })
