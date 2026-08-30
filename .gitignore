@@ -33,3 +33,4 @@ references/
 test-results/
 .env
 .env.local
+coach-self-audit-*.txt
