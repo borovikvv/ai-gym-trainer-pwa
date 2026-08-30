@@ -178,6 +178,10 @@ export interface CoachState {
   volumeSnapshots?: Record<string, MuscleVolumeSnapshot>
   // Issue #65: muscle group + exercise state (computed by coachState.ts)
   muscleGroups?: Record<string, MuscleGroupInfo | undefined>
+  // Issue #293: состояние по под-мышцам ног (quads/hamstrings/glutes/calves).
+  // Та же форма, что у muscleGroups, — параллельная структура, а не замена
+  // (контракт issue #65 остаётся на 7 канонических группах).
+  subMuscleGroups?: Record<string, MuscleGroupInfo | undefined>
   exercises?: Record<string, ExerciseStateInfo | undefined>
   // Additional computed fields produced by coachState.ts
   lastWorkoutId?: string | null

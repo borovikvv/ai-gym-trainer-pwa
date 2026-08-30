@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   normalizeExerciseMuscleGroup,
+  normalizeLegSubMuscles,
   normalizeMuscleGroup,
   labelFor,
   labelForLower,
   MUSCLE_LABELS,
   CANONICAL_MUSCLE_KEYS,
+  LEG_SUB_MUSCLE_KEYS,
   isAssistedExerciseName,
 } from '../../shared/muscleGroups.js'
 
@@ -168,6 +170,51 @@ describe('normalizeExerciseMuscleGroup (#221)', () => {
   it('нераспознанная группа не мешает подбору по названию', () => {
     expect(normalizeExerciseMuscleGroup('Всё тело', 'Тяга верхнего блока')).toBe('back')
     expect(normalizeExerciseMuscleGroup('', '')).toBe('other')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #293: нормализация под-мышц ног (quads/hamstrings/glutes/calves).
+// Свободные строки target_muscles сводятся к стабильным под-ключам.
+// ---------------------------------------------------------------------------
+
+describe('normalizeLegSubMuscles (#293)', () => {
+  it('«квадрицепс» и «ягодицы» дают quads и glutes', () => {
+    expect(normalizeLegSubMuscles(['квадрицепс', 'ягодицы']).sort()).toEqual(['glutes', 'quads'])
+  })
+
+  it('«задняя поверхность бедра» даёт hamstrings', () => {
+    expect(normalizeLegSubMuscles(['задняя поверхность бедра'])).toEqual(['hamstrings'])
+  })
+
+  it('«бицепс бедра» тоже даёт hamstrings', () => {
+    expect(normalizeLegSubMuscles(['бицепс бедра'])).toEqual(['hamstrings'])
+  })
+
+  it('«икроножная» даёт calves', () => {
+    expect(normalizeLegSubMuscles(['икроножная'])).toEqual(['calves'])
+    expect(normalizeLegSubMuscles(['камбаловидная'])).toEqual(['calves'])
+    expect(normalizeLegSubMuscles(['икры'])).toEqual(['calves'])
+  })
+
+  it('пустой список или undefined дают пустой список', () => {
+    expect(normalizeLegSubMuscles([])).toEqual([])
+    expect(normalizeLegSubMuscles(null)).toEqual([])
+    expect(normalizeLegSubMuscles(undefined)).toEqual([])
+  })
+
+  it('строки не из ног (поясница, кор) не матчатся', () => {
+    expect(normalizeLegSubMuscles(['поясница', 'кор'])).toEqual([])
+  })
+
+  it('не различает регистр', () => {
+    expect(normalizeLegSubMuscles(['КВАДРИЦЕПС', 'Ягодицы']).sort()).toEqual(['glutes', 'quads'])
+  })
+})
+
+describe('LEG_SUB_MUSCLE_KEYS (#293)', () => {
+  it('содержит ровно 4 под-ключа ног', () => {
+    expect(LEG_SUB_MUSCLE_KEYS).toEqual(['quads', 'hamstrings', 'glutes', 'calves'])
   })
 })
 

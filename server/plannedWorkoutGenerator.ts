@@ -19,7 +19,7 @@ import { buildCoachDecision } from './coachDecision.js'
 import type { WeeklyVolumeStatus } from './weeklyVolumeTargets.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { CANONICAL_MUSCLE_KEYS, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, normalizeExerciseMuscleGroup, normalizeLegSubMuscles, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, harderWeight, easierWeight, strongerOf, easierOf } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
 import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, teenLimitsApply } from '../shared/teenLimits.js'
@@ -141,6 +141,10 @@ interface LibraryExerciseInput {
   exercise_type?: string | null
   movementPattern?: string | null
   movement_pattern?: string | null
+  // Issue #293: целевые под-мышцы из справочника — здесь уже принят дуализм
+  // camelCase/snake_case для всех полей, следуем тому же стилю.
+  targetMuscles?: string[] | null
+  target_muscles?: string[] | null
 }
 
 interface NormalizedLibraryExercise {
@@ -160,6 +164,9 @@ interface NormalizedLibraryExercise {
   equipment: string | null
   exerciseType: string | null
   movementPattern: string | null
+  /** Issue #293: канонические под-ключи ног (quads/hamstrings/glutes/calves),
+   * пустой список для не-ног. */
+  subMuscleKeys: string[]
 }
 
 interface PreviousGeneratedWorkout {
@@ -1141,6 +1148,15 @@ function exerciseScore(
   if (fatigue === 'low') score += 30
   if (fatigue === 'medium') score += lowReadiness ? 0 : 12
   if (fatigue === 'high') score -= 100
+  // Issue #293: мягкий штраф по под-мышцам ног — сигнал внутри уже разрешённой
+  // группы, а не блокировка (числа сознательно меньше хард-фильтра группы,
+  // минус 100 при fatigue high). У кандидата с двумя утомлёнными под-мышцами
+  // штраф суммируется, у свежего — ноль (фолбэк low, если поля нет).
+  for (const subKey of exercise.subMuscleKeys) {
+    const subFatigue = coachState?.subMuscleGroups?.[subKey as keyof typeof coachState.subMuscleGroups]?.fatigue ?? 'low'
+    if (subFatigue === 'high') score -= 60
+    else if (subFatigue === 'medium') score -= 20
+  }
   if (latestExerciseHistory(history, exercise.id)) score += 8
   if (coachState?.exercises?.[exercise.id]?.status === 'progress_possible') score += 8
   if (coachState?.exercises?.[exercise.id]?.status === 'pain') score -= 80
@@ -1385,23 +1401,30 @@ function extractRecentMuscleKeys(
 }
 
 function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): NormalizedLibraryExercise[] {
-  return (exerciseLibrary ?? []).map((exercise) => ({
-    id: canonicalExerciseId(exercise) ?? '',
-    name: String(exercise.name ?? ''),
-    muscleGroup: exercise.muscleGroup ?? exercise.muscle_group ?? '',
-    muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.name ?? ''),
-    setsCount: Number(exercise.setsCount ?? exercise.sets_count ?? 2),
-    repMin: Number(exercise.repMin ?? exercise.rep_min ?? 8),
-    repMax: Number(exercise.repMax ?? exercise.rep_max ?? 12),
-    targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
-    weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
-    restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
-    weightDirection: (exercise.weightDirection ?? exercise.weight_direction ?? null) as string | null,
-    // Issue #171: метаданные движения — вход для isAxialFreeWeight.
-    equipment: (exercise.equipment ?? null) as string | null,
-    exerciseType: (exercise.exerciseType ?? exercise.exercise_type ?? null) as string | null,
-    movementPattern: (exercise.movementPattern ?? exercise.movement_pattern ?? null) as string | null,
-  })).filter((exercise) => exercise.id && exercise.name)
+  return (exerciseLibrary ?? []).map((exercise) => {
+    const muscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.name ?? '')
+    return {
+      id: canonicalExerciseId(exercise) ?? '',
+      name: String(exercise.name ?? ''),
+      muscleGroup: exercise.muscleGroup ?? exercise.muscle_group ?? '',
+      muscleKey,
+      setsCount: Number(exercise.setsCount ?? exercise.sets_count ?? 2),
+      repMin: Number(exercise.repMin ?? exercise.rep_min ?? 8),
+      repMax: Number(exercise.repMax ?? exercise.rep_max ?? 12),
+      targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
+      weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
+      restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
+      weightDirection: (exercise.weightDirection ?? exercise.weight_direction ?? null) as string | null,
+      // Issue #171: метаданные движения — вход для isAxialFreeWeight.
+      equipment: (exercise.equipment ?? null) as string | null,
+      exerciseType: (exercise.exerciseType ?? exercise.exercise_type ?? null) as string | null,
+      movementPattern: (exercise.movementPattern ?? exercise.movement_pattern ?? null) as string | null,
+      // Issue #293: под-мышцы только для ног.
+      subMuscleKeys: muscleKey === 'legs'
+        ? normalizeLegSubMuscles(exercise.targetMuscles ?? exercise.target_muscles ?? null)
+        : [],
+    }
+  }).filter((exercise) => exercise.id && exercise.name)
 }
 
 function normalizePreferences(profile: ProfileForGenerator = {}): NormalizedPreferences {

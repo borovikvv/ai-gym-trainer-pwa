@@ -9,7 +9,7 @@ import type {
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { isAssistedExerciseName, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
+import { isAssistedExerciseName, normalizeExerciseMuscleGroup, normalizeLegSubMuscles } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
@@ -59,6 +59,9 @@ interface LibraryExerciseInput {
   repMin?: number
   repMax?: number
   weightDirection?: string | null
+  // Issue #293: целевые под-мышцы (camelCase — как остальные поля; сюда
+  // приходит уже нормализованный объект от server/utils.ts normalizeLibraryExercise).
+  targetMuscles?: string[] | null
 }
 
 interface E1rmHistoryInput {
@@ -103,6 +106,9 @@ interface CatalogItem {
   repMin?: number
   repMax?: number
   weightDirection?: string | null
+  // Issue #293: канонические под-ключи ног (quads/hamstrings/glutes/calves),
+  // пустой список для не-ног. Справочник — источник истины.
+  subMuscleKeys: string[]
 }
 
 interface MuscleGroupState extends MuscleGroupInfo {
@@ -177,7 +183,7 @@ export function computeCoachState({
   const weeklyLoadStatus = weeklyLoadRatio >= 1.35 ? 'above_plan' : weeklyLoadRatio >= 0.75 ? 'on_plan' : 'below_plan'
 
   const exerciseCatalog = buildExerciseCatalog(workoutDays, exerciseLibrary ?? [])
-  const muscleGroups = buildMuscleGroupState({ history: normalizedHistory, exerciseCatalog, now: nowDate })
+  const { groups: muscleGroups, subGroups: subMuscleGroups } = buildMuscleGroupState({ history: normalizedHistory, exerciseCatalog, now: nowDate })
   const exercises = buildExerciseState({ history: normalizedHistory, exerciseCatalog })
   const highFatigueGroups = Object.values(muscleGroups).filter((group) => group?.fatigue === 'high').length
   const recentMaxEffortSets = Object.values(muscleGroups).reduce((sum, group) => sum + (group?.recentMaxEffortSets ?? 0), 0)
@@ -245,6 +251,7 @@ export function computeCoachState({
     recoveryStatus,
     readinessScore,
     muscleGroups,
+    subMuscleGroups,
     exercises,
     personalization: {
       trainingDataConfidence,
@@ -271,30 +278,41 @@ function buildExerciseCatalog(workoutDays: WorkoutDayInput[], exerciseLibrary: L
   for (const exercise of exerciseLibrary ?? []) {
     const id = canonicalExerciseId(exercise)
     if (!id) continue
+    const muscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? '')
     catalog.set(id, {
       ...exercise,
       id,
       canonicalExerciseId: id,
-      muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? ''),
+      muscleKey,
+      // Issue #293: под-мышцы только для ног; справочник — источник истины.
+      subMuscleKeys: muscleKey === 'legs' ? normalizeLegSubMuscles(exercise.targetMuscles ?? null) : [],
     } as CatalogItem)
   }
   for (const day of workoutDays ?? []) {
     for (const exercise of day.exercises ?? []) {
       const id = canonicalExerciseId(exercise)
       if (!id) continue
+      // Issue #232/#293: WorkoutDayInput не содержит targetMuscles, поэтому
+      // запись дня программы наследует subMuscleKeys от уже построенной записи
+      // справочника (если есть) — иначе день затирает разбивку под-мышц.
+      const libraryItem = catalog.get(id)
       catalog.set(id, {
         ...exercise,
         id,
         canonicalExerciseId: id,
         muscleKey: normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? ''),
+        subMuscleKeys: libraryItem?.subMuscleKeys ?? [],
       } as CatalogItem)
     }
   }
   return catalog
 }
 
-function buildMuscleGroupState({ history, exerciseCatalog, now }: BuildMuscleGroupStateInput): Record<string, MuscleGroupState> {
+function buildMuscleGroupState({ history, exerciseCatalog, now }: BuildMuscleGroupStateInput): { groups: Record<string, MuscleGroupState>; subGroups: Record<string, MuscleGroupState> } {
   const groups = new Map<string, MuscleGroupState>()
+  // Issue #293: под-мышечное состояние (только ноги) — параллельная структура
+  // поверх групп, с теми же числами для каждого под-ключа упражнения.
+  const subGroups = new Map<string, MuscleGroupState>()
   for (const session of history ?? []) {
     const completedAt = new Date(session.completedAt)
     const ageDays = daysBetween(completedAt, now)
@@ -329,6 +347,22 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }: BuildMuscleGro
       current.recentVolume = roundNumber(current.recentVolume + volume)
       current.lastTrainedDaysAgo = current.lastTrainedDaysAgo === null ? wholeDaysBetween(completedAt, now) : Math.min(current.lastTrainedDaysAgo, wholeDaysBetween(completedAt, now))
       groups.set(muscleKey, current)
+      // Issue #293: те же уже посчитанные числа для каждого под-ключа
+      // упражнения (не пересчитываем отдельно, чтобы не разъехаться с группой).
+      for (const subKey of catalogItem?.subMuscleKeys ?? []) {
+        const subCurrent: MuscleGroupState = subGroups.get(subKey) ?? {
+          fatigue: 'low',
+          recentHardSets: 0,
+          recentMaxEffortSets: 0,
+          recentVolume: 0,
+          lastTrainedDaysAgo: null,
+        }
+        subCurrent.recentHardSets += hardSets
+        subCurrent.recentMaxEffortSets += maxEffortSets
+        subCurrent.recentVolume = roundNumber(subCurrent.recentVolume + volume)
+        subCurrent.lastTrainedDaysAgo = subCurrent.lastTrainedDaysAgo === null ? wholeDaysBetween(completedAt, now) : Math.min(subCurrent.lastTrainedDaysAgo, wholeDaysBetween(completedAt, now))
+        subGroups.set(subKey, subCurrent)
+      }
     }
   }
 
@@ -339,7 +373,14 @@ function buildMuscleGroupState({ history, exerciseCatalog, now }: BuildMuscleGro
       fatigue: classifyMuscleFatigue(group),
     }
   }
-  return result
+  const subResult: Record<string, MuscleGroupState> = {}
+  for (const [key, group] of subGroups.entries()) {
+    subResult[key] = {
+      ...group,
+      fatigue: classifyMuscleFatigue(group),
+    }
+  }
+  return { groups: result, subGroups: subResult }
 }
 
 function buildExerciseState({ history, exerciseCatalog }: BuildExerciseStateInput): Record<string, ExerciseStateInfo> {

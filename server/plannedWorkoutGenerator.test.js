@@ -2536,3 +2536,76 @@ describe('planned workout generator — разрыв в день и распис
     expect((await planFor(3)).workoutDayName).toBe('Разгрузка')
   })
 })
+
+// Issue #293: генератор планировал ноги как одну группу, и односуставное
+// движение на те же под-мышцы (выпады → BSS, оба квадрицепс+ягодицы) занимало
+// слот через день, хотя задняя цепь свежая. Мягкий штраф в exerciseScore по
+// под-мышцам ног (subMuscleGroups из coachState) отдаёт слот свежему кандидату.
+describe('Issue #293: под-мышечный штраф в слоте legs', () => {
+  const issue293Library = [
+    { id: 'bulgarian-split-squat', name: 'Болгарский сплит-присед', muscleGroup: 'Ноги', targetMuscles: ['квадрицепс', 'ягодицы'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 120 },
+    { id: 'leg-curl', name: 'Сгибание ног', muscleGroup: 'Ноги', targetMuscles: ['задняя поверхность бедра'], setsCount: 3, repMin: 10, repMax: 12, targetWeight: 30, weightStep: 2.5, restSeconds: 90 },
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150 },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+    { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90 },
+    { id: 'hammer-curl', name: 'Молотковые сгибания', muscleGroup: 'Руки', setsCount: 2, repMin: 10, repMax: 12, targetWeight: 10, weightStep: 1, restSeconds: 75 },
+  ]
+  const subFatigueState = {
+    recoveryStatus: 'ready',
+    readinessScore: 82,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    // Issue #293: под-мышцы ног — quads утомлены (high), glutes medium,
+    // hamstrings отсутствует → фолбэк low.
+    subMuscleGroups: {
+      quads: { fatigue: 'high' },
+      glutes: { fatigue: 'medium' },
+    },
+    exercises: {},
+  }
+  const neutralDecision = {
+    avoidMuscleGroups: [],
+    priorityMuscleGroups: [],
+    exercisePolicies: {},
+    loadPolicy: 'controlled_progression',
+  }
+  const buildPlan = (coachState) => buildGeneratedPlannedWorkout({
+    profile,
+    scheduledDate: '2026-06-09',
+    coachState,
+    coachDecision: neutralDecision,
+    exerciseLibrary: issue293Library,
+    history: [],
+  })
+
+  it('слот legs достаётся свежему кандидату, а не утомлённым под-мышцам', async () => {
+    const plan = await buildPlan(subFatigueState)
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    // BSS (quads+glutes) получает штраф за утомлённые под-мышцы, leg-curl
+    // (hamstrings, свежий) выигрывает слот.
+    expect(exerciseIds).toContain('leg-curl')
+    expect(exerciseIds).not.toContain('bulgarian-split-squat')
+  })
+
+  it('без истории под-мышц поведение не меняется (регрессия)', async () => {
+    const stateWithoutSubGroups = { ...subFatigueState }
+    delete stateWithoutSubGroups.subMuscleGroups
+    const plan = await buildPlan(stateWithoutSubGroups)
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    // Штраф не применяется (фолбэк low), кандидат из начала библиотеки
+    // сохраняет слот — как до issue.
+    expect(exerciseIds).toContain('bulgarian-split-squat')
+    expect(exerciseIds).not.toContain('leg-curl')
+  })
+})
