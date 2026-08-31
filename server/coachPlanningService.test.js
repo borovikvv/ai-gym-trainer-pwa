@@ -80,6 +80,35 @@ describe('coach planning service', () => {
     )
   })
 
+  it('Issue #299: recommendation body has no itemized composition, names the next program day, and excludes the just-finished workout', async () => {
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+    await planAndApplyNextWorkout(client, {
+      id: 'session-299',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      completedAt: '2026-06-08T12:00:00.000Z',
+      exercises: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          nextRecommendedWeight: 50,
+          sets: [{ weight: 50, reps: 6, rpe: 8, completed: true }],
+        },
+      ],
+    })
+
+    const recommendationCall = client.query.mock.calls.find(([sql]) => String(sql).includes('insert into public.recommendations'))
+    const body = recommendationCall[1][2]
+
+    // No itemized "NxM, W кг" composition — the cascade regenerator would
+    // overwrite it, so it must not be presented as a promise to the user.
+    expect(body).not.toMatch(/\d+×\d+\s*[–-]\s*\d+\s*,\s*\d+(?:\.\d+)?\s*кг/)
+    // The anchor names the next program day: completed='day-a' → next='day-b'.
+    expect(body).toContain('День B')
+    // The anchor explicitly excludes the just-finished workout from the addressed target.
+    expect(body).toContain('не к той, что вы только что выполнили')
+  })
+
   it('Issue #137: coachState считается на дату следующей тренировки, а не на момент завершения текущей', async () => {
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
     await planAndApplyNextWorkout(client, {
