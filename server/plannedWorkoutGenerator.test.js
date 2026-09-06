@@ -1393,6 +1393,37 @@ describe('issue #221: слот груди и recent-штраф', () => {
     expect(exerciseIds).toContain('barbell-squat')
     expect(exerciseIds).not.toContain('seated-calf-raise')
   })
+
+  it('issue #301: французский жим не встаёт перед жимом лёжа', async () => {
+    // Сценарий 06.09: грудь была в прошлой плановой сессии, трицепс свежий —
+    // arms-слот идёт раньше chest-слота. Пока exerciseOrderPriority определяла
+    // группу по имени, «Французский жим» попадал в полосу груди (12) и на
+    // равенстве уезжал вперёд жима лёжа по порядку слотов.
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: { ...profile, targetWorkoutMinutes: 70 },
+      scheduledDate: '2026-08-07',
+      coachState: readyCoachState,
+      exerciseLibrary: libraryWithSkullCrusher,
+      history: [],
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-08-04',
+        exercises: [
+          { exerciseId: 'bench-press', exerciseName: 'Жим лёжа', muscleGroup: 'Грудь' },
+          { exerciseId: 'incline-db-press', exerciseName: 'Жим гантелей на наклонной', muscleGroup: 'Грудь' },
+        ],
+      }],
+    })
+
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+    expect(exerciseIds).toContain('bench-press')
+    expect(exerciseIds).toContain('skull-crusher')
+    // Трицепс-изоляция — после жима лёжа…
+    expect(exerciseIds.indexOf('bench-press')).toBeLessThan(exerciseIds.indexOf('skull-crusher'))
+    // …существующие групповые инварианты не задеты…
+    expect(exerciseIds.indexOf('barbell-squat')).toBeLessThan(exerciseIds.indexOf('bench-press'))
+    // …планка остаётся финишером.
+    expect(plan.exercises.at(-1).exerciseId).toBe('plank')
+  })
 })
 
 // ---------------------------------------------------------------------------
