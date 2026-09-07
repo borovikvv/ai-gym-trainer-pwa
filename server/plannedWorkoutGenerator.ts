@@ -689,7 +689,9 @@ function findCoreFinisherReplacementIndex(exercises: GeneratedExercise[]): numbe
 
 function exerciseOrderPriority(exercise: GeneratedExercise | null | undefined): number {
   const text = normalizeText(`${exercise?.exerciseName ?? ''} ${exercise?.muscleGroup ?? ''}`)
-  const muscleKey = normalizeMuscleGroup(text)
+  // Issue #301: группа — из справочника, а не из имени: алиас «жим» в
+  // «Французском жиме» (трицепс) тянул его в полосу груди, вровень с жимом лёжа.
+  const muscleKey = normalizeExerciseMuscleGroup(exercise?.muscleGroup ?? '', exercise?.exerciseName ?? '')
   if (muscleKey === 'core') return 70
   if (isLowerBackAccessory(text)) return 55
   if (isPrimaryCompound(text, muscleKey)) return 10 + compoundMuscleOrder(muscleKey)
