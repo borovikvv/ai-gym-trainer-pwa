@@ -367,6 +367,9 @@ export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkou
   const longTermMemory = await nonFatal(client, 'longTermMemory', () => loadLongTermMemoryBlock(client, userId), '')
   const generated = await buildGeneratedPlannedWorkout({ profile, scheduledDate, coachState, coachMemory, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], previousGeneratedWorkouts: previousGeneratedWorkouts as unknown as NonNullable<Parameters<typeof buildGeneratedPlannedWorkout>[0]>["previousGeneratedWorkouts"], longTermMemory: [longTermMemory, formatWeeklyVolumeForPrompt(weeklyVolume)].filter(Boolean).join('\n'), refineWithLlm, weeklyVolume })
   await client.query('delete from public.planned_workout_exercises where planned_workout_id = $1', [plannedWorkoutId])
+  // Issue #302: черновик хранит состав по workout_day_id, который переживает пересборку —
+  // без чистки он протухает и перекрывает свежий план на вкладке «План».
+  await client.query('delete from public.workout_drafts where workout_day_id = $1 and user_id = $2', [plannedWorkoutId, userId])
   await updateGeneratedPlannedWorkout(client, { id: plannedWorkoutId, generated })
 }
 

@@ -78,11 +78,14 @@ describe('cascadeRegenerateFutureWorkouts — сужение до ближайш
   // видно, какие именно тренировки пересобирались.
   const fakeClient = (rows) => {
     const regeneratedIds = []
+    const draftDeletes = []
     const client = {
       regeneratedIds,
+      draftDeletes,
       query: vi.fn().mockImplementation(async (text, params) => {
         if (text.includes('select id, scheduled_date, source from public.planned_workouts')) return { rows, rowCount: rows.length }
         if (text.includes('delete from public.planned_workout_exercises')) regeneratedIds.push(params[0])
+        if (text.includes('delete from public.workout_drafts')) draftDeletes.push(params)
         return { rows: [], rowCount: 0 }
       }),
     }
@@ -116,5 +119,43 @@ describe('cascadeRegenerateFutureWorkouts — сужение до ближайш
 
     expect(regenerated).toBe(1)
     expect(client.regeneratedIds).toEqual(['planned-1'])
+  })
+})
+
+// Issue #302: черновик (workout_drafts) хранит состав сессии по workout_day_id,
+// который переживает пересборку плана — без чистки черновик протухает и
+// перекрывает свежий план на вкладке «План».
+describe('regeneratePlannedWorkout — чистит протухший черновик (#302)', () => {
+  const futureRows = [
+    { id: 'planned-1', scheduled_date: new Date('2026-08-03T00:00:00Z'), source: 'coach' },
+    { id: 'planned-2', scheduled_date: new Date('2026-08-05T00:00:00Z'), source: 'coach' },
+    { id: 'planned-3', scheduled_date: new Date('2026-08-07T00:00:00Z'), source: 'coach' },
+  ]
+
+  const fakeClient = (rows) => {
+    const draftDeletes = []
+    const client = {
+      draftDeletes,
+      query: vi.fn().mockImplementation(async (text, params) => {
+        if (text.includes('select id, scheduled_date, source from public.planned_workouts')) return { rows, rowCount: rows.length }
+        if (text.includes('delete from public.workout_drafts')) draftDeletes.push(params)
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+    return client
+  }
+
+  it('удаляет черновик пересобранной тренировки', async () => {
+    const client = fakeClient(futureRows)
+    await cascadeRegenerateFutureWorkouts(client, { userId: 'vyacheslav', limit: 1 })
+
+    expect(client.draftDeletes).toContainEqual(['planned-1', 'vyacheslav'])
+  })
+
+  it('не трогает черновики тренировок, которые не пересобирались', async () => {
+    const client = fakeClient(futureRows)
+    await cascadeRegenerateFutureWorkouts(client, { userId: 'vyacheslav', limit: 1 })
+
+    expect(client.draftDeletes).toEqual([['planned-1', 'vyacheslav']])
   })
 })
