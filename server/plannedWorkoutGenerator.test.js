@@ -2641,6 +2641,129 @@ describe('Issue #293: под-мышечный штраф в слоте legs', ()
   })
 })
 
+// Issue #305: генератор планировал руки и спину как одну группу, поэтому бицепс
+// не получал бонус застоялости, а трицепс — недавнего штрафа: слот рук занимало
+// одно и то же движение подряд. То же для спины: горизонтальная тяга после
+// горизонтальной не штрафовалась. Мягкий штраф в exerciseScore по под-ключам
+// (subMuscleGroups из coachState) отдаёт слот свежему кандидату.
+describe('Issue #305: под-мышечный штраф в слотах arms и back', () => {
+  const neutralDecision = {
+    avoidMuscleGroups: [],
+    priorityMuscleGroups: [],
+    exercisePolicies: {},
+    loadPolicy: 'controlled_progression',
+  }
+  const baseFatigueState = {
+    recoveryStatus: 'ready',
+    readinessScore: 82,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+
+  const issue305ArmsLibrary = [
+    { id: 'triceps-pushdown', name: 'Разгибание на блоке', muscleGroup: 'Руки', targetMuscles: ['трицепс'], setsCount: 3, repMin: 10, repMax: 12, targetWeight: 20, weightStep: 2.5, restSeconds: 90 },
+    { id: 'barbell-curl', name: 'Подъём штанги на бицепс', muscleGroup: 'Руки', targetMuscles: ['бицепс'], setsCount: 2, repMin: 8, repMax: 10, targetWeight: 20, weightStep: 2.5, restSeconds: 75 },
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150 },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+    { id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 60, weightStep: 2.5, restSeconds: 150 },
+    { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90 },
+    { id: 'plank', name: 'Планка', muscleGroup: 'Кор', setsCount: 2, repMin: 40, repMax: 60, targetWeight: 0, weightStep: 0, restSeconds: 60 },
+  ]
+  const armsSubFatigueState = {
+    ...baseFatigueState,
+    // Issue #305: трицепс утомлён (high), biceps отсутствует → фолбэк low.
+    subMuscleGroups: { triceps: { fatigue: 'high' } },
+  }
+  const buildArmsPlan = (coachState) => buildGeneratedPlannedWorkout({
+    profile,
+    scheduledDate: '2026-06-09',
+    coachState,
+    coachDecision: neutralDecision,
+    exerciseLibrary: issue305ArmsLibrary,
+    history: [],
+  })
+
+  it('слот arms достаётся свежему бицепсу, а не утомлённому трицепсу', async () => {
+    const plan = await buildArmsPlan(armsSubFatigueState)
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    // triceps-pushdown получает штраф за утомлённую под-группу, barbell-curl
+    // (biceps, свежий) выигрывает слот.
+    expect(exerciseIds).toContain('barbell-curl')
+    expect(exerciseIds).not.toContain('triceps-pushdown')
+  })
+
+  it('без истории под-мышц рук поведение не меняется (регрессия)', async () => {
+    const stateWithoutSubGroups = { ...armsSubFatigueState }
+    delete stateWithoutSubGroups.subMuscleGroups
+    const plan = await buildArmsPlan(stateWithoutSubGroups)
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    // Штраф не применяется (фолбэк low), кандидат из начала библиотеки
+    // сохраняет слот — как до issue.
+    expect(exerciseIds).toContain('triceps-pushdown')
+    expect(exerciseIds).not.toContain('barbell-curl')
+  })
+
+  const issue305BackLibrary = [
+    { id: 'horizontal-row', name: 'Горизонтальная тяга', muscleGroup: 'Спина', targetMuscles: ['ромбовидные'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150 },
+    { id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 60, weightStep: 2.5, restSeconds: 150 },
+    { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90 },
+    { id: 'triceps-pushdown', name: 'Разгибание на блоке', muscleGroup: 'Руки', targetMuscles: ['трицепс'], setsCount: 3, repMin: 10, repMax: 12, targetWeight: 20, weightStep: 2.5, restSeconds: 90 },
+    { id: 'plank', name: 'Планка', muscleGroup: 'Кор', setsCount: 2, repMin: 40, repMax: 60, targetWeight: 0, weightStep: 0, restSeconds: 60 },
+  ]
+  const backSubFatigueState = {
+    ...baseFatigueState,
+    // Issue #305: горизонтальная тяга утомлена (high), vertical_pull отсутствует
+    // → фолбэк low.
+    subMuscleGroups: { horizontal_pull: { fatigue: 'high' } },
+  }
+  const buildBackPlan = (coachState) => buildGeneratedPlannedWorkout({
+    profile,
+    scheduledDate: '2026-06-09',
+    coachState,
+    coachDecision: neutralDecision,
+    exerciseLibrary: issue305BackLibrary,
+    history: [],
+  })
+
+  it('слот back достаётся вертикальной тяге, а не утомлённой горизонтальной', async () => {
+    const plan = await buildBackPlan(backSubFatigueState)
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    // horizontal-row получает штраф за утомлённый паттерн, lat-pulldown
+    // (vertical_pull, свежий) выигрывает слот.
+    expect(exerciseIds).toContain('lat-pulldown')
+    expect(exerciseIds).not.toContain('horizontal-row')
+  })
+
+  it('без истории под-мышц спины поведение не меняется (регрессия)', async () => {
+    const stateWithoutSubGroups = { ...backSubFatigueState }
+    delete stateWithoutSubGroups.subMuscleGroups
+    const plan = await buildBackPlan(stateWithoutSubGroups)
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    // Штраф не применяется (фолбэк low), кандидат из начала библиотеки
+    // сохраняет слот — как до issue.
+    expect(exerciseIds).toContain('horizontal-row')
+    expect(exerciseIds).not.toContain('lat-pulldown')
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Issue #294: bar-dips (equipment bodyweight, weightStep 2.5) не получают
 // фиктивные +2.5 кг из старых progression_events. Исторический вес для

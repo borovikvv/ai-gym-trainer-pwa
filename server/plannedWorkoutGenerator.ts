@@ -19,7 +19,7 @@ import { buildCoachDecision } from './coachDecision.js'
 import type { WeeklyVolumeStatus } from './weeklyVolumeTargets.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { CANONICAL_MUSCLE_KEYS, normalizeExerciseMuscleGroup, normalizeLegSubMuscles, normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { CANONICAL_MUSCLE_KEYS, normalizeArmSubMuscles, normalizeBackPullPattern, normalizeExerciseMuscleGroup, normalizeLegSubMuscles, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, harderWeight, easierWeight, strongerOf, easierOf } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
 import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, teenLimitsApply } from '../shared/teenLimits.js'
@@ -1424,10 +1424,15 @@ function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): Norm
       equipment: (exercise.equipment ?? null) as string | null,
       exerciseType: (exercise.exerciseType ?? exercise.exercise_type ?? null) as string | null,
       movementPattern: (exercise.movementPattern ?? exercise.movement_pattern ?? null) as string | null,
-      // Issue #293: под-мышцы только для ног.
+      // Issue #293/#305: под-мышцы ног, рук и паттерн тяг спины; справочник
+      // (для рук) и название упражнения (для спины) — источник истины.
       subMuscleKeys: muscleKey === 'legs'
         ? normalizeLegSubMuscles(exercise.targetMuscles ?? exercise.target_muscles ?? null)
-        : [],
+        : muscleKey === 'arms'
+          ? normalizeArmSubMuscles(exercise.targetMuscles ?? exercise.target_muscles ?? null)
+          : muscleKey === 'back'
+            ? normalizeBackPullPattern(exercise.name ?? '')
+            : [],
     }
   }).filter((exercise) => exercise.id && exercise.name)
 }

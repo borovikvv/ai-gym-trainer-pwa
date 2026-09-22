@@ -140,6 +140,85 @@ export function normalizeLegSubMuscles(targetMuscles: Array<string | null | unde
   return [...matched]
 }
 
+// Issue #305: под-мышцы рук. «arms» — одна группа, и бицепс/трицепс были
+// неразличимы: свежесть, recent-штраф и avoidMuscleGroups считались по группе,
+// поэтому слот рук мог три дня подряд занимать трицепс, пока бицепс «застаивался»
+// без бонуса (см. #305). Источник как у ног — строки target_muscles справочника.
+export const ARM_SUB_MUSCLE_KEYS = ['biceps', 'triceps'] as const
+
+export type ArmSubMuscleKey = (typeof ARM_SUB_MUSCLE_KEYS)[number]
+
+const ARM_SUB_MUSCLE_ALIASES = [
+  {
+    key: 'biceps',
+    match: ['бицеп', 'bicep'],
+  },
+  {
+    key: 'triceps',
+    match: ['трицеп', 'tricep'],
+  },
+] as const
+
+/**
+ * Issue #305: нормализация под-мышц рук. Аналогична normalizeLegSubMuscles (#293):
+ * по каждой строке target_muscles ищет совпадение и возвращает под-ключи
+ * biceps/triceps. Вызывается только для упражнений группы arms.
+ */
+export function normalizeArmSubMuscles(targetMuscles: Array<string | null | undefined> | null | undefined): string[] {
+  const matched = new Set<string>()
+  for (const raw of targetMuscles ?? []) {
+    const normalized = String(raw ?? '').toLowerCase()
+    if (!normalized) continue
+    for (const alias of ARM_SUB_MUSCLE_ALIASES) {
+      if (alias.match.some((part) => normalized.includes(part))) {
+        matched.add(alias.key)
+      }
+    }
+  }
+  return [...matched]
+}
+
+// Issue #305: паттерн тяги спины. Штраф повтора работает по exercise_id, но
+// внутри группы «спина» честно меняющееся упражнение может оставаться той же
+// тягой по направлению (горизонтальной): 09-15 блочная тяга → 09-20
+// горизонтальная тяга → 09-22 тяга в тренажёре + тяга с упором грудью.
+// Паттерн анатомией target_muscles не выражается — источником служит название.
+// Становая/румынская тяга — это хендж, не тяга по направлению, поэтому
+// под-ключа не получают и остаются как раньше.
+export const BACK_PULL_PATTERN_KEYS = ['vertical_pull', 'horizontal_pull'] as const
+
+export type BackPullPatternKey = (typeof BACK_PULL_PATTERN_KEYS)[number]
+
+const BACK_PULL_PATTERN_ALIASES = [
+  // Вертикальная тяга: блок сверху / подтягивания (в том числе в гравитроне).
+  {
+    key: 'vertical_pull',
+    match: ['верхн', 'подтягив', 'вертикальн', 'к груди', 'pulldown', 'pull-up', 'pullup'],
+  },
+  // Горизонтальная тяга: к поясу/животу, в наклоне, сидя, в тренажёре.
+  {
+    key: 'horizontal_pull',
+    match: ['горизонт', 'в наклоне', 'с упором', 'к поясу', 'к животу', 'сидя', 'тренажёр', 'гребн', 'row'],
+  },
+] as const
+
+/**
+ * Issue #305: классификация тяг спины по паттерну движения (вертикальная/
+ * горизонтальная) по названию упражнения. Вертикальная проверяется первой,
+ * чтобы «Тяга верхнего блока сидя» осталась vertical. Не-тяги (становая,
+ * румынская) возвращают пустой список.
+ */
+export function normalizeBackPullPattern(exerciseName: string | null | undefined): string[] {
+  const normalized = String(exerciseName ?? '').toLowerCase()
+  if (!normalized) return []
+  for (const alias of BACK_PULL_PATTERN_ALIASES) {
+    if (alias.match.some((part) => normalized.includes(part))) {
+      return [alias.key]
+    }
+  }
+  return []
+}
+
 export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey {
   const normalized = String(text ?? '').toLowerCase()
   for (const alias of MUSCLE_ALIASES) {

@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   normalizeExerciseMuscleGroup,
   normalizeLegSubMuscles,
+  normalizeArmSubMuscles,
+  normalizeBackPullPattern,
   normalizeMuscleGroup,
   labelFor,
   labelForLower,
   MUSCLE_LABELS,
   CANONICAL_MUSCLE_KEYS,
   LEG_SUB_MUSCLE_KEYS,
+  ARM_SUB_MUSCLE_KEYS,
   isAssistedExerciseName,
 } from '../../shared/muscleGroups.js'
 
@@ -215,6 +218,78 @@ describe('normalizeLegSubMuscles (#293)', () => {
 describe('LEG_SUB_MUSCLE_KEYS (#293)', () => {
   it('содержит ровно 4 под-ключа ног', () => {
     expect(LEG_SUB_MUSCLE_KEYS).toEqual(['quads', 'hamstrings', 'glutes', 'calves'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #305: нормализация под-мышц рук (biceps/triceps) и паттерна тяг спины
+// (vertical_pull/horizontal_pull). «arms» и «back» были одной группой: бицепс/
+// трицепс, горизонтальная/вертикальная тяга не различались, и слот занимало
+// одно и то же движение подряд, хотя формально упражнения менялись.
+// ---------------------------------------------------------------------------
+
+describe('normalizeArmSubMuscles (#305)', () => {
+  it('«бицепс» даёт biceps', () => {
+    expect(normalizeArmSubMuscles(['бицепс'])).toEqual(['biceps'])
+    expect(normalizeArmSubMuscles(['Бицепс'])).toEqual(['biceps'])
+  })
+
+  it('«трицепс» даёт triceps', () => {
+    expect(normalizeArmSubMuscles(['трицепс'])).toEqual(['triceps'])
+    expect(normalizeArmSubMuscles(['ТРИЦЕПС'])).toEqual(['triceps'])
+  })
+
+  it('«бицепс» и «трицепс» вместе дают оба ключа', () => {
+    expect(normalizeArmSubMuscles(['бицепс', 'трицепс']).sort()).toEqual(['biceps', 'triceps'])
+  })
+
+  it('пустой список или undefined дают пустой список', () => {
+    expect(normalizeArmSubMuscles([])).toEqual([])
+    expect(normalizeArmSubMuscles(null)).toEqual([])
+    expect(normalizeArmSubMuscles(undefined)).toEqual([])
+  })
+
+  it('строки не из рук (поясница, кор) не матчатся', () => {
+    expect(normalizeArmSubMuscles(['поясница', 'кор'])).toEqual([])
+  })
+})
+
+describe('ARM_SUB_MUSCLE_KEYS (#305)', () => {
+  it('содержит ровно 2 под-ключа рук', () => {
+    expect(ARM_SUB_MUSCLE_KEYS).toEqual(['biceps', 'triceps'])
+  })
+})
+
+describe('normalizeBackPullPattern (#305)', () => {
+  it('вертикальные тяги дают vertical_pull', () => {
+    expect(normalizeBackPullPattern('Тяга верхнего блока')).toEqual(['vertical_pull'])
+    expect(normalizeBackPullPattern('Подтягивания в гравитроне')).toEqual(['vertical_pull'])
+    expect(normalizeBackPullPattern('Подтягивания')).toEqual(['vertical_pull'])
+  })
+
+  it('горизонтальные тяги дают horizontal_pull', () => {
+    expect(normalizeBackPullPattern('Горизонтальная тяга')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Тяга в тренажёре')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Тяга с упором грудью')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Тяга штанги в наклоне')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Тяга гантели в наклоне')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Тяга на блоке сидя')).toEqual(['horizontal_pull'])
+  })
+
+  it('становая и румынская тяга (хендж) не дают паттерна', () => {
+    expect(normalizeBackPullPattern('Становая тяга')).toEqual([])
+    expect(normalizeBackPullPattern('Румынская тяга')).toEqual([])
+  })
+
+  it('не-тяги и пустые значения дают пустой список', () => {
+    expect(normalizeBackPullPattern('Жим лёжа')).toEqual([])
+    expect(normalizeBackPullPattern('')).toEqual([])
+    expect(normalizeBackPullPattern(null)).toEqual([])
+    expect(normalizeBackPullPattern(undefined)).toEqual([])
+  })
+
+  it('не различает регистр', () => {
+    expect(normalizeBackPullPattern('ТЯГА ВЕРХНЕГО БЛОКА')).toEqual(['vertical_pull'])
   })
 })
 

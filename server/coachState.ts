@@ -9,7 +9,7 @@ import type {
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { isAssistedExerciseName, normalizeExerciseMuscleGroup, normalizeLegSubMuscles } from '../shared/muscleGroups.js'
+import { isAssistedExerciseName, normalizeArmSubMuscles, normalizeBackPullPattern, normalizeExerciseMuscleGroup, normalizeLegSubMuscles } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
@@ -106,8 +106,9 @@ interface CatalogItem {
   repMin?: number
   repMax?: number
   weightDirection?: string | null
-  // Issue #293: канонические под-ключи ног (quads/hamstrings/glutes/calves),
-  // пустой список для не-ног. Справочник — источник истины.
+  // Issue #293/#305: канонические под-ключи (ноги — quads/hamstrings/glutes/
+  // calves, руки — biceps/triceps, спина — паттерн vertical_pull/horizontal_pull),
+  // пустой список для остальных. Справочник и название — источник истины.
   subMuscleKeys: string[]
 }
 
@@ -284,8 +285,15 @@ function buildExerciseCatalog(workoutDays: WorkoutDayInput[], exerciseLibrary: L
       id,
       canonicalExerciseId: id,
       muscleKey,
-      // Issue #293: под-мышцы только для ног; справочник — источник истины.
-      subMuscleKeys: muscleKey === 'legs' ? normalizeLegSubMuscles(exercise.targetMuscles ?? null) : [],
+      // Issue #293/#305: под-мышцы ног, рук и паттерн тяг спины; справочник
+      // (для рук) и название упражнения (для спины) — источник истины.
+      subMuscleKeys: muscleKey === 'legs'
+        ? normalizeLegSubMuscles(exercise.targetMuscles ?? null)
+        : muscleKey === 'arms'
+          ? normalizeArmSubMuscles(exercise.targetMuscles ?? null)
+          : muscleKey === 'back'
+            ? normalizeBackPullPattern(exercise.name ?? '')
+            : [],
     } as CatalogItem)
   }
   for (const day of workoutDays ?? []) {
