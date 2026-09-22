@@ -2641,6 +2641,92 @@ describe('Issue #293: под-мышечный штраф в слоте legs', ()
   })
 })
 
+// Issue #305: расширение #293 на руки (biceps/triceps) и паттерн тяги спины
+// (horizontal_pull/vertical_pull) — тот же мягкий штраф в exerciseScore, теперь
+// применяется и к arms/back, а не только к legs.
+describe('Issue #305: под-мышечный штраф в слотах arms и back', () => {
+  const issue305Library = [
+    { id: 'triceps-pushdown', name: 'Разгибание на блоке', muscleGroup: 'Руки', targetMuscles: ['трицепс'], setsCount: 2, repMin: 10, repMax: 12, targetWeight: 20, weightStep: 2.5, restSeconds: 75 },
+    { id: 'hammer-curl', name: 'Молотковые сгибания', muscleGroup: 'Руки', targetMuscles: ['бицепс'], setsCount: 2, repMin: 10, repMax: 12, targetWeight: 10, weightStep: 1, restSeconds: 75 },
+    { id: 'machine-row', name: 'Тяга в тренажёре', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150 },
+    { id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 60, weightStep: 2.5, restSeconds: 150 },
+    { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90 },
+  ]
+  const baseMuscleGroups = {
+    chest: { fatigue: 'low' },
+    back: { fatigue: 'low' },
+    legs: { fatigue: 'low' },
+    shoulders: { fatigue: 'low' },
+    arms: { fatigue: 'low' },
+    core: { fatigue: 'low' },
+  }
+  const neutralDecision = {
+    avoidMuscleGroups: [],
+    priorityMuscleGroups: [],
+    exercisePolicies: {},
+    loadPolicy: 'controlled_progression',
+  }
+  const buildPlan = (coachState) => buildGeneratedPlannedWorkout({
+    profile,
+    scheduledDate: '2026-06-09',
+    coachState,
+    coachDecision: neutralDecision,
+    exerciseLibrary: issue305Library,
+    history: [],
+  })
+
+  it('трицепс утомлён (high) — слот arms достаётся бицепсу, а не трицепсу', async () => {
+    const plan = await buildPlan({
+      recoveryStatus: 'ready',
+      readinessScore: 82,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: baseMuscleGroups,
+      subMuscleGroups: { triceps: { fatigue: 'high' } },
+      exercises: {},
+    })
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    expect(exerciseIds).toContain('hammer-curl')
+    expect(exerciseIds).not.toContain('triceps-pushdown')
+  })
+
+  it('горизонтальная тяга утомлена (high) — слот back достаётся вертикальной тяге', async () => {
+    const plan = await buildPlan({
+      recoveryStatus: 'ready',
+      readinessScore: 82,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: baseMuscleGroups,
+      subMuscleGroups: { horizontal_pull: { fatigue: 'high' } },
+      exercises: {},
+    })
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    expect(exerciseIds).toContain('lat-pulldown')
+    expect(exerciseIds).not.toContain('machine-row')
+  })
+
+  it('без subMuscleGroups поведение не меняется (регрессия) — побеждает первый кандидат в порядке библиотеки', async () => {
+    const plan = await buildPlan({
+      recoveryStatus: 'ready',
+      readinessScore: 82,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: baseMuscleGroups,
+      exercises: {},
+    })
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+
+    expect(plan.status).toBe('generated')
+    expect(exerciseIds).toContain('triceps-pushdown')
+    expect(exerciseIds).not.toContain('hammer-curl')
+    expect(exerciseIds).toContain('machine-row')
+    expect(exerciseIds).not.toContain('lat-pulldown')
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Issue #294: bar-dips (equipment bodyweight, weightStep 2.5) не получают
 // фиктивные +2.5 кг из старых progression_events. Исторический вес для

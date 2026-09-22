@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   normalizeExerciseMuscleGroup,
   normalizeLegSubMuscles,
+  normalizeArmSubMuscles,
+  normalizeBackPullPattern,
   normalizeMuscleGroup,
   labelFor,
   labelForLower,
   MUSCLE_LABELS,
   CANONICAL_MUSCLE_KEYS,
   LEG_SUB_MUSCLE_KEYS,
+  ARM_SUB_MUSCLE_KEYS,
+  BACK_PULL_PATTERN_KEYS,
   isAssistedExerciseName,
 } from '../../shared/muscleGroups.js'
 
@@ -215,6 +219,91 @@ describe('normalizeLegSubMuscles (#293)', () => {
 describe('LEG_SUB_MUSCLE_KEYS (#293)', () => {
   it('содержит ровно 4 под-ключа ног', () => {
     expect(LEG_SUB_MUSCLE_KEYS).toEqual(['quads', 'hamstrings', 'glutes', 'calves'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #305: под-мышцы рук (biceps/triceps) — расширение #293 на руки.
+// ---------------------------------------------------------------------------
+
+describe('normalizeArmSubMuscles (#305)', () => {
+  it('«бицепс» даёт biceps', () => {
+    expect(normalizeArmSubMuscles(['бицепс'])).toEqual(['biceps'])
+  })
+
+  it('«трицепс» даёт triceps', () => {
+    expect(normalizeArmSubMuscles(['трицепс'])).toEqual(['triceps'])
+  })
+
+  it('«бицепс», «предплечье» — предплечье не матчится, только biceps', () => {
+    expect(normalizeArmSubMuscles(['бицепс', 'предплечье'])).toEqual(['biceps'])
+  })
+
+  it('пустой список или undefined дают пустой список', () => {
+    expect(normalizeArmSubMuscles([])).toEqual([])
+    expect(normalizeArmSubMuscles(null)).toEqual([])
+    expect(normalizeArmSubMuscles(undefined)).toEqual([])
+  })
+
+  it('не различает регистр', () => {
+    expect(normalizeArmSubMuscles(['ТРИЦЕПС'])).toEqual(['triceps'])
+  })
+})
+
+describe('ARM_SUB_MUSCLE_KEYS (#305)', () => {
+  it('содержит ровно 2 под-ключа рук', () => {
+    expect(ARM_SUB_MUSCLE_KEYS).toEqual(['biceps', 'triceps'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #305: паттерн тяги спины (horizontal_pull/vertical_pull) — по названию,
+// не по target_muscles (там анатомия, а не направление движения).
+// ---------------------------------------------------------------------------
+
+describe('normalizeBackPullPattern (#305)', () => {
+  it('«Тяга верхнего блока» — vertical_pull', () => {
+    expect(normalizeBackPullPattern('Тяга верхнего блока')).toEqual(['vertical_pull'])
+  })
+
+  it('«Подтягивания в гравитроне» — vertical_pull', () => {
+    expect(normalizeBackPullPattern('Подтягивания в гравитроне')).toEqual(['vertical_pull'])
+  })
+
+  it('«Горизонтальная тяга» и «Горизонтальная тяга блока» — horizontal_pull', () => {
+    expect(normalizeBackPullPattern('Горизонтальная тяга')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Горизонтальная тяга блока')).toEqual(['horizontal_pull'])
+  })
+
+  it('«Тяга штанги в наклоне» и «Тяга гантели одной рукой в наклоне» — horizontal_pull', () => {
+    expect(normalizeBackPullPattern('Тяга штанги в наклоне')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Тяга гантели одной рукой в наклоне')).toEqual(['horizontal_pull'])
+  })
+
+  it('«Тяга в тренажёре» и «Тяга с упором грудью» — horizontal_pull (наблюдение issue #305)', () => {
+    expect(normalizeBackPullPattern('Тяга в тренажёре')).toEqual(['horizontal_pull'])
+    expect(normalizeBackPullPattern('Тяга с упором грудью')).toEqual(['horizontal_pull'])
+  })
+
+  it('«Тяга на блоке сидя» — horizontal_pull', () => {
+    expect(normalizeBackPullPattern('Тяга на блоке сидя')).toEqual(['horizontal_pull'])
+  })
+
+  it('«Становая тяга» и «Румынская тяга» — хендж, паттерн не определён', () => {
+    expect(normalizeBackPullPattern('Становая тяга')).toEqual([])
+    expect(normalizeBackPullPattern('Румынская тяга')).toEqual([])
+  })
+
+  it('пустое/null/undefined дают пустой список', () => {
+    expect(normalizeBackPullPattern('')).toEqual([])
+    expect(normalizeBackPullPattern(null)).toEqual([])
+    expect(normalizeBackPullPattern(undefined)).toEqual([])
+  })
+})
+
+describe('BACK_PULL_PATTERN_KEYS (#305)', () => {
+  it('содержит ровно 2 паттерна тяги', () => {
+    expect(BACK_PULL_PATTERN_KEYS).toEqual(['horizontal_pull', 'vertical_pull'])
   })
 })
 
