@@ -1,7 +1,7 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 // Removed `// @ts-nocheck` pragma — the file now compiles under tsc.
 import type { CoachState, MesocycleState, MuscleGroupProfileExtended, ExerciseProfile } from '../shared/types.js'
-import { labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
+import { LEG_SUB_MUSCLE_KEYS, labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { isDeloadWeek } from './mesocycle.js'
 
 const DEFAULT_PRIORITY = ['back', 'chest', 'arms', 'shoulders', 'core', 'legs']
@@ -89,6 +89,22 @@ export function buildCoachDecision({
     }
   }
 
+  // Issue #313: fix #308 стал смотреть усталость перед авойдом ног, но читал
+  // ГРУППОВОЙ показатель (coachState.muscleGroups.legs.fatigue) — а он «medium»
+  // целиком от застоявшихся икр, даже когда квадрицепс и ягодицы свежие
+  // (fatigue low, 9 дней простоя). Групповой авойд снимает всю группу, хотя
+  // под-мышечная гранулярность для ног уже есть (#293/#305): если хотя бы одна
+  // под-мышца свежая, слот всё ещё можно закрыть квадрицепсом/ягодицами —
+  // конкретно застоявшуюся икру и так придавит мягкий штраф в exerciseScore.
+  const legsFatigue = coachState?.muscleGroups?.legs?.fatigue ?? 'low'
+  // Отсутствие subMuscleGroups целиком (старый/синтетический coachState без
+  // #293) — не сигнал свежести, группа тогда решает сама, как раньше. Когда
+  // объект есть, отсутствующий в нём конкретный под-ключ уже по конвенции
+  // #293/#305 означает «не тренировали недавно» = low (см. exerciseScore).
+  const hasFreshLegSubMuscle = Boolean(coachState?.subMuscleGroups)
+    && LEG_SUB_MUSCLE_KEYS.some((key) => (coachState?.subMuscleGroups?.[key]?.fatigue ?? 'low') === 'low')
+  const legsGenuinelyFatigued = legsFatigue !== 'low' && !hasFreshLegSubMuscle
+
   // Issue #308: 'returning' в профиле — статичный речевой флаг («возвращаюсь
   // после перерыва»), а не факт текущего перерыва: он может годами оставаться
   // true после первого возврата. Ниже (#223) lowReadiness уже не выключает ноги
@@ -96,12 +112,11 @@ export function buildCoachDecision({
   // блокировалась по одному факту «ноги были в соседней сессии», без проверки,
   // восстановились ли они фактически (застоявшиеся 9 дней ноги с fatigue=low
   // исключались из плана наравне с реально уставшими).
-  const legsFatigueForReturn = coachState?.muscleGroups?.legs?.fatigue ?? 'low'
   for (const workout of previousGeneratedWorkouts ?? []) {
     const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
     if (!Number.isFinite(daysSinceWorkout) || daysSinceWorkout <= 0 || daysSinceWorkout > 2) continue
     const previousMuscleKeys = new Set((workout?.exercises ?? []).map((exercise) => normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')))
-    if (returningAfterBreak && previousMuscleKeys.has('legs') && legsFatigueForReturn !== 'low') {
+    if (returningAfterBreak && previousMuscleKeys.has('legs') && legsGenuinelyFatigued) {
       avoidMuscleGroups.add('legs')
       reasons.push('Ноги не повторяем через один день отдыха: профиль — возвращение после перерыва.')
     }
@@ -112,11 +127,11 @@ export function buildCoachDecision({
   // они не работали неделю: свежая группа теряла день, а нагрузку получали
   // ровно те группы, что были в прошлой сессии. Ноги системно дороги всего
   // остального, поэтому недовосстановленные всё так же не ставим — но
-  // «недовосстановленные» теперь решает их собственная усталость, а не общий
-  // флаг. Свежие ноги идут в день с урезанной интенсивностью (loadPolicy ниже).
+  // «недовосстановленные» теперь решает их собственная усталость (#313: с
+  // учётом под-мышц), а не общий флаг. Свежие ноги идут в день с урезанной
+  // интенсивностью (loadPolicy ниже).
   if (lowReadiness) {
-    const legsFatigue = coachState?.muscleGroups?.legs?.fatigue ?? 'low'
-    if (legsFatigue !== 'low') {
+    if (legsGenuinelyFatigued) {
       avoidMuscleGroups.add('legs')
       reasons.push('Готовность снижена, ноги ещё не восстановились — сегодня их не грузим.')
     }

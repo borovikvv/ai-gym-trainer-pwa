@@ -113,6 +113,77 @@ describe('Issue #308: avoid ног учитывает фактическую у�
   })
 })
 
+// Issue #313: fix #308 стал смотреть усталость перед авойдом ног, но читал
+// ГРУППОВОЙ показатель — «medium» целиком от застоявшихся икр (2 дня), даже
+// когда квадрицепс/ягодицы свежие (9 дней, low). Хотя бы одна свежая под-мышца
+// снимает хард-avoid со всей группы — конкретно застоявшуюся икру придавит
+// мягкий штраф в exerciseScore при выборе упражнения, а не блокировка группы.
+describe('Issue #313: avoid ног смотрит под-мышцы, а не только групповой агрегат', () => {
+  const subMuscleGroupsCalvesStale = { quads: { fatigue: 'low' }, glutes: { fatigue: 'low' }, calves: { fatigue: 'medium' } }
+
+  it('«returning»-ветка: икры medium не блокируют ноги, если quads/glutes свежие', () => {
+    const decision = buildCoachDecision({
+      profile: returningProfile,
+      scheduledDate: '2026-09-22',
+      coachState: { ...coachState, muscleGroups: { legs: { fatigue: 'medium' } }, subMuscleGroups: subMuscleGroupsCalvesStale },
+      coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-09-20',
+        exercises: [
+          { exerciseId: 'calf-raise', exerciseName: 'Икры сидя', muscleGroup: 'Ноги' },
+        ],
+      }],
+    })
+
+    expect(decision.avoidMuscleGroups).not.toContain('legs')
+  })
+
+  it('«lowReadiness»-ветка (#223): тот же демо-кейс тоже не блокирует ноги', () => {
+    const decision = buildCoachDecision({
+      profile: { userId: 'vyacheslav', level: 'intermediate', workoutsPerWeek: 3, preferences: { intensityTolerance: 'normal' } },
+      scheduledDate: '2026-09-22',
+      coachState: { readinessScore: 42, recoveryStatus: 'low', weeklyLoadStatus: 'on_plan', muscleGroups: { legs: { fatigue: 'medium' } }, subMuscleGroups: subMuscleGroupsCalvesStale },
+      coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+    })
+
+    expect(decision.avoidMuscleGroups).not.toContain('legs')
+  })
+
+  it('регрессия: если ни одна под-мышца не свежая, группа по-прежнему блокируется', () => {
+    const decision = buildCoachDecision({
+      profile: returningProfile,
+      scheduledDate: '2026-09-22',
+      coachState: { ...coachState, muscleGroups: { legs: { fatigue: 'medium' } }, subMuscleGroups: { quads: { fatigue: 'medium' }, hamstrings: { fatigue: 'medium' }, glutes: { fatigue: 'high' }, calves: { fatigue: 'medium' } } },
+      coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-09-20',
+        exercises: [
+          { exerciseId: 'calf-raise', exerciseName: 'Икры сидя', muscleGroup: 'Ноги' },
+        ],
+      }],
+    })
+
+    expect(decision.avoidMuscleGroups).toContain('legs')
+  })
+
+  it('регрессия: subMuscleGroups отсутствует целиком — группа решает по агрегату, как раньше', () => {
+    const decision = buildCoachDecision({
+      profile: returningProfile,
+      scheduledDate: '2026-09-22',
+      coachState: { ...coachState, muscleGroups: { legs: { fatigue: 'medium' } } },
+      coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-09-20',
+        exercises: [
+          { exerciseId: 'calf-raise', exerciseName: 'Икры сидя', muscleGroup: 'Ноги' },
+        ],
+      }],
+    })
+
+    expect(decision.avoidMuscleGroups).toContain('legs')
+  })
+})
+
 // Issue #223: lowReadiness — системный флаг (сон, ЦНС, недельный объём), а
 // восстановление мышц локально. Раньше низкая готовность выключала ноги
 // целиком, даже если они не работали неделю: свежая группа теряла день, а

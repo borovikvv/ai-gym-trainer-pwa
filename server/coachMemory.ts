@@ -8,7 +8,7 @@ import type {
   WorkoutHistoryEntry,
 } from '../shared/types.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { MUSCLE_LABELS, isAssistedExerciseName, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
+import { LEG_SUB_MUSCLE_KEYS, MUSCLE_LABELS, isAssistedExerciseName, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { completedSetsOf, daysBetween, clampNumber, roundNumber } from './lib/numeric.js'
 import { RECENTLY_TRAINED_DAYS } from './coachState.js'
@@ -295,7 +295,7 @@ function buildMuscleGroupProfiles({ library, history, now, profile, coachState }
   for (const profileEntry of Object.values(profiles)) {
     const stateGroup = coachState?.muscleGroups?.[profileEntry.key]
     profileEntry.fatigue = stateGroup?.fatigue ?? classifyFatigue(profileEntry)
-    profileEntry.status = classifyMuscleStatus(profileEntry, profile)
+    profileEntry.status = classifyMuscleStatus(profileEntry, profile, coachState)
     profileEntry.label = MUSCLE_LABELS[profileEntry.key as keyof typeof MUSCLE_LABELS] ?? profileEntry.key
   }
   return profiles
@@ -363,12 +363,17 @@ function emptyMuscleProfile(key: string): MuscleGroupProfileExtended {
   }
 }
 
-function classifyMuscleStatus(group: MuscleGroupProfileExtended, profile: ProfileForCoachMemory): MuscleGroupStatus {
+function classifyMuscleStatus(group: MuscleGroupProfileExtended, profile: ProfileForCoachMemory, coachState: CoachState | null = null): MuscleGroupStatus {
   if (group.pain) return 'avoid'
   // Issue #308: тот же речевой флаг 'returning', что и в coachDecision.ts —
   // без проверки актуальной усталости он блокировал ноги навсегда, даже
   // застоявшиеся (fatigue уже посчитан на group.fatigue строкой выше по коду).
-  if (profileIsReturningAfterBreak(profile) && group.key === 'legs' && group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 2 && group.fatigue !== 'low') return 'avoid'
+  // Issue #313: group.fatigue — ГРУППОВОЙ показатель, который «medium» целиком
+  // от застоявшихся икр, даже когда квадрицепс/ягодицы свежие. Если хотя бы
+  // одна под-мышца ног свежая (низкая усталость), группа не блокируется целиком.
+  const hasFreshLegSubMuscle = group.key === 'legs' && Boolean(coachState?.subMuscleGroups)
+    && LEG_SUB_MUSCLE_KEYS.some((key) => (coachState?.subMuscleGroups?.[key]?.fatigue ?? 'low') === 'low')
+  if (profileIsReturningAfterBreak(profile) && group.key === 'legs' && group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 2 && group.fatigue !== 'low' && !hasFreshLegSubMuscle) return 'avoid'
   if (group.fatigue === 'high') return 'fatigued'
   // Отдельная проверка lastTrainedDaysAgo здесь не нужна: 'medium' по свежести
   // уже выставляет classifyMuscleFatigue / classifyFatigue (RECENTLY_TRAINED_DAYS).

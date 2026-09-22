@@ -584,3 +584,53 @@ describe('Issue #308: muscleGroupProfiles.legs.status учитывает фак�
     expect(memory.muscleGroupProfiles.legs.status).toBe('avoid')
   })
 })
+
+// Issue #313: group.fatigue — групповой агрегат, «medium» целиком от
+// застоявшихся икр даже когда квадрицепс/ягодицы свежие. Хотя бы одна свежая
+// под-мышца снимает hard-avoid со всей группы.
+describe('Issue #313: classifyMuscleStatus смотрит под-мышцы ног, а не только групповой агрегат', () => {
+  const returningProfile = { userId: 'vyacheslav', level: 'возвращаюсь после перерыва', workoutsPerWeek: 2 }
+  const legsLibrary = [{ id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', targetWeight: 50, repMin: 6, repMax: 8 }]
+  const legsSessionTwoDaysAgo = [{
+    id: 'session-legs',
+    userId: 'vyacheslav',
+    completedAt: '2026-09-20T18:00:00.000Z',
+    totalVolume: 300,
+    exercises: [{
+      exerciseId: 'barbell-squat',
+      exerciseName: 'Присед со штангой',
+      pain: false,
+      sets: [{ weight: 50, reps: 8, rpe: 7, completed: true }],
+    }],
+  }]
+
+  it('quads/glutes low, calves medium — статус НЕ avoid', () => {
+    const memory = computeCoachMemory({
+      profile: returningProfile,
+      exerciseLibrary: legsLibrary,
+      history: legsSessionTwoDaysAgo,
+      coachState: {
+        muscleGroups: { legs: { fatigue: 'medium' } },
+        subMuscleGroups: { quads: { fatigue: 'low' }, glutes: { fatigue: 'low' }, calves: { fatigue: 'medium' } },
+      },
+      now: new Date('2026-09-22T12:00:00.000Z'),
+    })
+
+    expect(memory.muscleGroupProfiles.legs.status).not.toBe('avoid')
+  })
+
+  it('регрессия: ни одна под-мышца не свежая — статус остаётся avoid', () => {
+    const memory = computeCoachMemory({
+      profile: returningProfile,
+      exerciseLibrary: legsLibrary,
+      history: legsSessionTwoDaysAgo,
+      coachState: {
+        muscleGroups: { legs: { fatigue: 'medium' } },
+        subMuscleGroups: { quads: { fatigue: 'medium' }, hamstrings: { fatigue: 'medium' }, glutes: { fatigue: 'high' }, calves: { fatigue: 'medium' } },
+      },
+      now: new Date('2026-09-22T12:00:00.000Z'),
+    })
+
+    expect(memory.muscleGroupProfiles.legs.status).toBe('avoid')
+  })
+})
