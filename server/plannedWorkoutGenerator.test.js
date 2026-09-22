@@ -2727,6 +2727,110 @@ describe('Issue #305: под-мышечный штраф в слотах arms и
   })
 })
 
+// Issue #309: дубль слота группы (второе упражнение той же группы в один день)
+// не знал, какой под-ключ уже занят более ранним слотом в этом же дне — бицепс
+// мог повториться дублем arms, горизонтальная тяга — дублем back, хотя свежая
+// альтернатива (трицепс / вертикальная тяга) была в библиотеке. usedSubMuscleKeys
+// в chooseBestExerciseForMuscle предпочитает кандидата со свежим под-ключом
+// внутри уже отданного дублю слота (не меняет то, какая ГРУППА получает дубль).
+describe('Issue #309: дубль слота группы предпочитает свежий под-ключ', () => {
+  const neutralDecision = {
+    avoidMuscleGroups: [],
+    priorityMuscleGroups: [],
+    exercisePolicies: {},
+    loadPolicy: 'controlled_progression',
+  }
+  const readyState = {
+    recoveryStatus: 'ready',
+    readinessScore: 85,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+  // targetWorkoutMinutes >= 85 → exerciseTarget = 7: 6 канонических групп (по
+  // одному слоту) + 1 дубль. Пустой previousGeneratedWorkouts → застоялость
+  // всех групп равна, порядок дублей идёт по CANONICAL_MUSCLE_KEYS (back раньше
+  // arms) — воспроизводит порядок реального дня из issue.
+  const longSessionProfile = { ...profile, targetWorkoutMinutes: 90 }
+  const buildPlan = (library, history = []) => buildGeneratedPlannedWorkout({
+    profile: longSessionProfile,
+    scheduledDate: '2026-06-09',
+    coachState: readyState,
+    coachDecision: neutralDecision,
+    exerciseLibrary: library,
+    history,
+  })
+
+  it('дубль back: вторая тяга — vertical_pull, а не второй horizontal_pull', async () => {
+    const library = [
+      // Два horizontal-кандидата — ровно пара из реального кейса issue
+      // («тяга в тренажёре» + «тяга с упором грудью»). У обоих есть история
+      // (+8 к очкам): без фикса второй слот ушёл бы chest-supported-row —
+      // тоже horizontal, обгоняет по очкам «безысторийный» lat-pulldown.
+      { id: 'machine-row', name: 'Тяга в тренажёре', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+      { id: 'chest-supported-row', name: 'Тяга с упором грудью', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+      { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+      { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150 },
+      { id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 60, weightStep: 2.5, restSeconds: 150 },
+      { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90 },
+      { id: 'hammer-curl', name: 'Молотковые сгибания', muscleGroup: 'Руки', setsCount: 2, repMin: 10, repMax: 12, targetWeight: 10, weightStep: 1, restSeconds: 75 },
+      { id: 'plank', name: 'Планка', muscleGroup: 'Кор', setsCount: 2, repMin: 40, repMax: 60, targetWeight: 0, weightStep: 0, restSeconds: 60 },
+    ]
+    const historySession = (exerciseId, exerciseName) => ({
+      id: `session-${exerciseId}`,
+      completedAt: '2026-06-01T18:00:00.000Z',
+      totalVolume: 100,
+      exercises: [{ exerciseId, exerciseName, pain: false, sets: [{ weight: 40, reps: 8, rpe: 7, completed: true }] }],
+    })
+    const plan = await buildPlan(library, [
+      historySession('machine-row', 'Тяга в тренажёре'),
+      historySession('chest-supported-row', 'Тяга с упором грудью'),
+    ])
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+    const backSlots = exerciseIds.filter((id) => ['machine-row', 'chest-supported-row', 'lat-pulldown'].includes(id))
+
+    expect(plan.status).toBe('generated')
+    expect(backSlots).toHaveLength(2)
+    expect(exerciseIds).toContain('machine-row')
+    expect(exerciseIds).toContain('lat-pulldown')
+    expect(exerciseIds).not.toContain('chest-supported-row')
+  })
+
+  it('дубль arms: второй слот — трицепс, а не второй бицепс', async () => {
+    const library = [
+      { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 40, weightStep: 2.5, restSeconds: 90 },
+      { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150 },
+      { id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 60, weightStep: 2.5, restSeconds: 150 },
+      { id: 'db-shoulder-press', name: 'Жим гантелей сидя', muscleGroup: 'Плечи', setsCount: 2, repMin: 8, repMax: 10, targetWeight: 12, weightStep: 2, restSeconds: 90 },
+      { id: 'plank', name: 'Планка', muscleGroup: 'Кор', setsCount: 2, repMin: 40, repMax: 60, targetWeight: 0, weightStep: 0, restSeconds: 60 },
+      // Три кандидата arms, все без истории/бонусов (чистая ничья по очкам):
+      // barbell-curl выигрывает первый слот порядком в массиве (стабильная
+      // сортировка). Без фикса второй слот аналогично по порядку ушёл бы
+      // hammer-curl (тоже бицепс) — с фиксом его под-ключ уже занят,
+      // побеждает triceps-pushdown.
+      { id: 'barbell-curl', name: 'Подъём штанги на бицепс', muscleGroup: 'Руки', targetMuscles: ['бицепс'], setsCount: 3, repMin: 8, repMax: 10, targetWeight: 20, weightStep: 2.5, restSeconds: 75 },
+      { id: 'hammer-curl', name: 'Молотковые сгибания', muscleGroup: 'Руки', targetMuscles: ['бицепс'], setsCount: 2, repMin: 10, repMax: 12, targetWeight: 10, weightStep: 1, restSeconds: 75 },
+      { id: 'triceps-pushdown', name: 'Разгибание на блоке', muscleGroup: 'Руки', targetMuscles: ['трицепс'], setsCount: 2, repMin: 10, repMax: 12, targetWeight: 20, weightStep: 2.5, restSeconds: 75 },
+    ]
+    const plan = await buildPlan(library)
+    const exerciseIds = plan.exercises.map((exercise) => exercise.exerciseId)
+    const armsSlots = exerciseIds.filter((id) => ['barbell-curl', 'hammer-curl', 'triceps-pushdown'].includes(id))
+
+    expect(plan.status).toBe('generated')
+    expect(armsSlots).toHaveLength(2)
+    expect(exerciseIds).toContain('barbell-curl')
+    expect(exerciseIds).toContain('triceps-pushdown')
+    expect(exerciseIds).not.toContain('hammer-curl')
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Issue #294: bar-dips (equipment bodyweight, weightStep 2.5) не получают
 // фиктивные +2.5 кг из старых progression_events. Исторический вес для

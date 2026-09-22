@@ -274,6 +274,9 @@ interface ChooseBestExerciseParams {
   coachDecision: CoachDecisionForGenerator | null
   history: WorkoutHistoryEntry[]
   usedExerciseIds: Set<string>
+  // Issue #309: под-мышцы, уже занятые более ранним слотом в ЭТОМ дне —
+  // дубль слота группы не должен вслепую повторять тот же под-ключ.
+  usedSubMuscleKeys?: Set<string>
   lowReadiness: boolean
   preferences: NormalizedPreferences
   weeklyContext: WeeklyContext
@@ -369,11 +372,16 @@ export async function buildGeneratedPlannedWorkout({
 
   const selected: GeneratedExercise[] = []
   const usedExerciseIds = new Set<string>()
+  // Issue #309: под-ключи, уже занятые более ранним слотом в этом дне —
+  // передаётся в chooseBestExerciseForMuscle, чтобы дубль слота группы
+  // (второй back/arms/legs в тот же день) предпочитал свежий под-ключ.
+  const usedSubMuscleKeys = new Set<string>()
   for (const muscleKey of targetPattern) {
-    const candidate = chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision: decision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext, exerciseFlags })
+    const candidate = chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision: decision, history, usedExerciseIds, usedSubMuscleKeys, lowReadiness, preferences, weeklyContext, exerciseFlags })
     if (!candidate) continue
     selected.push(applyPrescription({ exercise: candidate, profile, coachState, coachMemory, coachDecision: decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, exerciseFlag: findFlag(candidate.id) }))
     usedExerciseIds.add(candidate.id)
+    for (const subKey of candidate.subMuscleKeys) usedSubMuscleKeys.add(subKey)
     if (selected.length >= exerciseTarget) break
   }
 
@@ -865,7 +873,7 @@ function orderPatternByWeeklyDeficit(pattern: string[], weeklyVolume: Record<str
   return [...pattern].sort((a, b) => rank(a) - rank(b))
 }
 
-function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, lowReadiness, preferences, weeklyContext, exerciseFlags = [] }: ChooseBestExerciseParams): NormalizedLibraryExercise | null {
+function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, usedSubMuscleKeys = new Set(), lowReadiness, preferences, weeklyContext, exerciseFlags = [] }: ChooseBestExerciseParams): NormalizedLibraryExercise | null {
   if (isRecoveryRestricted(muscleKey, weeklyContext) || isCoachMemoryRestricted(muscleKey, coachMemory) || coachDecision?.avoidMuscleGroups?.includes(muscleKey)) return null
   // Issue #106: build a set of plateau exercise ids (recommendation =
   // swap_exercise) so we can skip them IF alternatives exist for this muscle
@@ -884,7 +892,19 @@ function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemo
   // Issue #106: prefer non-plateau candidates; only fall back to a plateau
   // exercise if no alternative exists for this muscle group
   const nonPlateau = candidates.filter((c) => !plateauIds.has(c.id))
-  return nonPlateau[0] ?? candidates[0] ?? null
+  // Issue #309: дубль слота группы (второе упражнение arms/back/legs в том же
+  // дне) раньше не знал, какой под-ключ уже занят первым слотом — бицепс мог
+  // повториться дублем arms, горизонтальная тяга — дублем back. Предпочитаем
+  // кандидата со свежим (ещё не занятым в этом дне) под-ключом, но только как
+  // прибавку поверх уже существующих приоритетов (плато остаётся сильнее): при
+  // отсутствии кандидата со свежим под-ключом откатываемся к прежнему выбору.
+  const hasFreshSubMuscle = (exercise: NormalizedLibraryExercise) =>
+    exercise.subMuscleKeys.length === 0 || exercise.subMuscleKeys.some((key) => !usedSubMuscleKeys.has(key))
+  return nonPlateau.filter(hasFreshSubMuscle)[0]
+    ?? nonPlateau[0]
+    ?? candidates.filter(hasFreshSubMuscle)[0]
+    ?? candidates[0]
+    ?? null
 }
 
 function applyPrescription({ exercise, profile, coachState, coachMemory = null, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null, exerciseFlag = null }: ApplyPrescriptionParams): GeneratedExercise {
