@@ -47,11 +47,14 @@ describe('coach decision', () => {
     expect(decision.reasons.join(' ')).toContain('Ноги')
   })
 
-  it('blocks legs after a recent legs workout for a returning user', () => {
+  // Issue #308: сам факт «ноги были в соседней сессии» не блокирует их —
+  // блокирует актуальная усталость (см. describe ниже). Здесь ноги реально
+  // fatigued (high), поэтому avoid всё ещё нужен.
+  it('blocks legs after a recent legs workout for a returning user, when legs are actually fatigued', () => {
     const decision = buildCoachDecision({
       profile: returningProfile,
       scheduledDate: '2026-06-11',
-      coachState,
+      coachState: { ...coachState, muscleGroups: { legs: { fatigue: 'high' } } },
       coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
       previousGeneratedWorkouts: [{
         scheduledDate: '2026-06-09',
@@ -63,6 +66,50 @@ describe('coach decision', () => {
 
     expect(decision.avoidMuscleGroups).toContain('legs')
     expect(decision.reasons.join(' ')).toContain('возвращение после перерыва')
+  })
+})
+
+// Issue #308: 'returning' — статичный речевой флаг профиля, а не факт текущего
+// перерыва. Раньше он один, без проверки фактической усталости, сносил ноги
+// из плана: quads простаивали 9 дней с fatigue=low, а ноги всё равно
+// исключались только потому, что предыдущая ЗАПЛАНИРОВАННАЯ сессия (не
+// обязательно фактически выполненная в этом составе) 2 дня назад числила
+// присед. Как и #223 для lowReadiness, avoid решает актуальная усталость
+// группы, а не факт «ноги были в соседней сессии».
+describe('Issue #308: avoid ног учитывает фактическую усталость, а не только флаг возврата', () => {
+  it('не блокирует свежие ноги (fatigue=low, 9 дней простоя), даже если профиль — возвращение после перерыва', () => {
+    const decision = buildCoachDecision({
+      profile: returningProfile,
+      scheduledDate: '2026-09-22',
+      coachState: { ...coachState, muscleGroups: { legs: { fatigue: 'low', lastTrainedDaysAgo: 9 } } },
+      coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-09-20',
+        exercises: [
+          { exerciseId: 'lunge', exerciseName: 'Выпады с гантелями', muscleGroup: 'Ноги' },
+        ],
+      }],
+    })
+
+    expect(decision.avoidMuscleGroups).not.toContain('legs')
+    expect(decision.nextWorkoutIntent.type).not.toBe('upper_body_accessory')
+  })
+
+  it('без coachState.muscleGroups (фолбэк low) тоже не блокирует ноги — регрессия', () => {
+    const decision = buildCoachDecision({
+      profile: returningProfile,
+      scheduledDate: '2026-09-22',
+      coachState,
+      coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-09-20',
+        exercises: [
+          { exerciseId: 'lunge', exerciseName: 'Выпады с гантелями', muscleGroup: 'Ноги' },
+        ],
+      }],
+    })
+
+    expect(decision.avoidMuscleGroups).not.toContain('legs')
   })
 })
 

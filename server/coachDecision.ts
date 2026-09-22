@@ -89,11 +89,19 @@ export function buildCoachDecision({
     }
   }
 
+  // Issue #308: 'returning' в профиле — статичный речевой флаг («возвращаюсь
+  // после перерыва»), а не факт текущего перерыва: он может годами оставаться
+  // true после первого возврата. Ниже (#223) lowReadiness уже не выключает ноги
+  // целиком, а смотрит их актуальную усталость — здесь та же дыра: группа
+  // блокировалась по одному факту «ноги были в соседней сессии», без проверки,
+  // восстановились ли они фактически (застоявшиеся 9 дней ноги с fatigue=low
+  // исключались из плана наравне с реально уставшими).
+  const legsFatigueForReturn = coachState?.muscleGroups?.legs?.fatigue ?? 'low'
   for (const workout of previousGeneratedWorkouts ?? []) {
     const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
     if (!Number.isFinite(daysSinceWorkout) || daysSinceWorkout <= 0 || daysSinceWorkout > 2) continue
     const previousMuscleKeys = new Set((workout?.exercises ?? []).map((exercise) => normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')))
-    if (returningAfterBreak && previousMuscleKeys.has('legs')) {
+    if (returningAfterBreak && previousMuscleKeys.has('legs') && legsFatigueForReturn !== 'low') {
       avoidMuscleGroups.add('legs')
       reasons.push('Ноги не повторяем через один день отдыха: профиль — возвращение после перерыва.')
     }
