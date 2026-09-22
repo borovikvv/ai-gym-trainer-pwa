@@ -9,7 +9,7 @@ import type {
 } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { isAssistedExerciseName, normalizeExerciseMuscleGroup, normalizeLegSubMuscles } from '../shared/muscleGroups.js'
+import { isAssistedExerciseName, normalizeArmSubMuscles, normalizeBackPullPattern, normalizeExerciseMuscleGroup, normalizeLegSubMuscles } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, strongerOf } from '../shared/weightDirection.js'
 import { computeMesocycleState, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
@@ -284,8 +284,15 @@ function buildExerciseCatalog(workoutDays: WorkoutDayInput[], exerciseLibrary: L
       id,
       canonicalExerciseId: id,
       muscleKey,
-      // Issue #293: под-мышцы только для ног; справочник — источник истины.
-      subMuscleKeys: muscleKey === 'legs' ? normalizeLegSubMuscles(exercise.targetMuscles ?? null) : [],
+      // Issue #293/#305: под-мышцы ног и рук — справочник (target_muscles);
+      // паттерн тяги спины — по названию (target_muscles там анатомия).
+      subMuscleKeys: muscleKey === 'legs'
+        ? normalizeLegSubMuscles(exercise.targetMuscles ?? null)
+        : muscleKey === 'arms'
+        ? normalizeArmSubMuscles(exercise.targetMuscles ?? null)
+        : muscleKey === 'back'
+        ? normalizeBackPullPattern(exercise.name ?? '')
+        : [],
     } as CatalogItem)
   }
   for (const day of workoutDays ?? []) {

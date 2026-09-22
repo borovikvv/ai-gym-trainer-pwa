@@ -140,6 +140,63 @@ export function normalizeLegSubMuscles(targetMuscles: Array<string | null | unde
   return [...matched]
 }
 
+// Issue #305: под-мышцы рук. «arms» — одна группа, и recent-штраф считается по
+// exercise_id — разные трицепсовые изоляции меняют id, но нагрузку получает
+// один и тот же пучок, а бицепс не получает бонуса застоялости. Источник тот
+// же, что у ног (#293): target_muscles уже содержит 'бицепс'/'трицепс'.
+export const ARM_SUB_MUSCLE_KEYS = ['biceps', 'triceps'] as const
+
+export type ArmSubMuscleKey = (typeof ARM_SUB_MUSCLE_KEYS)[number]
+
+const ARM_SUB_MUSCLE_ALIASES = [
+  { key: 'biceps', match: ['бицепс'] },
+  { key: 'triceps', match: ['трицепс'] },
+] as const
+
+/**
+ * Issue #305: нормализация под-мышц рук, по образцу normalizeLegSubMuscles.
+ */
+export function normalizeArmSubMuscles(targetMuscles: Array<string | null | undefined> | null | undefined): string[] {
+  const matched = new Set<string>()
+  for (const raw of targetMuscles ?? []) {
+    const normalized = String(raw ?? '').toLowerCase()
+    if (!normalized) continue
+    for (const alias of ARM_SUB_MUSCLE_ALIASES) {
+      if (alias.match.some((part) => normalized.includes(part))) {
+        matched.add(alias.key)
+      }
+    }
+  }
+  return [...matched]
+}
+
+// Issue #305: паттерн тяги (спина). target_muscles тут анатомия (широчайшие,
+// ромбовидные), а не направление движения — «другая тяга» той же плоскости
+// (тяга в тренажёре → тяга с упором грудью, обе горизонтальные) засчитывалась
+// генератором как разнообразие. Источник — название упражнения, не target_muscles.
+export const BACK_PULL_PATTERN_KEYS = ['horizontal_pull', 'vertical_pull'] as const
+
+export type BackPullPatternKey = (typeof BACK_PULL_PATTERN_KEYS)[number]
+
+const BACK_PULL_PATTERN_ALIASES = [
+  { key: 'vertical_pull', match: ['верхнего блока', 'гравитрон', 'подтягив', 'pulldown', 'pull-up', 'pullup'] },
+  { key: 'horizontal_pull', match: ['горизонтальн', 'наклоне', 'тренажёре', 'тренажере', 'блоке сидя', 'упором', 'row'] },
+] as const
+
+/**
+ * Issue #305: паттерн тяги по названию упражнения. Становая/румынская тяга —
+ * хендж, не попадает ни в одну категорию (как и раньше, без под-ключа).
+ */
+export function normalizeBackPullPattern(exerciseName: string | null | undefined): string[] {
+  const normalized = String(exerciseName ?? '').toLowerCase()
+  if (!normalized) return []
+  const matched: string[] = []
+  for (const alias of BACK_PULL_PATTERN_ALIASES) {
+    if (alias.match.some((part) => normalized.includes(part))) matched.push(alias.key)
+  }
+  return matched
+}
+
 export function normalizeMuscleGroup(text: string | null | undefined): MuscleKey {
   const normalized = String(text ?? '').toLowerCase()
   for (const alias of MUSCLE_ALIASES) {

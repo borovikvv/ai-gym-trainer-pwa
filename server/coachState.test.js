@@ -524,6 +524,80 @@ describe('Issue #293: subMuscleGroups по под-мышцам ног', () => {
   })
 })
 
+// Issue #305: расширение #293 на руки (biceps/triceps) и паттерн тяги спины
+// (horizontal_pull/vertical_pull) — та же generic-агрегация subMuscleGroups,
+// без изменений в buildMuscleGroupState.
+describe('Issue #305: subMuscleGroups по рукам и паттерну тяги', () => {
+  const armsAndBackLibrary = [
+    { id: 'triceps-pushdown', name: 'Разгибание на блоке', muscleGroup: 'Руки', targetMuscles: ['трицепс'], targetWeight: 20, repMin: 10, repMax: 12 },
+    { id: 'hammer-curl', name: 'Молотковые сгибания', muscleGroup: 'Руки', targetMuscles: ['бицепс'], targetWeight: 10, repMin: 10, repMax: 12 },
+    { id: 'machine-row', name: 'Тяга в тренажёре', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], targetWeight: 40, repMin: 8, repMax: 10 },
+    { id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина', targetMuscles: ['широчайшие'], targetWeight: 40, repMin: 8, repMax: 10 },
+  ]
+
+  it('трицепс 3 дня назад тяжёлыми подходами даёт medium по triceps, biceps не тронут', () => {
+    const state = computeCoachState({
+      profile,
+      workoutDays: [],
+      exerciseLibrary: armsAndBackLibrary,
+      history: [
+        {
+          id: 'session-triceps',
+          userId: 'vyacheslav',
+          workoutDayId: 'day-a',
+          workoutDayName: 'Верх',
+          completedAt: '2026-08-27T18:00:00.000Z',
+          totalVolume: 400,
+          exercises: [{
+            exerciseId: 'triceps-pushdown',
+            exerciseName: 'Разгибание на блоке',
+            pain: false,
+            sets: [
+              { weight: 20, reps: 10, rpe: 9, completed: true },
+              { weight: 20, reps: 10, rpe: 9, completed: true },
+            ],
+          }],
+        },
+      ],
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.subMuscleGroups.triceps).toMatchObject({ fatigue: 'medium', lastTrainedDaysAgo: 3 })
+    expect(state.subMuscleGroups.biceps).toBeUndefined()
+  })
+
+  it('горизонтальная тяга 3 дня назад тяжёлыми подходами даёт medium по horizontal_pull, vertical_pull не тронут', () => {
+    const state = computeCoachState({
+      profile,
+      workoutDays: [],
+      exerciseLibrary: armsAndBackLibrary,
+      history: [
+        {
+          id: 'session-row',
+          userId: 'vyacheslav',
+          workoutDayId: 'day-a',
+          workoutDayName: 'Спина',
+          completedAt: '2026-08-27T18:00:00.000Z',
+          totalVolume: 600,
+          exercises: [{
+            exerciseId: 'machine-row',
+            exerciseName: 'Тяга в тренажёре',
+            pain: false,
+            sets: [
+              { weight: 40, reps: 8, rpe: 9, completed: true },
+              { weight: 40, reps: 8, rpe: 9, completed: true },
+            ],
+          }],
+        },
+      ],
+      now: new Date('2026-08-30T18:00:00.000Z'),
+    })
+
+    expect(state.subMuscleGroups.horizontal_pull).toMatchObject({ fatigue: 'medium', lastTrainedDaysAgo: 3 })
+    expect(state.subMuscleGroups.vertical_pull).toBeUndefined()
+  })
+})
+
 // Issue #288: перерыв (>= 14 дней) в истории не должен давать ложный
 // above_plan. Возвращение после перерыва по обычному расписанию — это
 // on_plan, а не перегрузка: отпускное окно исключается из оценки частоты.
