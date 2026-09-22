@@ -365,7 +365,7 @@ function emptyMuscleProfile(key: string): MuscleGroupProfileExtended {
 
 function classifyMuscleStatus(group: MuscleGroupProfileExtended, profile: ProfileForCoachMemory): MuscleGroupStatus {
   if (group.pain) return 'avoid'
-  if (profileIsReturningAfterBreak(profile) && group.key === 'legs' && group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 2) return 'avoid'
+  if (profileIsReturningAfterBreak(profile) && group.key === 'legs' && group.lastTrainedDaysAgo !== null && group.lastTrainedDaysAgo <= 2 && group.fatigue !== 'low') return 'avoid'
   if (group.fatigue === 'high') return 'fatigued'
   // Отдельная проверка lastTrainedDaysAgo здесь не нужна: 'medium' по свежести
   // уже выставляет classifyMuscleFatigue / classifyFatigue (RECENTLY_TRAINED_DAYS).

@@ -80,6 +80,7 @@ export function buildCoachDecision({
   const lowReadiness = readinessScore < 55 || coachState?.recoveryStatus === 'low' || coachState?.weeklyLoadStatus === 'above_plan'
   const mesocycleIsDeload = isDeloadWeek((coachState as { mesocycle?: MesocycleState | null })?.mesocycle ?? null)
   const returningAfterBreak = isReturningAfterBreak(profile)
+  const legsFatigue = coachState?.muscleGroups?.legs?.fatigue ?? 'low'
 
   const muscleGroupProfiles = coachMemory?.muscleGroupProfiles ?? {}
   for (const [muscleKey, group] of Object.entries(muscleGroupProfiles)) {
@@ -93,7 +94,7 @@ export function buildCoachDecision({
     const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
     if (!Number.isFinite(daysSinceWorkout) || daysSinceWorkout <= 0 || daysSinceWorkout > 2) continue
     const previousMuscleKeys = new Set((workout?.exercises ?? []).map((exercise) => normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')))
-    if (returningAfterBreak && previousMuscleKeys.has('legs')) {
+    if (returningAfterBreak && legsFatigue !== 'low' && previousMuscleKeys.has('legs')) {
       avoidMuscleGroups.add('legs')
       reasons.push('Ноги не повторяем через один день отдыха: профиль — возвращение после перерыва.')
     }
@@ -107,7 +108,6 @@ export function buildCoachDecision({
   // «недовосстановленные» теперь решает их собственная усталость, а не общий
   // флаг. Свежие ноги идут в день с урезанной интенсивностью (loadPolicy ниже).
   if (lowReadiness) {
-    const legsFatigue = coachState?.muscleGroups?.legs?.fatigue ?? 'low'
     if (legsFatigue !== 'low') {
       avoidMuscleGroups.add('legs')
       reasons.push('Готовность снижена, ноги ещё не восстановились — сегодня их не грузим.')

@@ -116,6 +116,21 @@ describe('Coach Memory', () => {
     expect(memory.summary).toContain('Ноги')
   })
 
+  // Issue #308: статус avoid по «возвращению после перерыва» не должен
+  // выставляться, если фактическая усталость ног low — свежая группа остаётся
+  // доступной, несмотря на флаг профиля и недавнюю сессию с ногами.
+  it('keeps legs ready for a returning user when legs fatigue is low', () => {
+    const memory = computeCoachMemory({
+      profile,
+      exerciseLibrary,
+      history,
+      coachState: { muscleGroups: { legs: { fatigue: 'low' } } },
+      now: new Date('2026-06-11T12:00:00.000Z'),
+    })
+
+    expect(memory.muscleGroupProfiles.legs.status).not.toBe('avoid')
+  })
+
   it('uses canonical ids for added exercise variants in memory', () => {
     const memory = computeCoachMemory({
       profile,

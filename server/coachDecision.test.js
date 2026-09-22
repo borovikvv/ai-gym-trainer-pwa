@@ -51,7 +51,7 @@ describe('coach decision', () => {
     const decision = buildCoachDecision({
       profile: returningProfile,
       scheduledDate: '2026-06-11',
-      coachState,
+      coachState: { ...coachState, muscleGroups: { legs: { fatigue: 'medium' } } },
       coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
       previousGeneratedWorkouts: [{
         scheduledDate: '2026-06-09',
@@ -63,6 +63,26 @@ describe('coach decision', () => {
 
     expect(decision.avoidMuscleGroups).toContain('legs')
     expect(decision.reasons.join(' ')).toContain('возвращение после перерыва')
+  })
+
+  // Issue #308: avoid-логика «возвращение после перерыва» не должна исключать
+  // ноги, если у них фактическая усталость low — даже при флаге returning и
+  // недавней сессии с ногами (демо-кейс из issue: quads 9 дней простоя).
+  it('does not avoid legs for a returning user when legs fatigue is low', () => {
+    const decision = buildCoachDecision({
+      profile: { ...returningProfile, level: 'returning' },
+      scheduledDate: '2026-06-11',
+      coachState: { ...coachState, muscleGroups: { legs: { fatigue: 'low' } } },
+      coachMemory: { exerciseProfiles: {}, muscleGroupProfiles: {}, weeklyBalance: { muscleSetCounts: {} } },
+      previousGeneratedWorkouts: [{
+        scheduledDate: '2026-06-09',
+        exercises: [
+          { exerciseId: 'lunge', exerciseName: 'Выпады', muscleGroup: 'Ноги' },
+        ],
+      }],
+    })
+
+    expect(decision.avoidMuscleGroups).not.toContain('legs')
   })
 })
 
