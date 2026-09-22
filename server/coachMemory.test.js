@@ -538,3 +538,49 @@ describe('Issue #286: currentWorkingWeight по сессии под суффик
     expect(memory.exerciseProfiles['bench-press'].status).toBe('progress_possible')
   })
 })
+
+// Issue #308: тот же речевой флаг 'returning', что и в coachDecision.ts —
+// classifyMuscleStatus блокировал ноги статусом 'avoid' только по факту
+// «тренировались ≤2 дня назад», без проверки, восстановились ли они
+// фактически. coachState.muscleGroups[key].fatigue (если передан) переопределяет
+// внутренний фолбэк-расчёт усталости — так вышестоящий, более точный источник
+// (реальные тяжёлые подходы за окно) может сказать «на самом деле уже low».
+describe('Issue #308: muscleGroupProfiles.legs.status учитывает фактическую усталость', () => {
+  const returningProfile = { userId: 'vyacheslav', level: 'возвращаюсь после перерыва', workoutsPerWeek: 2 }
+  const legsLibrary = [{ id: 'barbell-squat', name: 'Присед со штангой', muscleGroup: 'Ноги', targetWeight: 50, repMin: 6, repMax: 8 }]
+  const legsSessionTwoDaysAgo = [{
+    id: 'session-legs',
+    userId: 'vyacheslav',
+    completedAt: '2026-09-20T18:00:00.000Z',
+    totalVolume: 300,
+    exercises: [{
+      exerciseId: 'barbell-squat',
+      exerciseName: 'Присед со штангой',
+      pain: false,
+      sets: [{ weight: 50, reps: 8, rpe: 7, completed: true }],
+    }],
+  }]
+
+  it('fatigue=low из coachState переопределяет фолбэк — статус НЕ avoid, несмотря на возврат и тренировку 2 дня назад', () => {
+    const memory = computeCoachMemory({
+      profile: returningProfile,
+      exerciseLibrary: legsLibrary,
+      history: legsSessionTwoDaysAgo,
+      coachState: { muscleGroups: { legs: { fatigue: 'low' } } },
+      now: new Date('2026-09-22T12:00:00.000Z'),
+    })
+
+    expect(memory.muscleGroupProfiles.legs.status).not.toBe('avoid')
+  })
+
+  it('без coachState.muscleGroups фолбэк по реальным подходам даёт medium (не low) — avoid остаётся, регрессия', () => {
+    const memory = computeCoachMemory({
+      profile: returningProfile,
+      exerciseLibrary: legsLibrary,
+      history: legsSessionTwoDaysAgo,
+      now: new Date('2026-09-22T12:00:00.000Z'),
+    })
+
+    expect(memory.muscleGroupProfiles.legs.status).toBe('avoid')
+  })
+})
