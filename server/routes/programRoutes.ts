@@ -2,11 +2,12 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
 import { loadProgramData, updateProgramExercise } from '../services/programService.js'
+import { getAllowedUserIds } from '../privateUsers.js'
 
 export const programRoutes = Router()
 
 programRoutes.get('/program-data', async (_req, res) => {
-  res.json(await loadProgramData(pool))
+  res.json(await loadProgramData(pool, getAllowedUserIds()))
 })
 
 programRoutes.patch('/program-exercises/:id', async (req, res) => {

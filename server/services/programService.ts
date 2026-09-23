@@ -15,28 +15,31 @@ import { syncWeeklyVolumeTargets, type SyncWeeklyVolumeResult } from '../weeklyV
 import { applyMemoryUpdates, loadGoals } from '../coachLongTermMemory.js'
 import { loadBodyWeightLog } from '../bodyWeightLog.js'
 
-export async function loadProgramData(client: DbClient) {
+export async function loadProgramData(client: DbClient, allowedUserIds: string[]) {
   const [users, profileRows, dayRows, exerciseRows, libraryRows] = await Promise.all([
     client.query(`
       select id, name, initials, goal, streak
       from public.app_users
+      where id = any($1)
       order by case id when 'vyacheslav' then 1 when 'oleg' then 2 else 99 end, created_at, id
-    `),
+    `, [allowedUserIds]),
     client.query(`
       select user_id, age, sex, height_cm, weight_kg, goal, level, workouts_per_week,
              target_workout_minutes, injuries, limitations, banned_exercises,
              preferred_exercises, equipment, training_days, preferences, notes
       from public.user_profiles
-    `),
+      where user_id = any($1)
+    `, [allowedUserIds]),
     client.query(`
       select d.id, d.day_key, d.name, d.label, d.description, d.sort_order, p.user_id
       from public.program_days d
       join public.programs p on p.id = d.program_id
       left join public.user_profiles up on up.user_id = p.user_id
       where p.status = 'active'
+        and p.user_id = any($1)
         and d.sort_order <= greatest(1, least(coalesce(up.workouts_per_week, 3), 7))
       order by p.user_id, d.sort_order
-    `),
+    `, [allowedUserIds]),
     client.query(`
       select
         d.id as program_day_id,
@@ -65,9 +68,10 @@ export async function loadProgramData(client: DbClient) {
       left join public.user_profiles up on up.user_id = p.user_id
       join public.exercise_library el on el.id = pe.exercise_id
       where p.status = 'active'
+        and p.user_id = any($1)
         and d.sort_order <= greatest(1, least(coalesce(up.workouts_per_week, 3), 7))
       order by d.id, pe.sort_order
-    `),
+    `, [allowedUserIds]),
     client.query(librarySql()),
   ])
 

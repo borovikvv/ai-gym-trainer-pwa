@@ -112,12 +112,14 @@ interface WorkoutDraftRow {
   saved_at: Date | string
 }
 
-export async function loadWorkoutHistory(client: DbClient): Promise<WorkoutHistoryEntry[]> {
-  const sessions = await client.query(`
-    select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, quality_score, readiness_check_in
-    from public.workout_sessions
-    order by completed_at desc
-  `)
+export async function loadWorkoutHistory(client: DbClient, allowedUserIds: string[]): Promise<WorkoutHistoryEntry[]> {
+  const sessions = await client.query(
+    `select id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, quality_score, readiness_check_in
+     from public.workout_sessions
+     where user_id = any($1)
+     order by completed_at desc`,
+    [allowedUserIds],
+  )
   const sessionIds = sessions.rows.map((row) => String(row.id))
   if (sessionIds.length === 0) return []
 
@@ -691,11 +693,12 @@ export async function loadActiveWorkoutDraft(client: DbClient, userId: string): 
   }
 }
 
-export async function deleteWorkoutDraft(client: DbClient, id: string): Promise<void> {
+export async function deleteWorkoutDraft(client: DbClient, id: string): Promise<boolean> {
   const current = await client.query('select user_id from public.workout_drafts where id = $1', [id])
-  if (current.rowCount === 0) return
+  if (current.rowCount === 0) return false
   assertAllowedRowOwner(current.rows[0])
   await client.query('delete from public.workout_drafts where id = $1', [id])
+  return true
 }
 
 // Type re-export for consumers
