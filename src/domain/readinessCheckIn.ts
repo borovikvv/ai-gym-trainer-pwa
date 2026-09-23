@@ -22,10 +22,6 @@ export function resolveReadinessMode(checkIn: ReadinessCheckIn): ReadinessMode {
     return 'very_light'
   }
 
-  if (checkIn.availableMinutes > 0 && checkIn.availableMinutes < 35) {
-    return 'very_light'
-  }
-
   if (
     (checkIn.sleepQuality <= 2 && checkIn.energy <= 2) ||
     checkIn.stress >= 5 ||

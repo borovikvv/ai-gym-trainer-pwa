@@ -30,6 +30,7 @@ import { suggestExerciseToAdd } from './domain/exerciseSuggestion'
 import {
   adaptWorkoutDayForReadiness,
   estimateWorkoutMinutes,
+  fitWorkoutDayToAvailableMinutes,
   readinessOptions,
   type ReadinessMode,
 } from './domain/workoutReadiness'
@@ -207,7 +208,10 @@ function App() {
     clearDraftOriginal()
     setRestoredDraftKey(null)
   }
-  const previewWorkoutDay = adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn)
+  const previewWorkoutDay = fitWorkoutDayToAvailableMinutes(
+    adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn),
+    readinessCheckIn.availableMinutes,
+  )
   const exerciseAddSuggestion = screen === 'session'
     ? suggestExerciseToAdd({ workoutDay: activeWorkoutDay, exerciseLibrary: programData.exerciseLibrary })
     : null
