@@ -1,4 +1,5 @@
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
+import { matchesPainArea } from '../../shared/painAreaMuscleMap'
 import { formatWeight } from '../lib/format'
 import type { ReadinessCheckIn } from './readinessCheckIn'
 
@@ -84,21 +85,9 @@ export function adaptWorkoutDayForReadiness(day: WorkoutDay, mode: ReadinessMode
 
 function targetedReadinessState(exercise: ExercisePlan, checkIn?: ReadinessCheckIn) {
   if (!checkIn) return 'none'
-  const exerciseText = `${exercise.name} ${exercise.muscleGroup}`.toLowerCase()
-  if ((checkIn.painAreas ?? []).some((area) => matchesArea(exerciseText, area))) return 'pain'
-  if ((checkIn.soreMuscleGroups ?? []).some((group) => matchesArea(exerciseText, group))) return 'sore'
+  if ((checkIn.painAreas ?? []).some((area) => matchesPainArea(exercise, area))) return 'pain'
+  if ((checkIn.soreMuscleGroups ?? []).some((group) => matchesPainArea(exercise, group))) return 'sore'
   return 'none'
-}
-
-function matchesArea(exerciseText: string, area: string) {
-  const normalizedArea = area.toLowerCase()
-  if (normalizedArea.includes('груд')) return exerciseText.includes('груд') || exerciseText.includes('bench') || exerciseText.includes('жим')
-  if (normalizedArea.includes('спин')) return exerciseText.includes('спин') || exerciseText.includes('тяга') || exerciseText.includes('row') || exerciseText.includes('pulldown')
-  if (normalizedArea.includes('ног') || normalizedArea.includes('колен')) return exerciseText.includes('ног') || exerciseText.includes('бедр') || exerciseText.includes('ягод') || exerciseText.includes('присед') || exerciseText.includes('leg')
-  if (normalizedArea.includes('плеч')) return exerciseText.includes('плеч') || exerciseText.includes('дельт') || exerciseText.includes('shoulder') || exerciseText.includes('жим')
-  if (normalizedArea.includes('рук') || normalizedArea.includes('локт')) return exerciseText.includes('рук') || exerciseText.includes('бицеп') || exerciseText.includes('трицеп') || exerciseText.includes('curl')
-  if (normalizedArea.includes('кор')) return exerciseText.includes('кор') || exerciseText.includes('пресс') || exerciseText.includes('планк') || exerciseText.includes('core')
-  return false
 }
 
 export function estimateWorkoutMinutes(day: WorkoutDay) {
