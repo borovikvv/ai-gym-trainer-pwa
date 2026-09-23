@@ -2,6 +2,7 @@
 import cors from 'cors'
 import express from 'express'
 import { pool } from './db.js'
+import { apiRateLimiter } from './rateLimit.js'
 import { coachRoutes } from './routes/coachRoutes.js'
 import { plannedWorkoutRoutes } from './routes/plannedWorkoutRoutes.js'
 import { profileRoutes } from './routes/profileRoutes.js'
@@ -12,6 +13,11 @@ import { memoryRoutes } from './routes/memoryRoutes.js'
 const port = Number(process.env.API_PORT ?? 8910)
 const host = process.env.API_HOST ?? '127.0.0.1'
 const app = express()
+
+// Issue #319: exactly one trusted hop — the Nginx/Caddy reverse proxy on the
+// same host (see docs/DEPLOYMENT.md). Not `true`: that would trust every hop
+// and let a client spoof its IP via X-Forwarded-For.
+app.set('trust proxy', 1)
 
 const allowedOrigins = (process.env.CORS_ORIGIN ?? 'https://trainer.borovikvv.ru')
   .split(',')
@@ -34,6 +40,7 @@ app.get('/health', async (_req, res) => {
   res.json({ ok: true, dbTime: result.rows[0].now })
 })
 
+app.use('/api', apiRateLimiter)
 app.use('/api', programRoutes)
 app.use('/api', profileRoutes)
 app.use('/api', workoutRoutes)

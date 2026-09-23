@@ -14,6 +14,7 @@ import { reviewProgram } from '../coachProgramReview.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { requireAllowedUserId } from '../privateUsers.js'
+import { llmRateLimiter } from '../rateLimit.js'
 import { loadGoals, loadLongTermMemoryBlock, loadMemoryFacts, refreshGoalProgress } from '../coachLongTermMemory.js'
 
 export const coachRoutes = Router()
@@ -22,7 +23,7 @@ export const coachRoutes = Router()
 // (issue #150 — deduplicated). For GET :userId checks req.params.userId,
 // for POST checks req.body.userId.
 
-coachRoutes.post('/coach/next-set', requireAllowedUserId, async (req, res) => {
+coachRoutes.post('/coach/next-set', requireAllowedUserId, llmRateLimiter, async (req, res) => {
   const body = req.body ?? {}
   const context = body.context ?? {}
   const coachState = context.coachState || (body.userId ? await loadCoachStateForUser(pool, body.userId) : null)
@@ -144,7 +145,7 @@ coachRoutes.get('/coach/memory/:userId', requireAllowedUserId, async (req, res) 
   res.json({ ok: true, coachMemory, coachState, memoryFacts, goals, blockGoal, weeklyVolume })
 })
 
-coachRoutes.post('/coach/live-strategy', requireAllowedUserId, async (req, res) => {
+coachRoutes.post('/coach/live-strategy', requireAllowedUserId, llmRateLimiter, async (req, res) => {
   const body = req.body ?? {}
   const context = body.context ?? {}
   // Issue #171: возраст — вход политики; без него подросток получал бы
@@ -197,7 +198,7 @@ coachRoutes.post('/coach/workout-today', requireAllowedUserId, async (req, res) 
 })
 
 // Issue #84: AI Level 2 — progress analysis (with daily caching)
-coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async (req, res) => {
+coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, llmRateLimiter, async (req, res) => {
   const userId = String(req.params.userId)
   const now = new Date()
 
@@ -255,7 +256,7 @@ coachRoutes.get('/coach/progress-analysis/:userId', requireAllowedUserId, async 
 })
 
 // Issue #85: AI Level 3 — program review (with weekly caching)
-coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, async (req, res) => {
+coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLimiter, async (req, res) => {
   const userId = String(req.params.userId)
   const now = new Date()
 
