@@ -4,12 +4,12 @@ import { pool } from '../db.js'
 import { deleteWorkoutDraft, loadActiveWorkoutDraft, loadWorkoutHistory, saveWorkoutDraft, saveWorkoutHistoryEntry } from '../services/workoutService.js'
 import { runMemoryReflection } from '../services/memoryReflectionService.js'
 import { buildWorkoutSavedEvent, logActivity } from '../activityLog.js'
-import { assertAllowedUserId } from '../privateUsers.js'
+import { assertAllowedUserId, getAllowedUserIds } from '../privateUsers.js'
 
 export const workoutRoutes = Router()
 
 workoutRoutes.get('/workout-history', async (_req, res) => {
-  res.json(await loadWorkoutHistory(pool))
+  res.json(await loadWorkoutHistory(pool, getAllowedUserIds()))
 })
 
 workoutRoutes.post('/workout-history', async (req, res, next) => {
@@ -51,6 +51,7 @@ workoutRoutes.get('/workout-drafts/active', async (req, res) => {
 })
 
 workoutRoutes.delete('/workout-drafts/:id', async (req, res) => {
-  await deleteWorkoutDraft(pool, req.params.id)
+  const deleted = await deleteWorkoutDraft(pool, req.params.id)
+  if (!deleted) return res.status(404).json({ error: 'workout draft not found' })
   res.json({ ok: true })
 })
