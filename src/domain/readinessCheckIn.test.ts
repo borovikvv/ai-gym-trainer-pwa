@@ -6,6 +6,13 @@ describe('readiness check-in', () => {
     expect(resolveReadinessMode(defaultReadinessCheckIn)).toBe('normal')
   })
 
+  it('keeps a normal mode when time is short but recovery is balanced', () => {
+    expect(resolveReadinessMode({
+      ...defaultReadinessCheckIn,
+      availableMinutes: 30,
+    })).toBe('normal')
+  })
+
   it('allows a heavy day only when recovery signals are strong', () => {
     expect(resolveReadinessMode({
       ...defaultReadinessCheckIn,
