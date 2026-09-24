@@ -8,6 +8,7 @@ import { profileRoutes } from './routes/profileRoutes.js'
 import { programRoutes } from './routes/programRoutes.js'
 import { workoutRoutes } from './routes/workoutRoutes.js'
 import { memoryRoutes } from './routes/memoryRoutes.js'
+import { errorHandler } from './errorHandler.js'
 
 const port = Number(process.env.API_PORT ?? 8910)
 const host = process.env.API_HOST ?? '127.0.0.1'
@@ -41,12 +42,7 @@ app.use('/api', coachRoutes)
 app.use('/api', plannedWorkoutRoutes)
 app.use('/api', memoryRoutes)
 
-app.use((error, _req, res, _next) => {
-  console.error(error)
-  const statusCode = Number(error?.statusCode)
-  const safeStatusCode = Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 600 ? statusCode : 500
-  res.status(safeStatusCode).json({ error: error instanceof Error ? error.message : String(error) })
-})
+app.use(errorHandler)
 
 app.listen(port, host, () => {
   console.log(`AI Gym Trainer API listening on http://${host}:${port}`)
