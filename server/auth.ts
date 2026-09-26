@@ -12,9 +12,11 @@ function unauthorized(message: string): ApiAuthError {
 }
 
 /**
- * Express middleware that requires `Authorization: Bearer <token>` on every
- * /api/* request. Fail-closed: if API_AUTH_TOKEN is not configured on the
- * server, every request is rejected with 401 (never silently allow all).
+ * Express middleware that requires `X-API-Token: <token>` on every /api/*
+ * request. Not `Authorization`: Caddy basic_auth in front of the app sends its
+ * Basic credentials there, and a request can carry only one of the two.
+ * Fail-closed: if API_AUTH_TOKEN is not configured on the server, every
+ * request is rejected with 401 (never silently allow all).
  * Calls next() on success, next(error) on failure.
  */
 export function requireApiToken(
@@ -26,9 +28,8 @@ export function requireApiToken(
   try {
     const expected = envValue ?? ''
     if (!expected) throw unauthorized('API token is not configured')
-    const header = req.headers.authorization ?? ''
-    const match = /^Bearer (.+)$/.exec(header)
-    const actual = match ? match[1] : ''
+    const header = req.headers['x-api-token']
+    const actual = typeof header === 'string' ? header : ''
     if (actual.length !== expected.length) throw unauthorized('Invalid API token')
     const actualBuffer = Buffer.from(actual)
     const expectedBuffer = Buffer.from(expected)
