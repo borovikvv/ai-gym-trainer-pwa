@@ -16,13 +16,13 @@ afterEach(() => {
 })
 
 describe('apiAuth', () => {
-  it('attaches the Bearer token to headers when a token is configured', async () => {
+  it('attaches the token as X-API-Token when a token is configured', async () => {
     configureToken(TOKEN)
     const { apiAuthHeaders } = await import('./apiAuth')
 
     expect(apiAuthHeaders({ 'Content-Type': 'application/json' })).toEqual({
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${TOKEN}`,
+      'X-API-Token': TOKEN,
     })
   })
 
@@ -35,7 +35,7 @@ describe('apiAuth', () => {
     })
   })
 
-  it('sends the Authorization header through the global fetch', async () => {
+  it('sends the X-API-Token header through the global fetch', async () => {
     configureToken(TOKEN)
     const fetchMock = vi.fn().mockResolvedValue({ ok: true })
     vi.stubGlobal('fetch', fetchMock)
@@ -44,7 +44,20 @@ describe('apiAuth', () => {
     await apiFetch('http://api.test/program-data')
 
     expect(fetchMock).toHaveBeenCalledWith('http://api.test/program-data', {
-      headers: { Authorization: `Bearer ${TOKEN}` },
+      headers: { 'X-API-Token': TOKEN },
+    })
+  })
+
+  // Caddy basic_auth in front of the app owns the Authorization header: the
+  // browser sends the Basic credentials there. Overwriting it with our token
+  // makes Caddy answer 401 and the browser re-prompt for login forever.
+  it('never sets the Authorization header, so Caddy basic auth keeps working', async () => {
+    configureToken(TOKEN)
+    const { apiAuthHeaders } = await import('./apiAuth')
+
+    expect(apiAuthHeaders({ Authorization: 'Basic dXNlcjpwYXNz' })).toEqual({
+      Authorization: 'Basic dXNlcjpwYXNz',
+      'X-API-Token': TOKEN,
     })
   })
 })
@@ -64,6 +77,6 @@ describe('programApi client auth', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('http://api.test/api/program-data')
-    expect(init.headers).toEqual({ Authorization: `Bearer ${TOKEN}` })
+    expect(init.headers).toEqual({ 'X-API-Token': TOKEN })
   })
 })
