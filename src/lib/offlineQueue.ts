@@ -13,6 +13,8 @@
  *   3. A wrapper around fetch that automatically enqueues on failure
  */
 
+import { apiFetch } from '../data/apiAuth'
+
 const DB_NAME = 'ai-gym-trainer-offline'
 const DB_VERSION = 1
 const STORE_NAME = 'request-queue'
@@ -160,7 +162,7 @@ export async function replayQueuedRequests(): Promise<number> {
     if (req.retryCount >= 5) continue
 
     try {
-      const response = await fetch(req.url, {
+      const response = await apiFetch(req.url, {
         method: req.method,
         headers: req.headers,
         body: req.method !== 'GET' && req.method !== 'DELETE' ? req.body : undefined,
@@ -168,6 +170,11 @@ export async function replayQueuedRequests(): Promise<number> {
       if (response.ok) {
         await removeQueuedRequest(req.id)
         successCount++
+      } else if (response.status === 401) {
+        // 401 means the request is invalid (e.g. missing/expired API token).
+        // Retrying the same body/token will keep failing — drop it so it
+        // does not poison the queue with endless futile attempts.
+        await removeQueuedRequest(req.id)
       } else {
         await incrementRetry(req.id)
       }
