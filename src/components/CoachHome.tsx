@@ -8,6 +8,7 @@ import { GoalsCard } from './GoalsCard'
 import { useEffect, useState } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { isProgramApiConfigured } from '../data/programApi'
+import { apiFetch } from '../data/apiAuth'
 import { changeAction, changeTitle, reviewTypeLabel } from './weeklyReview'
 
 /**
@@ -213,7 +214,7 @@ export function CoachHome({
     let cancelled = false
     Promise.resolve().then(() => {
       if (cancelled) return
-      fetch(`${apiBase}/api/coach/program-review/${encodeURIComponent(activeUserId)}`)
+      apiFetch(`${apiBase}/api/coach/program-review/${encodeURIComponent(activeUserId)}`)
         .then((r) => r.ok ? r.json() : null)
         .then((data) => { if (!cancelled && data?.review) setProgramReview(data.review) })
         .catch(() => {})

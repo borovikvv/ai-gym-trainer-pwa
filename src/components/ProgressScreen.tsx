@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ProgressDashboard } from '../domain/progressDashboard'
 import { ScreenHeader, SectionList } from './ui'
 import { isProgramApiConfigured } from '../data/programApi'
+import { apiFetch } from '../data/apiAuth'
 import { pluralRu } from '../lib/format'
 import { useBodyWeightLog } from '../hooks/useBodyWeightLog'
 import { BODY_WEIGHT_TREND_WINDOW_DAYS } from '../../shared/bodyWeight'
@@ -150,7 +151,7 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
     Promise.resolve().then(() => {
       if (cancelled) return
       setChangesLoading(true)
-      fetch(`${apiBase}/api/coach/training-records/${encodeURIComponent(activeUserId)}/latest`)
+      apiFetch(`${apiBase}/api/coach/training-records/${encodeURIComponent(activeUserId)}/latest`)
         .then((r) => r.ok ? r.json() : null)
         .then((data) => { if (!cancelled && data?.record) setCoachChanges(data.record) })
         .catch(() => {})
