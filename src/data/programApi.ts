@@ -210,7 +210,7 @@ export type PlannedWorkout = {
 
 export async function loadProgramDataFromApi(): Promise<ProgramData> {
   if (!apiBaseUrl) return fallbackProgramData
-  const response = await fetch(`${apiBaseUrl}/api/program-data`)
+  const response = await apiFetch(`${apiBaseUrl}/api/program-data`)
   if (!response.ok) throw new Error(`API program load failed: ${response.status}`)
   const data = (await response.json()) as ApiProgramData
   return mapApiProgramData(data)
