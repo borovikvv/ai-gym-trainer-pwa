@@ -15,6 +15,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
 import { saveWorkoutEntryToSupabase } from '../data/workoutRepository'
 import { createInitialLogs } from './useWorkoutSession'
 import { loadPlannedWorkoutsFromApi, type PlannedWorkout } from '../data/programApi'
+import { apiAuthHeaders } from '../data/apiAuth'
 import { enqueueRequest } from '../lib/offlineQueue'
 
 type UseWorkoutSaveOptions = {
@@ -103,6 +104,7 @@ export function useWorkoutSave({
                       `${apiBase}/api/workout-history`,
                       'POST',
                       baseEntry,
+                      apiAuthHeaders({ 'Content-Type': 'application/json' }),
                     )
                   }
                   notify('Сохранено локально. Отправим в базу при появлении интернета.')

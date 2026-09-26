@@ -10,6 +10,7 @@ import { programRoutes } from './routes/programRoutes.js'
 import { workoutRoutes } from './routes/workoutRoutes.js'
 import { memoryRoutes } from './routes/memoryRoutes.js'
 import { errorHandler } from './errorHandler.js'
+import { requireApiToken } from './auth.js'
 
 const port = Number(process.env.API_PORT ?? 8910)
 const host = process.env.API_HOST ?? '127.0.0.1'
@@ -35,6 +36,7 @@ app.use(cors({
   },
 }))
 app.use(express.json({ limit: '1mb' }))
+app.use('/api', requireApiToken)
 
 app.get('/health', async (_req, res) => {
   const result = await pool.query('select now() as now')

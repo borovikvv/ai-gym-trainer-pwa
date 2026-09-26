@@ -4,6 +4,7 @@ import { isTimedExercise } from '../domain/exerciseMetrics'
 import { users as fallbackUsers, workoutDays as fallbackWorkoutDays } from './mockProgram'
 import type { ExercisePlan, UserProfile, WorkoutDay } from '../../shared/types'
 import { formatWeight } from '../lib/format'
+import { apiFetch } from './apiAuth'
 
 const apiBaseUrl = import.meta.env.MODE === 'test' ? undefined : (import.meta.env.VITE_API_BASE_URL as string | undefined)
 
@@ -218,7 +219,7 @@ export async function loadProgramDataFromApi(): Promise<ProgramData> {
 export async function saveProgramExerciseToApi(
   programExerciseId: string,
   patch: ProgramExerciseUpdate,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<void> {
   if (!baseUrl) return
@@ -233,7 +234,7 @@ export async function saveProgramExerciseToApi(
 export async function saveUserQuestionnaireToApi(
   userId: string,
   patch: UserQuestionnaireDraft,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<void> {
   if (!baseUrl) return
@@ -251,7 +252,7 @@ const NEXT_SET_TIMEOUT_MS = 7000
 
 export async function requestCoachNextSetFromApi(
   request: CoachNextSetRequest,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
   signal?: AbortSignal,
 ): Promise<CoachNextSetRecommendation | null> {
@@ -278,7 +279,7 @@ export async function requestCoachNextSetFromApi(
 
 export async function requestCoachLiveStrategyFromApi(
   request: CoachLiveStrategyRequest,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachLiveStrategyDecision | null> {
   if (!baseUrl) return null
@@ -294,7 +295,7 @@ export async function requestCoachLiveStrategyFromApi(
 
 export async function requestCoachWorkoutTodayFromApi(
   userId: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachWorkoutTodayPlan | null> {
   if (!baseUrl) return null
@@ -319,7 +320,7 @@ export type CoachMemoryResult = {
 
 export async function loadCoachMemoryFromApi(
   userId: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachMemory | null> {
   if (!baseUrl) return null
@@ -331,7 +332,7 @@ export async function loadCoachMemoryFromApi(
 
 export async function loadCoachMemoryAndState(
   userId: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachMemoryResult> {
   if (!baseUrl) return { coachMemory: null, coachState: null }
@@ -346,7 +347,7 @@ export async function loadCoachMemoryAndState(
 
 export async function loadPlannedWorkoutsFromApi(
   userId: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<PlannedWorkout[]> {
   if (!baseUrl) return []
@@ -359,7 +360,7 @@ export async function loadPlannedWorkoutsFromApi(
 export async function createPlannedWorkoutInApi(
   userId: string,
   scheduledDate: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<PlannedWorkout | null> {
   if (!baseUrl) return null
@@ -376,7 +377,7 @@ export async function createPlannedWorkoutInApi(
 export async function updatePlannedWorkoutInApi(
   id: string,
   patch: { scheduledDate?: string; status?: PlannedWorkout['status'] },
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<PlannedWorkout[]> {
   if (!baseUrl) return []
@@ -392,7 +393,7 @@ export async function updatePlannedWorkoutInApi(
 
 export async function generatePlannedWorkoutInApi(
   id: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<PlannedWorkout[]> {
   if (!baseUrl) return []
@@ -408,7 +409,7 @@ export async function generatePlannedWorkoutInApi(
 export async function planTrainingWeekInApi(
   userId: string,
   dates: string[],
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
   range?: { rangeStart?: string; rangeEnd?: string },
 ): Promise<PlannedWorkout[]> {
@@ -425,7 +426,7 @@ export async function planTrainingWeekInApi(
 
 export async function deletePlannedWorkoutFromApi(
   id: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<void> {
   if (!baseUrl) return
@@ -531,7 +532,7 @@ export type CoachGoal = {
 
 export async function fetchMemoryFactsFromApi(
   userId: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachMemoryFact[]> {
   if (!baseUrl) return []
@@ -544,7 +545,7 @@ export async function fetchMemoryFactsFromApi(
 export async function addMemoryFactToApi(
   userId: string,
   fact: { kind: MemoryFactKind; content: string },
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachMemoryFact[]> {
   if (!baseUrl) return []
@@ -562,7 +563,7 @@ export async function patchMemoryFactInApi(
   userId: string,
   factId: string,
   patch: { content?: string; status?: 'archived'; confirm?: boolean },
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachMemoryFact[]> {
   if (!baseUrl) return []
@@ -579,7 +580,7 @@ export async function patchMemoryFactInApi(
 export async function fetchGoalsFromApi(
   userId: string,
   status: 'active' | 'all' = 'active',
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachGoal[]> {
   if (!baseUrl) return []
@@ -592,7 +593,7 @@ export async function fetchGoalsFromApi(
 export async function addGoalToApi(
   userId: string,
   goal: { title: string; metric?: CoachGoal['metric']; exerciseId?: string | null; targetValue?: number | null; targetDate?: string | null },
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachGoal[]> {
   if (!baseUrl) return []
@@ -610,7 +611,7 @@ export async function patchGoalInApi(
   userId: string,
   goalId: string,
   patch: { title?: string; status?: CoachGoal['status']; targetValue?: number; targetDate?: string },
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<CoachGoal[]> {
   if (!baseUrl) return []
@@ -658,7 +659,7 @@ function createFallbackQuestionnaire(user: UserProfile): UserQuestionnaire {
 // не ограничивает — сервер отдаёт ряд, тренд считает shared/bodyWeight.ts.
 export async function fetchBodyWeightLogFromApi(
   userId: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<BodyWeightMeasurement[]> {
   if (!baseUrl) return []
@@ -671,7 +672,7 @@ export async function fetchBodyWeightLogFromApi(
 export async function recordBodyWeightInApi(
   userId: string,
   weightKg: number,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = apiFetch,
   baseUrl: string | undefined = apiBaseUrl,
 ): Promise<BodyWeightMeasurement[]> {
   if (!baseUrl) return []

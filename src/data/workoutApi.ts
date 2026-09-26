@@ -2,6 +2,7 @@ import type { ExercisePlan } from '../../shared/types'
 import type { ExerciseLog, WorkoutHistoryEntry } from '../domain/workoutHistory'
 import type { WorkoutDebrief } from '../domain/workoutDebrief'
 import { mapSupabaseWorkoutRows, type SupabaseWorkoutRow } from './workoutRepository'
+import { apiFetch } from './apiAuth'
 
 const apiBaseUrl = import.meta.env.MODE === 'test' ? undefined : (import.meta.env.VITE_API_BASE_URL as string | undefined)
 
@@ -22,7 +23,7 @@ export type WorkoutDraftPayload = {
 
 export async function loadWorkoutHistoryFromApi(): Promise<WorkoutHistoryEntry[]> {
   if (!apiBaseUrl) return []
-  const response = await fetch(`${apiBaseUrl}/api/workout-history`)
+  const response = await apiFetch(`${apiBaseUrl}/api/workout-history`)
   if (!response.ok) throw new Error(`API load failed: ${response.status}`)
   const rows = (await response.json()) as SupabaseWorkoutRow[]
   return mapSupabaseWorkoutRows(rows)
@@ -41,7 +42,7 @@ export type WorkoutSaveResponse = {
 
 export async function saveWorkoutEntryToApi(entry: WorkoutHistoryEntry): Promise<WorkoutSaveResponse | null> {
   if (!apiBaseUrl) return null
-  const response = await fetch(`${apiBaseUrl}/api/workout-history`, {
+  const response = await apiFetch(`${apiBaseUrl}/api/workout-history`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry),
@@ -56,7 +57,7 @@ export async function saveWorkoutEntryToApi(entry: WorkoutHistoryEntry): Promise
 
 export async function saveWorkoutDraftToApi(draft: WorkoutDraftPayload): Promise<void> {
   if (!apiBaseUrl) return
-  const response = await fetch(`${apiBaseUrl}/api/workout-drafts`, {
+  const response = await apiFetch(`${apiBaseUrl}/api/workout-drafts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(draft),
@@ -69,7 +70,7 @@ export async function saveWorkoutDraftToApi(draft: WorkoutDraftPayload): Promise
 
 export async function loadActiveWorkoutDraftFromApi(userId: string): Promise<WorkoutDraftPayload | null> {
   if (!apiBaseUrl) return null
-  const response = await fetch(`${apiBaseUrl}/api/workout-drafts/active?userId=${encodeURIComponent(userId)}`)
+  const response = await apiFetch(`${apiBaseUrl}/api/workout-drafts/active?userId=${encodeURIComponent(userId)}`)
   if (!response.ok) throw new Error(`API draft load failed: ${response.status}`)
   const body = (await response.json()) as { draft?: WorkoutDraftPayload | null }
   return body.draft ?? null
@@ -77,7 +78,7 @@ export async function loadActiveWorkoutDraftFromApi(userId: string): Promise<Wor
 
 export async function clearWorkoutDraftFromApi(draftId: string): Promise<void> {
   if (!apiBaseUrl) return
-  const response = await fetch(`${apiBaseUrl}/api/workout-drafts/${encodeURIComponent(draftId)}`, { method: 'DELETE' })
+  const response = await apiFetch(`${apiBaseUrl}/api/workout-drafts/${encodeURIComponent(draftId)}`, { method: 'DELETE' })
   if (!response.ok) {
     const body = await response.text()
     throw new Error(`API draft clear failed: ${response.status} ${body}`)
