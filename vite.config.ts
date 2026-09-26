@@ -64,7 +64,7 @@ export default defineConfig({
     },
   },
   preview: {
-    allowedHosts: ['trainer.borovikvv.ru', '144.31.245.29'],
+    allowedHosts: (process.env.VITE_PREVIEW_ALLOWED_HOSTS ?? 'trainer.borovikvv.ru').split(','),
   },
   test: {
     environment: 'jsdom',

@@ -1,7 +1,10 @@
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { matchesPainArea } from '../../shared/painAreaMuscleMap'
+import { normalizeExerciseMuscleGroup } from '../../shared/muscleGroups'
 import { formatWeight } from '../lib/format'
 import type { ReadinessCheckIn } from './readinessCheckIn'
+
+const ACCESSORY_MUSCLE_KEYS = ['arms', 'shoulders', 'core']
 
 export type ReadinessMode = 'normal' | 'light' | 'very_light' | 'heavy'
 
@@ -93,4 +96,48 @@ function targetedReadinessState(exercise: ExercisePlan, checkIn?: ReadinessCheck
 export function estimateWorkoutMinutes(day: WorkoutDay) {
   const workMinutes = day.exercises.reduce((sum, exercise) => sum + exercise.setsCount * 2.2 + (exercise.setsCount * exercise.restSeconds) / 60, 0)
   return Math.max(20, Math.round(workMinutes))
+}
+
+export function fitWorkoutDayToAvailableMinutes(day: WorkoutDay, availableMinutes: number): WorkoutDay {
+  if (!(availableMinutes > 0)) return day
+  const dayWith = (exercises: ExercisePlan[]): WorkoutDay => ({ ...day, exercises })
+  const fits = (exercises: ExercisePlan[]) => estimateWorkoutMinutes(dayWith(exercises)) <= availableMinutes
+  if (fits(day.exercises)) return day
+
+  let exercises = day.exercises.slice()
+
+  while (exercises.length > 1 && !fits(exercises)) {
+    const last = exercises[exercises.length - 1]
+    const muscleKey = normalizeExerciseMuscleGroup(last.muscleGroup, last.name)
+    if (!ACCESSORY_MUSCLE_KEYS.includes(muscleKey)) break
+    exercises = exercises.slice(0, -1)
+  }
+
+  while (!fits(exercises)) {
+    let reduced = false
+    for (let i = exercises.length - 1; i >= 0; i--) {
+      if (fits(exercises)) break
+      const exercise = exercises[i]
+      if (exercise.setsCount > 1) {
+        exercises[i] = exerciseWithReducedSet(exercise)
+        reduced = true
+      }
+    }
+    if (!reduced) break
+  }
+
+  while (exercises.length > 1 && !fits(exercises)) {
+    exercises = exercises.slice(0, -1)
+  }
+
+  return dayWith(exercises)
+}
+
+function exerciseWithReducedSet(exercise: ExercisePlan): ExercisePlan {
+  const setsCount = exercise.setsCount - 1
+  return {
+    ...exercise,
+    setsCount,
+    prescription: `${setsCount}×${exercise.repMin}–${exercise.repMax} · рекомендовано ${formatWeight(exercise.targetWeight)} кг · отдых ${exercise.restSeconds} сек`,
+  }
 }

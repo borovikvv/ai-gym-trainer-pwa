@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { sanitizeWorkoutHistoryEntry, saveWorkoutHistoryEntry } from './services/workoutService.js'
+import { deleteWorkoutDraft, loadWorkoutHistory, sanitizeWorkoutHistoryEntry, saveWorkoutHistoryEntry } from './services/workoutService.js'
 import { cascadeRegenerateFutureWorkouts } from './services/plannedWorkoutService.js'
 
 // Mock the dependencies that saveWorkoutHistoryEntry calls — we only care
@@ -1063,5 +1063,73 @@ describe('saveWorkoutHistoryEntry — сужение каскада до бли�
 
     expect(cascade).toHaveBeenCalledTimes(1)
     expect(cascade).toHaveBeenCalledWith(client, { userId: 'vyacheslav', limit: 1 })
+  })
+})
+
+// Issue #316: история тренировок фильтруется по allowlist — раньше
+// GET /workout-history отдавал сессии всех пользователей без всякого where.
+describe('loadWorkoutHistory — фильтрация по allowlist (#316)', () => {
+  it('возвращает только строки пользователей из allowedUserIds', async () => {
+    const sessions = [
+      { id: 's-v', user_id: 'vyacheslav', workout_day_id: 'd1', workout_day_name: 'День A', completed_at: '2026-09-01T10:00:00Z', total_volume: '1000', quality_score: '80', readiness_check_in: null },
+      { id: 's-o', user_id: 'oleg', workout_day_id: 'd2', workout_day_name: 'День B', completed_at: '2026-09-02T10:00:00Z', total_volume: '900', quality_score: '70', readiness_check_in: null },
+    ]
+    const client = {
+      query: vi.fn().mockImplementation(async (text, params) => {
+        if (text.includes('from public.workout_sessions')) {
+          const allowed = params[0]
+          return { rows: sessions.filter((row) => allowed.includes(row.user_id)), rowCount: sessions.length }
+        }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    const result = await loadWorkoutHistory(client, ['vyacheslav'])
+
+    expect(result.map((row) => row.user_id)).toEqual(['vyacheslav'])
+
+    const sessionsQuery = client.query.mock.calls.find(([text]) => text.includes('from public.workout_sessions'))
+    expect(sessionsQuery[1]).toEqual([['vyacheslav']])
+  })
+})
+
+// Issue #316: DELETE /workout-drafts/:id при отсутствующем id молча отвечал
+// 200 {ok:true}. Теперь сервис возвращает boolean, роут отдаёт 404.
+describe('deleteWorkoutDraft — владелец и отсутствующий id (#316)', () => {
+  it('возвращает false и не вызывает delete, когда черновик не найден', async () => {
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+
+    const result = await deleteWorkoutDraft(client, 'missing-id')
+
+    expect(result).toBe(false)
+    expect(client.query.mock.calls.some(([text]) => text.includes('delete from public.workout_drafts'))).toBe(false)
+  })
+
+  it('rejects с 403, когда владелец черновика вне allowlist, delete не вызывается', async () => {
+    const client = {
+      query: vi.fn().mockImplementation(async (text) => {
+        if (text.includes('select user_id from public.workout_drafts')) return { rows: [{ user_id: 'hacker' }], rowCount: 1 }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await expect(deleteWorkoutDraft(client, 'draft-1')).rejects.toMatchObject({ statusCode: 403 })
+    expect(client.query.mock.calls.some(([text]) => text.includes('delete from public.workout_drafts'))).toBe(false)
+  })
+
+  it('возвращает true и вызывает delete с этим id, когда владелец в allowlist', async () => {
+    const client = {
+      query: vi.fn().mockImplementation(async (text) => {
+        if (text.includes('select user_id from public.workout_drafts')) return { rows: [{ user_id: 'vyacheslav' }], rowCount: 1 }
+        return { rows: [], rowCount: 1 }
+      }),
+    }
+
+    const result = await deleteWorkoutDraft(client, 'draft-1')
+
+    expect(result).toBe(true)
+    const deleteCall = client.query.mock.calls.find(([text]) => text.includes('delete from public.workout_drafts'))
+    expect(deleteCall).toBeDefined()
+    expect(deleteCall[1]).toEqual(['draft-1'])
   })
 })
