@@ -52,6 +52,7 @@ export async function loadProgramData(client: DbClient, allowedUserIds: string[]
         el.alternatives,
         el.weight_direction,
         el.equipment,
+        el.target_muscles,
         pe.sort_order,
         pe.sets_count,
         pe.rep_min,

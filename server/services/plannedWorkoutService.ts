@@ -177,6 +177,7 @@ export async function loadPlannedWorkouts(client: DbClient, userId: string, opti
             el.common_mistakes,
             el.alternatives,
             el.weight_direction,
+            el.target_muscles,
             pwe.sort_order,
             pwe.sets_count,
             pwe.rep_min,

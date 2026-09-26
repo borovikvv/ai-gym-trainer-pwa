@@ -377,6 +377,9 @@ export type ExercisePlan = {
    * bodyweight-упражнений с ненулевым weightStep (например, отжимания на
    * брусьях): у них прогрессия идёт повторами, а не килограммами. */
   equipment?: string | null
+  /** Issue #337: target_muscles из exercise_library — чтобы связывать зону боли
+   * с упражнением по метаданным, а не по подстроке названия. */
+  targetMuscles?: string[] | null
   prescription: string
   setsCount: number
   repMin: number

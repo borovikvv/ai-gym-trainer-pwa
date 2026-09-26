@@ -41,6 +41,8 @@ export interface NormalizedProgramExercise {
   weightDirection: string | null
   /** Issue #294: признак собственного веса из exercise_library.equipment. */
   equipment: string | null
+  /** Issue #337: target_muscles из exercise_library — для связи зоны боли с упражнением по метаданным. */
+  targetMuscles: string[]
 }
 
 export interface NormalizedLibraryExercise {
@@ -164,6 +166,9 @@ export function normalizeProgramExercise(row: DbRow): NormalizedProgramExercise 
     // Issue #294: признак собственного веса — как weightDirection, доезжает
     // от справочника через тот же провод.
     equipment: (row.equipment as string | null) ?? null,
+    // Issue #337: мышцы-цели из справочника — связываем зону боли с
+    // упражнением по метаданным, а не по подстроке названия.
+    targetMuscles: (row.target_muscles as string[]) ?? [],
   }
 }
 
