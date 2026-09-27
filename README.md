@@ -9,10 +9,10 @@ The app computes a personalized mesocycle (loading → accumulation → intensif
 | Layer | Tech |
 |-------|------|
 | Frontend | React 19, TypeScript 6 (strict), Vite 8, vite-plugin-pwa 1.3 |
-| Backend | Node.js (ESM), Express 5, pg 8 — **fully TypeScript, strict mode** |
+| Backend | Node.js (ESM), Express 5, pg 8 — TypeScript, strict mode (12 files still `@ts-nocheck`, gradual migration) |
 | Shared | `shared/types.ts` — single source of truth for cross-stack contracts |
 | DB / Auth | PostgreSQL (local) + Supabase (optional fallback) |
-| Tests | Vitest 4 + Testing Library + jsdom (474 tests) |
+| Tests | Vitest 4 + Testing Library + jsdom |
 | Lint | ESLint 10 + typescript-eslint 8 (type-checked, 0 errors) |
 | LLM | OpenAI-compatible (optional, for post-workout coach planning; falls back to rules) |
 
@@ -70,7 +70,7 @@ src/
   components/        UI components (CoachHome, GymScreen, ProgressScreen, etc.)
     ui/              Shared UI primitives (HeroStatus, MetricPair, SectionList, InfoHint, ...)
   hooks/             React hooks (useWorkoutSession, useProgramData, usePlannedWorkouts, ...)
-  contexts/          React contexts (NavigationContext, CoachContext, ProgramContext)
+  contexts/          React contexts (ProgramContext)
   domain/            Pure business logic (e1RM, mesocycle, progression, readinessCheckIn, ...)
   data/              API clients and repositories (programApi, workoutApi, ...)
   lib/               Shared utilities (format, muscleGroups, offlineQueue)
@@ -104,7 +104,9 @@ scripts/             Asset generators (Python + Node)
 
 ## CI
 
-GitHub Actions runs lint + type-check + tests + build on every push to `main` and `improvement/**`, and on every PR to `main`. See `.github/workflows/ci.yml`.
+- `ci.yml` — lint + type-check + tests + build, on every push to `main`/`improvement/**` and every PR to `main`.
+- `claude.yml` — planning (`needs-plan` label) and review (`@claude review` comment) side of the issue→PR pipeline.
+- `opencode.yml` — implementation side: writes code from the plan on `ready-for-code`, opens the PR.
 
 ## Architecture notes
 
