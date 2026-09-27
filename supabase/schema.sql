@@ -210,6 +210,23 @@ create table if not exists public.recommendations (
   created_at timestamptz not null default now()
 );
 
+-- Issue #6 phase 3: per-user adaptive MEV/MRV overrides. Originally applied
+-- via supabase/2026-06-23_volume_landmark_overrides.sql only — missing here
+-- meant a fresh restore never got the table, and RLS was never enabled
+-- (issue #362). This block is now the source of truth; the delta file stays
+-- for history.
+create table if not exists public.volume_landmark_overrides (
+  user_id text not null,
+  muscle_key text not null check (muscle_key in ('chest', 'back', 'legs', 'shoulders', 'arms', 'core')),
+  mev_override integer check (mev_override is null or (mev_override >= 2 and mev_override <= 30)),
+  mrv_override integer check (mrv_override is null or (mrv_override >= 4 and mrv_override <= 40)),
+  last_adjustment_iso timestamptz,
+  last_adjustment_reason text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, muscle_key)
+);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -260,6 +277,7 @@ alter table public.workout_sets enable row level security;
 alter table public.progression_events enable row level security;
 alter table public.workout_drafts enable row level security;
 alter table public.recommendations enable row level security;
+alter table public.volume_landmark_overrides enable row level security;
 
 -- MVP policy: the frontend uses the anon key without Supabase Auth yet.
 -- This is acceptable only for a private test link. Before public use, replace with auth.uid()-scoped policies.
@@ -269,7 +287,8 @@ declare
 begin
   foreach table_name in array array[
     'app_users', 'user_profiles', 'exercise_library', 'programs', 'program_days',
-    'program_exercises', 'planned_workouts', 'planned_workout_exercises', 'workout_sessions', 'workout_sets', 'progression_events', 'workout_drafts', 'recommendations'
+    'program_exercises', 'planned_workouts', 'planned_workout_exercises', 'workout_sessions', 'workout_sets', 'progression_events', 'workout_drafts', 'recommendations',
+    'volume_landmark_overrides'
   ] loop
     execute format('drop policy if exists "mvp_anon_select_%1$s" on public.%1$I', table_name);
     execute format('drop policy if exists "mvp_anon_insert_%1$s" on public.%1$I', table_name);
