@@ -53,7 +53,37 @@ pm2 restart ai-gym-trainer   # or: systemctl restart ai-gym-trainer
 
 # 6. Regenerate planned workouts (if mesocycle/pattern logic changed)
 node server/regeneratePlannedWorkouts.mjs --all-users
+
+# 7. Verify the token reaches the API THROUGH Caddy (not just the direct port) — see below
 ```
+
+## Headers reserved by infrastructure
+
+Caddy (`:443`) sits in front of the app with HTTP Basic Auth and owns the
+`Authorization` header — a request can carry only one Basic-auth credential,
+so app code must never read or write `Authorization`. The API auth token
+travels as `X-API-Token` instead (`server/auth.ts`, `src/data/apiAuth.ts`).
+Issue #360: a client that reused `Authorization` for its own token collided
+with Caddy's basic_auth and took prod down (401 on everything, including
+static files) until rolled back. Any PR adding a client-side auth header must
+check it against this list before merging.
+
+## Verifying auth through Caddy (issue #360)
+
+`curl 127.0.0.1:8910/...` only proves the API token works against the API
+directly — it never proves the request survives Caddy's basic-auth in front
+of it. Caddy's basic-auth password is only a bcrypt hash in the Caddyfile, so
+this step can't be scripted into CI; run it by hand after every deploy that
+touches auth headers or Caddy config:
+
+```bash
+BASIC_AUTH_USER=... BASIC_AUTH_PASS=... API_TOKEN=... \
+  ./scripts/verify-caddy-auth.sh https://trainer.borovikvv.ru
+```
+
+Expects `OK` (HTTP 200 on `/api/program-data` through Caddy). A 401 here
+means an app header is colliding with Caddy's basic-auth — see "Headers
+reserved by infrastructure" above.
 
 ## Database schema
 
@@ -128,8 +158,11 @@ curl http://127.0.0.1:8910/health
 node server/regeneratePlannedWorkouts.mjs --all-users
 ```
 
-### API returns 401
-Check HTTP Basic Auth credentials. User ID must match `app_users.id`.
+### API returns 401 (or the browser keeps prompting for a login)
+Most likely a header collision, not bad credentials — see "Headers reserved
+by infrastructure" above. Run `scripts/verify-caddy-auth.sh` to confirm.
+Otherwise check that `VITE_API_AUTH_TOKEN` (build-time) matches the server's
+`API_AUTH_TOKEN`.
 
 ### PWA shows old data (even after deploy)
 1. Hard refresh: iOS Safari → long-press reload → "Reload Without Content Blockers"
