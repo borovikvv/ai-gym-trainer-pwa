@@ -19,6 +19,7 @@ import { buildCoachDecision } from './coachDecision.js'
 import type { WeeklyVolumeStatus } from './weeklyVolumeTargets.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
+import { findLatestExerciseEntry, passesAssistedGraduation } from '../shared/pullUpProgression.js'
 import { CANONICAL_MUSCLE_KEYS, normalizeArmSubMuscles, normalizeBackPullPattern, normalizeExerciseMuscleGroup, normalizeLegSubMuscles, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { resolveWeightDirection, harderWeight, easierWeight, strongerOf, easierOf } from '../shared/weightDirection.js'
 import { roundWeight } from '../shared/format.js'
@@ -332,7 +333,12 @@ export async function buildGeneratedPlannedWorkout({
   refineWithLlm = false,
   weeklyVolume = null,
 }: BuildGeneratedPlannedWorkoutInput): Promise<GeneratedPlannedWorkout> {
-  const library = normalizeExerciseLibrary(exerciseLibrary)
+  const fullLibrary = normalizeExerciseLibrary(exerciseLibrary)
+  // Issue #370: подтягивания назначаются только после нуля в гравитроне, а сам
+  // гравитрон после нуля снимается — фильтр здесь закрывает все пути выбора
+  // (слоты групп, филлеры, кор-финишер, альтернативы LLM).
+  const fullLibraryIds = fullLibrary.map((exercise) => exercise.id)
+  const library = fullLibrary.filter((exercise) => passesAssistedGraduation(exercise.id, history, fullLibraryIds))
   const preferences = normalizePreferences(profile)
   // Issue #171: политика выводится из возраста профиля — передаём профиль,
   // а не один userId.
@@ -1530,10 +1536,8 @@ function isFreeWeightLike(exercise: NormalizedLibraryExercise): boolean {
 }
 
 function latestExerciseHistory(history: WorkoutHistoryEntry[], exerciseId: string): CompletedExerciseHistoryEntry | null {
-  return [...(history ?? [])]
-    .sort((a, b) => String(b.completedAt).localeCompare(String(a.completedAt)))
-    .flatMap((workout) => workout.exercises ?? [])
-    .find((exercise) => canonicalExerciseId(exercise) === canonicalExerciseId(exerciseId)) ?? null
+  // Issue #370: для подтягиваний история включает подходы гравитрона с 0 кг.
+  return findLatestExerciseEntry(history, exerciseId)
 }
 
 function intensityForGoal(goal: string | undefined): string {
