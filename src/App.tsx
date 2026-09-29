@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { ProgramExerciseEditor } from './components/ProgramExerciseEditor'
+import { ProgramLoadGate } from './components/ProgramLoadGate'
 import { CoachHomePage } from './pages/CoachHomePage'
 import { GymPage } from './pages/GymPage'
 import { PlanPage } from './pages/PlanPage'
@@ -99,6 +100,8 @@ function App() {
     setPlannedWorkouts,
     restoredDraftKey,
     setRestoredDraftKey,
+    programLoad,
+    retryProgramLoad,
   } = useProgramData({
     initialDraft,
     fallbackFirstUserId: fallbackFirstUser.id,
@@ -506,6 +509,10 @@ function App() {
   )
 
 
+  // Issue #368: без программы из базы (или её сохранённой копии) мок не показываем.
+  if (programLoad.status !== 'ready') {
+    return <ProgramLoadGate state={programLoad} onRetry={retryProgramLoad} />
+  }
 
   return (
     <ProgramProvider value={{
