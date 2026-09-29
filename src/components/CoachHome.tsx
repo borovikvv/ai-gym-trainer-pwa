@@ -254,7 +254,7 @@ export function CoachHome({
   }
 
   return (
-    <section className="screen active home-screen">
+    <section className="screen active home-screen" data-testid="home-screen">
       <ScreenHeader
         eyebrow={todayEyebrow()}
         title="Тренер"

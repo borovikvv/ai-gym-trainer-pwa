@@ -208,10 +208,21 @@ export type PlannedWorkout = {
   workoutDay: WorkoutDay
 }
 
+// Issue #368: код ответа нужен экрану ошибки — 401 значит «нет входа», а не
+// «база упала». Поле status читают структурно, класс наружу не импортируют.
+export class ProgramLoadError extends Error {
+  status: number
+
+  constructor(status: number) {
+    super(`API program load failed: ${status}`)
+    this.status = status
+  }
+}
+
 export async function loadProgramDataFromApi(): Promise<ProgramData> {
   if (!apiBaseUrl) return fallbackProgramData
   const response = await apiFetch(`${apiBaseUrl}/api/program-data`)
-  if (!response.ok) throw new Error(`API program load failed: ${response.status}`)
+  if (!response.ok) throw new ProgramLoadError(response.status)
   const data = (await response.json()) as ApiProgramData
   return mapApiProgramData(data)
 }

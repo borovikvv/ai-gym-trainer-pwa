@@ -8,6 +8,7 @@ import {
   type PlannedWorkout,
   type ProgramData,
 } from '../data/programApi'
+import { loadCachedProgramData, saveCachedProgramData } from '../data/programDataCache'
 import { supabase } from '../lib/supabaseClient'
 import { loadWorkoutHistoryFromSupabase } from '../data/workoutRepository'
 import { isWorkoutApiConfigured, loadActiveWorkoutDraftFromApi, loadWorkoutHistoryFromApi } from '../data/workoutApi'
@@ -87,6 +88,18 @@ export function loadPersistedActiveUserId(): string | null {
   return null
 }
 
+// Issue #368: пока программа не пришла из базы (или из сохранённой копии),
+// приложение не показывает мок из mockProgram.ts как реальные данные.
+export type ProgramLoadState =
+  | { status: 'loading' }
+  | { status: 'ready' }
+  | { status: 'error'; httpStatus: number | null }
+
+function httpStatusOf(error: unknown): number | null {
+  const status = (error as { status?: unknown } | null)?.status
+  return typeof status === 'number' ? status : null
+}
+
 type UseProgramDataOptions = {
   initialDraft: ActiveWorkoutDraft | null
   fallbackFirstUserId: string
@@ -110,6 +123,15 @@ export function useProgramData({
   notify,
 }: UseProgramDataOptions) {
   const [programData, setProgramData] = useState<ProgramData>(fallbackProgramData)
+  // Без настроенного API (dev/тесты) мок — единственный источник, ждать нечего.
+  const [programLoad, setProgramLoad] = useState<ProgramLoadState>(
+    isProgramApiConfigured ? { status: 'loading' } : { status: 'ready' },
+  )
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const retryProgramLoad = () => {
+    setProgramLoad({ status: 'loading' })
+    setLoadAttempt((attempt) => attempt + 1)
+  }
   // Priority for initial activeUserId:
   //   1. Draft's userId (if a workout was in progress)
   //   2. Persisted active user (from localStorage/sessionStorage — survives
@@ -136,41 +158,58 @@ export function useProgramData({
   useEffect(() => {
     if (!isProgramApiConfigured) return
     let cancelled = false
+    const applyProgramData = (remoteProgramData: ProgramData) => {
+      setProgramData(remoteProgramData)
+      const firstUser = remoteProgramData.users[0]
+      if (!firstUser) return
+      setActiveUserIdState((currentUserId) => {
+        const nextUserId = remoteProgramData.users.some((user) => user.id === currentUserId) ? currentUserId : firstUser.id
+        const nextDays = remoteProgramData.workoutDaysByUser[nextUserId] ?? remoteProgramData.workoutDays
+        const draftForUser = initialDraft?.userId === nextUserId ? initialDraft : null
+        const matchedDraftDay = draftForUser ? nextDays.find((day) => day.id === draftForUser.workoutDayId) : undefined
+        const nextDay = matchedDraftDay ?? nextDays[0]
+        if (draftForUser) {
+          setActiveWorkoutDayId(draftForUser.workoutDayId)
+          setActiveExerciseIndex(draftForUser.activeExerciseIndex)
+          setLogs(draftForUser.logs)
+          restoreSessionExercises(draftForUser)
+        } else if (nextDay) {
+          setActiveWorkoutDayId(nextDay.id)
+          const userTargets = buildNextTargets(loadHistory().filter((workout) => workout.userId === nextUserId))
+          setLogs(createInitialLogs(nextDay, userTargets))
+        }
+        return nextUserId
+      })
+      // Persist the resolved user ID (may differ from initial if API
+      // returned different users than fallback).
+      // We read it synchronously after setActiveUserIdState returns.
+      // The actual persisted value is set in the next render via
+      // setActiveUserId wrapper, but we also persist here for safety.
+    }
     loadProgramDataFromApi()
       .then((remoteProgramData) => {
         if (cancelled) return
-        setProgramData(remoteProgramData)
-        const firstUser = remoteProgramData.users[0]
-        if (!firstUser) return
-        setActiveUserIdState((currentUserId) => {
-          const nextUserId = remoteProgramData.users.some((user) => user.id === currentUserId) ? currentUserId : firstUser.id
-          const nextDays = remoteProgramData.workoutDaysByUser[nextUserId] ?? remoteProgramData.workoutDays
-          const draftForUser = initialDraft?.userId === nextUserId ? initialDraft : null
-          const matchedDraftDay = draftForUser ? nextDays.find((day) => day.id === draftForUser.workoutDayId) : undefined
-          const nextDay = matchedDraftDay ?? nextDays[0]
-          if (draftForUser) {
-            setActiveWorkoutDayId(draftForUser.workoutDayId)
-            setActiveExerciseIndex(draftForUser.activeExerciseIndex)
-            setLogs(draftForUser.logs)
-            restoreSessionExercises(draftForUser)
-          } else if (nextDay) {
-            setActiveWorkoutDayId(nextDay.id)
-            const userTargets = buildNextTargets(loadHistory().filter((workout) => workout.userId === nextUserId))
-            setLogs(createInitialLogs(nextDay, userTargets))
-          }
-          return nextUserId
-        })
-        // Persist the resolved user ID (may differ from initial if API
-        // returned different users than fallback).
-        // We read it synchronously after setActiveUserIdState returns.
-        // The actual persisted value is set in the next render via
-        // setActiveUserId wrapper, but we also persist here for safety.
+        saveCachedProgramData(remoteProgramData)
+        applyProgramData(remoteProgramData)
+        setProgramLoad({ status: 'ready' })
       })
-      .catch(() => notify('Программа из базы недоступна, показываем локальную'))
+      .catch((error: unknown) => {
+        if (cancelled) return
+        // Issue #368: вместо мока — последняя удачная копия; нет копии — экран
+        // ошибки с кодом ответа и повтором.
+        const cachedProgramData = loadCachedProgramData()
+        if (!cachedProgramData) {
+          setProgramLoad({ status: 'error', httpStatus: httpStatusOf(error) })
+          return
+        }
+        applyProgramData(cachedProgramData)
+        setProgramLoad({ status: 'ready' })
+        notify('Программа из базы недоступна, показываем сохранённую')
+      })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadAttempt])
 
   useEffect(() => {
     if (!isWorkoutApiConfigured || !activeUserId || remoteDraftLoadedUsers.current.has(activeUserId)) return
@@ -257,5 +296,7 @@ export function useProgramData({
     setPlannedWorkouts,
     restoredDraftKey,
     setRestoredDraftKey,
+    programLoad,
+    retryProgramLoad,
   }
 }
