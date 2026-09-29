@@ -2886,3 +2886,82 @@ describe('Issue #294: bodyweight exercises ignore fake historic weight', () => {
     expect(dips.targetWeight).toBe(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #370: гравитрон на нуле помощи → обычные подтягивания.
+// Подход в гравитроне с 0 кг — это и есть обычное подтягивание: он становится
+// базой истории `pull-up`, а гравитрон после него больше не назначается.
+// ---------------------------------------------------------------------------
+
+describe('Issue #370: переход с гравитрона на обычные подтягивания', () => {
+  const gravitron = { id: 'assisted-pull-up', name: 'Подтягивания в гравитроне', muscleGroup: 'Спина', setsCount: 3, repMin: 6, repMax: 10, targetWeight: 35, weightStep: 5, restSeconds: 90, weightDirection: 'assistance', equipment: 'machine' }
+  const pullUp = { id: 'pull-up', name: 'Подтягивания', muscleGroup: 'Спина', setsCount: 3, repMin: 3, repMax: 8, targetWeight: 0, weightStep: 0, restSeconds: 120, weightDirection: 'load', equipment: 'bodyweight' }
+  const backProfile = {
+    userId: 'vyacheslav',
+    age: 43,
+    goal: 'сила и мышечная масса',
+    level: 'intermediate',
+    workoutsPerWeek: 2,
+    targetWorkoutMinutes: 60,
+    preferences: { focusAreas: ['спина'], sessionStyle: 'moderate_stable' },
+  }
+  const readyState = {
+    recoveryStatus: 'ready',
+    readinessScore: 85,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'high' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'high' },
+      shoulders: { fatigue: 'high' },
+      arms: { fatigue: 'high' },
+      core: { fatigue: 'high' },
+    },
+    exercises: {},
+  }
+  const gravitronSession = (completedAt, weights) => ({
+    completedAt,
+    exercises: [{
+      exerciseId: 'assisted-pull-up',
+      exerciseName: 'Подтягивания в гравитроне',
+      muscleGroup: 'Спина',
+      nextRecommendedWeight: Math.min(...weights),
+      sets: weights.map((weight) => ({ weight, reps: 6, rpe: 8, completed: true })),
+    }],
+  })
+  const planIds = async (exerciseLibrary, history) => {
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: backProfile,
+      scheduledDate: '2026-09-30',
+      coachState: readyState,
+      exerciseLibrary,
+      history,
+    })
+    return plan.exercises.map((exercise) => exercise.exerciseId)
+  }
+
+  it('был подход с 0 кг помощи — план даёт подтягивания, гравитрон больше не назначается', async () => {
+    const ids = await planIds([gravitron, pullUp], [gravitronSession('2026-09-29T18:00:00Z', [10, 5, 0])])
+    expect(ids).toContain('pull-up')
+    expect(ids).not.toContain('assisted-pull-up')
+  })
+
+  it('помощь ещё больше нуля — остаётся гравитрон, подтягивания не назначаются', async () => {
+    const ids = await planIds([gravitron, pullUp], [gravitronSession('2026-09-29T18:00:00Z', [20, 15, 15])])
+    expect(ids).toContain('assisted-pull-up')
+    expect(ids).not.toContain('pull-up')
+  })
+
+  it('в справочнике нет подтягиваний (миграция не применена) — гравитрон не пропадает', async () => {
+    const ids = await planIds([gravitron], [gravitronSession('2026-09-29T18:00:00Z', [10, 0])])
+    expect(ids).toContain('assisted-pull-up')
+  })
+
+  it('после нуля пользователь вернулся к помощи — гравитрон снова доступен', async () => {
+    const ids = await planIds([gravitron, pullUp], [
+      gravitronSession('2026-09-29T18:00:00Z', [0]),
+      gravitronSession('2026-10-06T18:00:00Z', [15, 15]),
+    ])
+    expect(ids).toContain('assisted-pull-up')
+  })
+})
