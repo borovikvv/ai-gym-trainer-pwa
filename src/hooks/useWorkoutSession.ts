@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { applyLiveCoachSetUpdates } from '../domain/liveCoachSetUpdates'
+import { getCanonicalExerciseId } from '../domain/exerciseIdentity'
 import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '../domain/workoutHistory'
 import type { PlannedWorkout } from '../data/programApi'
 import type { ActiveWorkoutDraft } from './useProgramData'
@@ -94,6 +95,21 @@ type UseWorkoutSetActionsOptions = {
   requestServerNextSet: (payload: { completedSets: SetDraft[]; remainingSets: number; pain: boolean }) => Promise<NextSetHint | null>
   persistWorkoutDraft: (nextLogs: Record<string, ExerciseLog>) => void
   notify: (message: string) => void
+}
+
+// Issue #375: замена стартует с веса из истории САМОГО упражнения-замены. Ключ —
+// канонический id: у замены в сессии id `<id>-replacement-<ts>`, истории под
+// ним нет. Без истории остаётся вес справочника — вес исходного не подставляем.
+function withOwnHistoryWeight(exercise: ExercisePlan, nextTargets: Record<string, number>): ExercisePlan {
+  const historyWeight = nextTargets[getCanonicalExerciseId(exercise)]
+  if (typeof historyWeight !== 'number' || !Number.isFinite(historyWeight)) return exercise
+  const weightText = historyWeight > 0 ? `${formatWeight(historyWeight)} кг` : 'вес тела'
+  return {
+    ...exercise,
+    targetWeight: historyWeight,
+    // Подпись «рекомендовано N кг» должна совпадать с предзаполненным весом.
+    prescription: exercise.prescription.replace(/рекомендовано [^·]+/u, `рекомендовано ${weightText} `),
+  }
 }
 
 export function useWorkoutSetActions({
@@ -482,7 +498,7 @@ export function useWorkoutNavigation({
 
           function replaceCurrentExerciseInCurrentWorkout(exercise: ExercisePlan) {
             const replacementExercise: ExercisePlan = {
-              ...exercise,
+              ...withOwnHistoryWeight(exercise, nextTargets),
               id: `${exercise.id}-replacement-${Date.now()}`,
               programExerciseId: undefined,
               previous: 'заменено сегодня',
@@ -531,7 +547,7 @@ export function useWorkoutNavigation({
 
           function replaceNextExerciseInCurrentWorkout(exercise: ExercisePlan) {
     const replacementExercise: ExercisePlan = {
-      ...exercise,
+      ...withOwnHistoryWeight(exercise, nextTargets),
       id: `${exercise.id}-replacement-${Date.now()}`,
       programExerciseId: undefined,
       previous: 'заменено тренером сегодня',

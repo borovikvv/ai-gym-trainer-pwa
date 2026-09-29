@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createSets, useWorkoutNavigation, useWorkoutSetActions } from './useWorkoutSession'
 import type { ExercisePlan, WorkoutDay } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
+import { formatWeight } from '../lib/format'
 
 const bench: ExercisePlan = {
   id: 'bench-press',
@@ -198,5 +199,100 @@ describe('replaceNextExerciseInCurrentWorkout — лог старого упра
     expect(sessionExercises).toHaveLength(2)
     expect(sessionExercises[0].id).toBe(bench.id)
     expect(sessionExercises[1].id).toMatch(/^cable-fly-replacement-/)
+  })
+})
+
+// Issue #375: замена стартовала с веса справочника — история самого
+// упражнения-замены лежит под чистым/каноническим id, а в `nextTargets`
+// искался id с суффиксом -replacement-<ts>.
+describe('замена упражнения — стартовый вес из истории замены (#375)', () => {
+  const current: ExercisePlan = { ...bench, id: 'skull-crusher', name: 'Французский жим лёжа' }
+  const nextUp: ExercisePlan = { ...bench, id: 'incline-dumbbell-press', name: 'Жим гантелей на наклонной' }
+  const workoutDay = { id: 'day-1', name: 'День 1', label: '', description: '', exercises: [current, nextUp] } as WorkoutDay
+  const replacement: ExercisePlan = {
+    ...bench,
+    id: 'overhead-triceps-extension',
+    name: 'Разгибание рук из-за головы',
+    targetWeight: 5,
+    prescription: '3×8–12 · рекомендовано 5 кг · отдых 90 сек',
+  }
+
+  function makeOptions(nextTargets: Record<string, number>) {
+    const setLogs = vi.fn()
+    const persistWorkoutDraft = vi.fn()
+    const options = {
+      activeWorkoutDay: workoutDay,
+      activeWorkoutDayBase: workoutDay,
+      activeExerciseIndex: 0,
+      logs: {},
+      nextExercise: nextUp,
+      nextTargets,
+      draftStatus: '',
+      hasActiveDraft: true,
+      previewWorkoutDay: workoutDay,
+      manualWorkoutDaySelected: false,
+      nextPlannedWorkout: undefined,
+      trainingCalendar: [],
+      extraExercisesByDay: {},
+      setManualWorkoutDaySelected: vi.fn(),
+      setActiveSessionWorkoutDay: vi.fn(),
+      setWorkoutReadinessMode: vi.fn(),
+      setActiveWorkoutDayId: vi.fn(),
+      setActiveExerciseIndex: vi.fn(),
+      setRestRemainingSeconds: vi.fn(),
+      setCoachNextSetHint: vi.fn(),
+      setExerciseGuideOpen: vi.fn(),
+      setExtraExercisesByDay: vi.fn(),
+      setExercisePickerOpen: vi.fn(),
+      setLogs,
+      createExerciseLog: (exercise: ExercisePlan) => ({ exerciseId: exercise.id, pain: false, sets: createSets(exercise, nextTargets[exercise.id] ?? exercise.targetWeight) }),
+      persistWorkoutDraft,
+      navigate: vi.fn(),
+      notify: vi.fn(),
+      clearActiveWorkoutDay: vi.fn(),
+      clearActiveWorkoutDraft: vi.fn(),
+    } as unknown as Parameters<typeof useWorkoutNavigation>[0]
+    return { options, setLogs, persistWorkoutDraft }
+  }
+
+  const firstSetWeight = (setLogs: ReturnType<typeof vi.fn>) => {
+    const reducer = setLogs.mock.calls[0][0] as (state: Record<string, ExerciseLog>) => Record<string, ExerciseLog>
+    const nextLogs = reducer({})
+    const key = Object.keys(nextLogs).find((id) => id.startsWith('overhead-triceps-extension-replacement-'))!
+    return nextLogs[key].sets[0].weight
+  }
+
+  it('текущее упражнение: вес первого подхода — из истории замены, а не из справочника', () => {
+    const { options, setLogs, persistWorkoutDraft } = makeOptions({ 'overhead-triceps-extension': 12.5, 'skull-crusher': 30 })
+    const { result } = renderHook(() => useWorkoutNavigation(options))
+
+    act(() => result.current.replaceCurrentExerciseInCurrentWorkout(replacement))
+
+    expect(firstSetWeight(setLogs)).toBe(12.5)
+    const sessionExercises = persistWorkoutDraft.mock.calls[0][2] as ExercisePlan[]
+    expect(sessionExercises[0].targetWeight).toBe(12.5)
+    // Подпись «рекомендовано N кг» не остаётся со старым весом справочника.
+    expect(sessionExercises[0].prescription).toContain(formatWeight(12.5))
+    expect(sessionExercises[0].prescription).not.toContain(`рекомендовано ${formatWeight(5)} кг`)
+  })
+
+  it('следующее упражнение: вес первого подхода — из истории замены', () => {
+    const { options, setLogs, persistWorkoutDraft } = makeOptions({ 'overhead-triceps-extension': 12.5 })
+    const { result } = renderHook(() => useWorkoutNavigation(options))
+
+    act(() => result.current.replaceNextExerciseInCurrentWorkout(replacement))
+
+    expect(firstSetWeight(setLogs)).toBe(12.5)
+    const sessionExercises = persistWorkoutDraft.mock.calls[0][2] as ExercisePlan[]
+    expect(sessionExercises[1].targetWeight).toBe(12.5)
+  })
+
+  it('истории у замены нет — вес справочника, как раньше (вес исходного не подставляется)', () => {
+    const { options, setLogs } = makeOptions({ 'skull-crusher': 30 })
+    const { result } = renderHook(() => useWorkoutNavigation(options))
+
+    act(() => result.current.replaceCurrentExerciseInCurrentWorkout(replacement))
+
+    expect(firstSetWeight(setLogs)).toBe(5)
   })
 })

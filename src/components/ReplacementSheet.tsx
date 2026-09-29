@@ -1,4 +1,5 @@
 import type { ExercisePlan  } from '../../shared/types'
+import { getCanonicalExerciseId } from '../domain/exerciseIdentity'
 
 type ReplacementSheetProps = {
         exercise: ExercisePlan
@@ -12,7 +13,10 @@ export function ReplacementSheet({ exercise, exerciseLibrary, onChooseReplacemen
                 alternative,
                 exercise: exerciseLibrary.find((item) => item.name.toLowerCase() === alternative.name.toLowerCase()) ?? {
                         ...exercise,
-                        id: `${exercise.id}-alternative-${alternative.name.toLowerCase().replace(/\s+/g, '-')}`,
+                        // Issue #375: у заглушки своя идентичность — по названию. Id с суффиксом
+                        // исходного упражнения (`<исходный>-alternative-…`) канонизируется в
+                        // исходное, и замена получала его историю и вес.
+                        id: getCanonicalExerciseId({ name: alternative.name }),
                         name: alternative.name,
                         previous: 'замена на сегодня',
                         coachFocus: `${alternative.name}: ${alternative.reason}`,

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ReplacementSheet } from './ReplacementSheet'
 import type { ExercisePlan  } from '../../shared/types'
+import { getCanonicalExerciseId } from '../domain/exerciseIdentity'
 
 function makeExercise(partial: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name'>): ExercisePlan {
   return {
@@ -46,5 +47,59 @@ describe('ReplacementSheet', () => {
     await user.click(screen.getByRole('button', { name: /выбрать жим гантелей лёжа/i }))
 
     expect(onChooseReplacement).toHaveBeenCalledWith(expect.objectContaining({ id: 'db-press', name: 'Жим гантелей лёжа' }))
+  })
+
+  // Issue #375: альтернатива, которой нет в справочнике по точному названию,
+  // раньше собиралась копией исходного упражнения с id `<исходный>-alternative-…`,
+  // а каноническая нормализация срезала суффикс — замена «становилась» исходным
+  // упражнением и получала его историю.
+  it('заглушка замены не сворачивается в исходное упражнение', async () => {
+    const user = userEvent.setup()
+    const onChooseReplacement = vi.fn()
+    const original = makeExercise({
+      id: 'skull-crusher',
+      name: 'Французский жим лёжа',
+      alternatives: [{ name: 'Разгибание рук из-за головы', reason: 'вариант с гантелью' }],
+    })
+
+    render(
+      <ReplacementSheet
+        exercise={original}
+        exerciseLibrary={[]}
+        onChooseReplacement={onChooseReplacement}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /выбрать разгибание рук из-за головы/i }))
+
+    const chosen = onChooseReplacement.mock.calls[0][0] as ExercisePlan
+    expect(getCanonicalExerciseId(chosen)).not.toBe(getCanonicalExerciseId(original))
+    // Так id выглядит в сессии: useWorkoutNavigation дописывает -replacement-<ts>.
+    const inSession = { id: `${chosen.id}-replacement-1786124420031`, name: chosen.name }
+    expect(getCanonicalExerciseId(inSession)).toBe(getCanonicalExerciseId(chosen))
+    expect(getCanonicalExerciseId(inSession)).not.toBe('skull-crusher')
+  })
+
+  it('одна и та же альтернатива всегда получает один и тот же идентификатор', async () => {
+    const user = userEvent.setup()
+    const chosenIds: string[] = []
+    const original = makeExercise({
+      id: 'skull-crusher',
+      name: 'Французский жим лёжа',
+      alternatives: [{ name: 'Разгибание рук из-за головы', reason: 'вариант с гантелью' }],
+    })
+
+    for (let i = 0; i < 2; i += 1) {
+      const onChooseReplacement = vi.fn()
+      const { unmount } = render(
+        <ReplacementSheet exercise={original} exerciseLibrary={[]} onChooseReplacement={onChooseReplacement} onClose={vi.fn()} />,
+      )
+      await user.click(screen.getByRole('button', { name: /выбрать разгибание рук из-за головы/i }))
+      chosenIds.push(getCanonicalExerciseId(onChooseReplacement.mock.calls[0][0] as ExercisePlan))
+      unmount()
+    }
+
+    expect(chosenIds[0]).toBe(chosenIds[1])
   })
 })
