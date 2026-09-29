@@ -182,18 +182,22 @@ export function clampNextSetDecision(proposal: NextSetProposal, input: ClampNext
   if (rawNextSet && !input.pain && actionType !== 'stop_exercise' && actionType !== 'suggest_replacement') {
     let weight = Number(rawNextSet.weight)
     if (!Number.isFinite(weight) || weight < 0) weight = Number.isFinite(lastWeight) ? lastWeight : 0
+    // Issue #173: «вверх» = прогрессия (тяжелее), «вниз» = регрессия (легче).
+    // Для гравитрона прогрессия — это СНИЖЕНИЕ веса, поэтому числовые
+    // границы выводятся из направления, а не захардкожены как ±step.
+    const direction: WeightDirection = input.weightDirection === 'assistance' ? 'assistance' : 'load'
+    // Issue #369: у упражнения с помощью 0 кг — не «нет данных», а подход без
+    // помощи, самый тяжёлый вариант. Якорь есть и на нуле; для обычного веса
+    // ноль по-прежнему границ не даёт.
+    const hasWeightAnchor = Number.isFinite(lastWeight) && (lastWeight > 0 || (direction === 'assistance' && lastWeight === 0))
     if (input.timed || input.bodyweight) {
       // Упражнение на время / с собственным весом: веса нет по определению.
       weight = 0
-    } else if (Number.isFinite(lastWeight) && lastWeight > 0) {
+    } else if (hasWeightAnchor) {
       // Down: at most 2 steps below the last real set. Up: policy-limited
       // (Олег: 1 step), and never up at all right after a near-failure set
       // for no-failure users.
       const maxUpSteps = policy.allowFailureSets === false && Number.isFinite(lastRpe) && lastRpe >= 8 ? 0 : policy.maxWeightJumpSteps
-      // Issue #173: «вверх» = прогрессия (тяжелее), «вниз» = регрессия (легче).
-      // Для гравитрона прогрессия — это СНИЖЕНИЕ веса, поэтому числовые
-      // границы выводятся из направления, а не захардкожены как ±step.
-      const direction: WeightDirection = input.weightDirection === 'assistance' ? 'assistance' : 'load'
       const harderBound = harderWeight(lastWeight, maxUpSteps * step, direction)
       const easierBound = easierWeight(lastWeight, 2 * step, direction)
       const lower = Math.min(harderBound, easierBound)

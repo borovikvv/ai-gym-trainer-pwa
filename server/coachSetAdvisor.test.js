@@ -558,4 +558,78 @@ describe('Issue #173: clampNextSetDecision for assisted exercises', () => {
     // легче максимум на 2 шага: 30 + 5 = 35 (LLM предложил 60)
     expect(clamped.nextSet.weight).toBe(35)
   })
+
+  // Issue #369: 0 кг помощи — самый тяжёлый вариант, а не «нет данных».
+  // Раньше границы строились только при lastWeight > 0, и 60 кг от LLM проходили.
+  it('Issue #369: подход без помощи (0 кг) — 60 кг от LLM ограничены двумя шагами помощи', () => {
+    const clamped = clampNextSetDecision(
+      {
+        nextSet: { weight: 60, reps: 8, restSeconds: 120, targetRpe: 7 },
+        strategyAction: { type: 'hold' },
+        reason: 'x',
+      },
+      { userId: 'vyacheslav', lastSet: { weight: 0, reps: 8, rpe: 7 }, weightStep: 5, pain: false, weightDirection: 'assistance' },
+    )
+    // легче максимум на 2 шага: 0 + 10 = 10 (LLM предложил 60)
+    expect(clamped.nextSet.weight).toBe(10)
+    expect(clamped.wasClamped).toBe(true)
+  })
+
+  it('Issue #369: подход без помощи — предложение остаться без помощи не считается клампом', () => {
+    const clamped = clampNextSetDecision(
+      {
+        nextSet: { weight: 0, reps: 8, restSeconds: 120, targetRpe: 7 },
+        strategyAction: { type: 'hold' },
+        reason: 'x',
+      },
+      { userId: 'vyacheslav', lastSet: { weight: 0, reps: 8, rpe: 7 }, weightStep: 5, pain: false, weightDirection: 'assistance' },
+    )
+    expect(clamped.nextSet.weight).toBe(0)
+    expect(clamped.wasClamped).toBe(false)
+  })
+})
+
+describe('Issue #369: гравитрон после подхода без помощи', () => {
+  beforeEach(() => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  // Как в проде: направление веса определяется по названию, поля из справочника нет.
+  const GRAVITRON = {
+    id: 'assisted-pull-up',
+    name: 'Подтягивания в гравитроне',
+    muscleGroup: 'Спина',
+    repMin: 6,
+    repMax: 10,
+    weightStep: 5,
+    restSeconds: 90,
+    targetWeight: 60,
+    equipment: 'machine',
+  }
+
+  it('LLM предложил 60 кг после подхода с 0 кг — следующий вес не выше двух шагов помощи', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      nextSet: { weight: 60, reps: 6, restSeconds: 90, targetRpe: 7 },
+      strategyAction: { type: 'hold' },
+      reason: 'Возвращаемся к плановому весу.',
+    })))
+    const { decision } = await buildNextSetDecision({
+      client: fakeClient,
+      userId: 'vyacheslav',
+      exercise: GRAVITRON,
+      completedSets: [{ weight: 0, reps: 6, rpe: 7, completed: true }],
+      remainingSets: 2,
+      pain: false,
+      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 6, recommendedRestSeconds: 90 },
+    })
+    expect(decision.source).toBe('llm')
+    expect(decision.recommendedWeight).toBeLessThanOrEqual(10)
+    expect(decision.remainingSetUpdates.every((update) => update.recommendedWeight <= 10)).toBe(true)
+  })
 })
