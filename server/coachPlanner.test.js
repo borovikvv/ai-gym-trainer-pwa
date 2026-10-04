@@ -810,3 +810,59 @@ describe('прогрессия без веса', () => {
     expect(safe.changes[0]).toMatchObject({ repMin: 10, repMax: 12 })
   })
 })
+
+// Issue #343: шаг веса непропорционален рабочему весу (+2.5 кг к 10 кг — это
+// +25%) — рост по повторам, пока диапазон не упрётся в потолок.
+describe('шаг веса непропорционален весу', () => {
+  const lightIsolationDay = {
+    id: 'day-lateral',
+    name: 'День C',
+    label: 'Плечи',
+    sortOrder: 1,
+    exercises: [{
+      programExerciseId: 'pe-lateral',
+      exerciseId: 'lateral-raise',
+      name: 'Разведение гантелей в стороны',
+      muscleGroup: 'Плечи',
+      setsCount: 3,
+      repMin: 10,
+      repMax: 12,
+      targetWeight: 10,
+      weightStep: 2.5,
+      restSeconds: 75,
+    }],
+  }
+
+  const lightIsolationSession = {
+    id: 'session-lateral-12',
+    userId: 'vyacheslav',
+    workoutDayId: 'day-lateral',
+    workoutDayName: 'День C',
+    completedAt: '2026-06-05T20:00:00.000Z',
+    totalVolume: 360,
+    exercises: [{
+      exerciseId: 'lateral-raise',
+      exerciseName: 'Разведение гантелей в стороны',
+      muscleGroup: 'Плечи',
+      pain: false,
+      volume: 360,
+      nextRecommendedWeight: 10,
+      progressionType: 'increase',
+      progressionReason: 'все подходы на верхней границе',
+      sets: Array.from({ length: 3 }, () => ({ weight: 10, reps: 12, rpe: 7, completed: true })),
+    }],
+  }
+
+  it('диапазон повторов растёт, вес остаётся прежним', () => {
+    const plan = buildSafeCoachPlan({
+      profile,
+      workoutDays: [lightIsolationDay],
+      completedWorkout: null,
+      history: [lightIsolationSession],
+      exerciseLibrary,
+      now: new Date('2026-06-05T21:00:00.000Z'),
+    })
+
+    expect(plan.changes[0]).toMatchObject({ repMin: 11, repMax: 13, targetWeight: 10 })
+  })
+})

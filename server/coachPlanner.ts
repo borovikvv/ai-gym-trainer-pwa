@@ -8,6 +8,8 @@ import { formatWeight, roundWeight } from '../shared/format.js'
 // планировщик и оба дебрифа.
 import {
   isWeightlessProgression,
+  isDisproportionateStep,
+  resolveWeightDirection,
   nextRepRange,
   BODYWEIGHT_REP_CEILING,
   TIMED_SECONDS_CEILING,
@@ -258,24 +260,41 @@ export function buildSafeCoachPlan({
     let repMax = Number(exercise.repMax ?? 0)
     let repProgressNote = ''
     const weightless = isWeightlessProgression(targetWeight, Number(exercise.weightStep ?? exercise.weight_step ?? 0))
+    // Issue #343: шаг веса непропорционален рабочему весу (например, +2.5 кг к
+    // 10 кг — это +25%) — рост идёт по повторам, как у безвесовых, пока
+    // диапазон не упрётся в потолок. Для assisted (гравитрон) «вес» —
+    // противовес, а не рабочая нагрузка, порог не применяем.
+    const direction = resolveWeightDirection({
+      name: exercise.name,
+      weightDirection: exercise.weightDirection ?? exercise.weight_direction ?? null,
+    })
+    const disproportionateStep = !weightless && direction !== 'assistance' && isDisproportionateStep(targetWeight, Number(exercise.weightStep ?? exercise.weight_step ?? 0))
     // Условие идемпотентно: сдвигаем диапазон только если прошлая сессия
     // дотянула до ТЕКУЩЕЙ верхней границы. После сдвига (15 → 16) та же
     // история её уже не достаёт, и повторный прогон плана не двигает цель
     // второй раз без новых данных.
     const topReps = Math.max(0, ...(recent?.sets ?? []).filter((set) => set.completed !== false).map((set) => Number(set.reps) || 0))
-    if (weightless && !hadPain && recent?.progressionType === 'increase' && repMax > 0 && topReps >= repMax) {
+    if ((weightless || disproportionateStep) && !hadPain && recent?.progressionType === 'increase' && repMax > 0 && topReps >= repMax) {
       const timed = isTimedExerciseName(`${exercise.exerciseId ?? exercise.id ?? ''} ${exercise.name ?? ''}`)
       const unit = timed ? 'времени' : 'повторам'
       const next = nextRepRange({ repMin, repMax, timed })
       if (next.atCeiling) {
-        const harder = harderAlternative(exercise.alternatives, library)
-        repProgressNote = harder
-          ? `${exercise.name}: потолок по ${unit} — дальше растём не объёмом, а сложностью: ${harder.name}. `
-          : `${exercise.name}: потолок по ${unit} — дальше нужен более сложный вариант движения. `
+        // Issue #343: потолок диапазона. Для безвесовых зовём на вариант
+        // посложнее; при непропорциональном шаге вес уже увеличен
+        // calculateProgression (recent.nextRecommendedWeight → targetWeight),
+        // диапазон не трогаем.
+        if (weightless) {
+          const harder = harderAlternative(exercise.alternatives, library)
+          repProgressNote = harder
+            ? `${exercise.name}: потолок по ${unit} — дальше растём не объёмом, а сложностью: ${harder.name}. `
+            : `${exercise.name}: потолок по ${unit} — дальше нужен более сложный вариант движения. `
+        }
       } else {
         repMin = next.repMin
         repMax = next.repMax
-        repProgressNote = `${exercise.name}: вес добавить некуда, растём по ${unit} — ${repMin}–${repMax}. `
+        repProgressNote = weightless
+          ? `${exercise.name}: вес добавить некуда, растём по ${unit} — ${repMin}–${repMax}. `
+          : `${exercise.name}: шаг +${Number(exercise.weightStep ?? exercise.weight_step ?? 0)} кг слишком большой для этого веса, растём по ${unit} — ${repMin}–${repMax}. `
       }
     }
 

@@ -441,3 +441,58 @@ describe('Issue #247: rep deviation guards progression at the top of the range',
     expect(result.recommendedWeight).toBe(62.5)
   })
 })
+
+// Issue #343: фиксированный шаг веса (+2.5 кг) на лёгкой изоляции — это скачок
+// в десятки процентов рабочего веса. Пока шаг непропорционален (>10%), рост
+// идёт по повторам, а вес повышается, когда диапазон упёрся в потолок.
+describe('Issue #343: шаг непропорционален весу', () => {
+  const lateralRaiseAtTop = {
+    exerciseName: 'Разведение гантелей в стороны',
+    currentWeight: 10,
+    repMin: 10,
+    repMax: 12,
+    weightStep: 2.5,
+    sets: [
+      { weight: 10, reps: 12, rpe: 7, completed: true },
+      { weight: 10, reps: 12, rpe: 7, completed: true },
+      { weight: 10, reps: 12, rpe: 7, completed: true },
+    ],
+    pain: false,
+  }
+
+  it('10 кг + шаг 2.5: на верхней границе рост по повторам, а не +25%', () => {
+    const result = calculateProgression(lateralRaiseAtTop)
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(10)
+    expect(result.reason).not.toContain('+2.5 кг')
+    expect(result.reason).toContain('11–13 повторов')
+  })
+
+  it('150 кг + шаг 2.5: поведение прежнее — +2.5 кг', () => {
+    const result = calculateProgression({
+      ...lateralRaiseAtTop,
+      exerciseName: 'Присед со штангой',
+      currentWeight: 150,
+      sets: lateralRaiseAtTop.sets.map((set) => ({ ...set, weight: 150 })),
+    })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(152.5)
+    expect(result.reason).toContain('+2.5 кг')
+  })
+
+  it('у потолка диапазона повторов — обычный прыжок на шаг веса', () => {
+    const result = calculateProgression({
+      ...lateralRaiseAtTop,
+      repMin: 18,
+      repMax: 20,
+      sets: lateralRaiseAtTop.sets.map((set) => ({ ...set, reps: 20 })),
+    })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(12.5)
+    expect(result.reason).toContain('+2.5 кг')
+    expect(result.reason).not.toContain('вариант посложнее')
+  })
+})
