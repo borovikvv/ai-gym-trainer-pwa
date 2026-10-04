@@ -1,4 +1,4 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
+// @ts-expect-error — пакет `cors` поставляется без деклараций типов (нет @types/cors)
 import cors from 'cors'
 import express from 'express'
 import { pool } from './db.js'
@@ -29,7 +29,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? 'https://trainer.borovikvv.ru
   .filter(Boolean)
 
 app.use(cors({
-  origin(origin, callback) {
+  origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true)
       return

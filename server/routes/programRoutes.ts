@@ -1,4 +1,3 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { Router } from 'express'
 import { pool } from '../db.js'
 import { loadProgramData, updateProgramExercise } from '../services/programService.js'

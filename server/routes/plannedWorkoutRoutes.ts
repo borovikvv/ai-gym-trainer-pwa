@@ -1,4 +1,3 @@
-// @ts-nocheck — gradual TS migration (issue #4); types will be tightened in follow-up
 import { Router } from 'express'
 import { pool } from '../db.js'
 import { cascadeRegenerateFutureWorkouts, createGeneratedPlannedWorkoutForDate, ensureDefaultPlannedWorkouts, loadPlannedWorkouts, regeneratePlannedWorkout, replacePlannedTrainingRange } from '../services/plannedWorkoutService.js'
@@ -50,7 +49,7 @@ plannedWorkoutRoutes.post('/planned-workouts', async (req, res, next) => {
 
 plannedWorkoutRoutes.post('/planned-workouts/week', async (req, res, next) => {
   const userId = assertAllowedUserId(req.body?.userId)
-  const dates = Array.isArray(req.body?.dates) ? Array.from(new Set(req.body.dates.map(String))).sort() : []
+  const dates: string[] = Array.isArray(req.body?.dates) ? Array.from(new Set<string>(req.body.dates.map(String))).sort() : []
   if (dates.length === 0) return res.status(400).json({ error: 'dates are required' })
   if (dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))) return res.status(400).json({ error: 'dates must be YYYY-MM-DD' })
   const rangeStart = req.body?.rangeStart ? String(req.body.rangeStart) : dates[0]
