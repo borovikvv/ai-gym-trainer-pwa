@@ -73,8 +73,8 @@ describe('CurrentStepCard', () => {
     const doneBtn = screen.getByRole('button', { name: /подход 2 выполнен/i })
     expect(doneBtn).toBeDisabled()
 
-    // Select RIR = 8 (Тяж)
-    await user.click(screen.getByRole('button', { name: /тяж.*1.*2/i }))
+    // Select RIR = 8 (Тяж, 2 повтора в запасе)
+    await user.click(screen.getByRole('button', { name: /тяж.*2/i }))
 
     // Now Готово is enabled
     expect(doneBtn).not.toBeDisabled()
@@ -83,6 +83,17 @@ describe('CurrentStepCard', () => {
     // setLogs с completed), отдельного updateSet больше нет.
     await user.click(doneBtn)
     expect(markSetDone).toHaveBeenCalledWith(1, { rpe: 8 })
+  })
+
+  it('Issue #344: точка «1 в запасе» (Жёстко) пишет rpe 9', async () => {
+    const user = userEvent.setup()
+    const markSetDone = vi.fn()
+    render(<CurrentStepCard {...baseProps({ markSetDone })} />)
+
+    await user.click(screen.getByRole('button', { name: /жёстко/i }))
+    await user.click(screen.getByRole('button', { name: /подход 2 выполнен/i }))
+
+    expect(markSetDone).toHaveBeenCalledWith(1, { rpe: 9 })
   })
 
   it('режим отдыха: таймер, цель следующего подхода, +30 с и пропуск', async () => {

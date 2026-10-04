@@ -2,7 +2,7 @@
 //
 // The card now shows:
 // 1. Two ± steppers for weight (by weightStep) and reps (by 1)
-// 2. RIR scale: 4 dots (4+/3/1-2/0) — user taps one to select difficulty
+// 2. RIR scale: 5 dots (4+/3/2/1/0) — user taps one to select difficulty
 // 3. "Готово · подход N" button — disabled until RIR is chosen
 // 4. Coach hint line with green left border (tag / value / note)
 //
@@ -126,11 +126,12 @@ export function CurrentStepCard({
   const currentReps = activeSet?.reps ?? exercise.repMin ?? 0
   const weightStep = exercise.weightStep > 0 ? exercise.weightStep : 2.5
 
-  // RIR dots: short labels + tone for the 4 options (запас → отказ)
+  // RIR dots: short labels + tone for the 5 options (запас → отказ)
   const rirDots = [
     { rpe: 6, label: '4+', hint: 'Легко', tone: 'success' },
     { rpe: 7, label: '3', hint: 'Норм', tone: 'success' },
-    { rpe: 8, label: '1–2', hint: 'Тяж', tone: 'warning' },
+    { rpe: 8, label: '2', hint: 'Тяж', tone: 'warning' },
+    { rpe: 9, label: '1', hint: 'Жёстко', tone: 'danger' },
     { rpe: 10, label: '0', hint: 'Макс', tone: 'danger' },
   ]
 

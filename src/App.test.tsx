@@ -109,8 +109,8 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Жим лёжа' })).toBeInTheDocument()
     expect(screen.queryByText(/RPE/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Норм — 3 в запасе' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Тяж — 1–2 в запасе' }))
-    expect(screen.getByRole('button', { name: 'Тяж — 1–2 в запасе' })).toHaveClass('rir-dot--active')
+    await user.click(screen.getByRole('button', { name: 'Тяж — 2 в запасе' }))
+    expect(screen.getByRole('button', { name: 'Тяж — 2 в запасе' })).toHaveClass('rir-dot--active')
 
     const firstSetReps = screen.getByLabelText('Повторы')
     await user.clear(firstSetReps)

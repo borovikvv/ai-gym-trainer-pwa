@@ -173,6 +173,27 @@ describe('calculateProgression', () => {
     expect(result.type).not.toBe('increase')
   })
 
+  it('Issue #344: все сеты RPE 9 на верхней границе → hold, а не increase', () => {
+    const result = calculateProgression({
+      exerciseName: 'Жим лёжа',
+      currentWeight: 60,
+      repMin: 8,
+      repMax: 10,
+      weightStep: 2.5,
+      sets: [
+        { weight: 60, reps: 10, rpe: 9, completed: true },
+        { weight: 60, reps: 10, rpe: 9, completed: true },
+        { weight: 60, reps: 10, rpe: 9, completed: true },
+      ],
+      pain: false,
+    })
+
+    // Запас 1 повтор (RPE 9) — не «под контролем»: половина подходов на
+    // высоком RPE оставляет вес, а не разрешает прибавку.
+    expect(result.type).toBe('hold')
+    expect(result.type).not.toBe('increase')
+  })
+
   it('handles gravitron progression when current weight is already 0', () => {
     const result = calculateProgression({
       exerciseName: 'Подтягивания в гравитроне',
