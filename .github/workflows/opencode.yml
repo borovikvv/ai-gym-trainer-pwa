@@ -39,7 +39,7 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
-          model: opencode/deepseek-v4-flash
+          model: opencode/deepseek-v4.1-flash
           prompt: |
             В issue #${{ github.event.issue.number }} есть комментарий с планом от Claude. Выполни его.
 
@@ -115,7 +115,7 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
-          model: opencode/deepseek-v4-flash
+          model: opencode/deepseek-v4.1-flash
           prompt: |
             На PR #${{ github.event.pull_request.number }} ревью оставило замечания. Исправь их.
 
