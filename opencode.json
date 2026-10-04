@@ -7,5 +7,5 @@
       }
     }
   },
-  "small_model": "opencode/deepseek-v4-flash"
+  "small_model": "opencode/deepseek-v4.1-flash"
 }
