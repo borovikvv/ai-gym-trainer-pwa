@@ -8,6 +8,7 @@
     "api": "tsx --env-file=.env.local server/index.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "migrate": "node supabase/migrate.mjs",
     "test": "vitest run",
     "preview": "vite preview"
   },

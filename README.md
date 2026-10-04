@@ -54,11 +54,13 @@ npm run build
 
 ## Database migrations
 
-Migrations live in `supabase/` as plain SQL files. Apply with:
+Migrations live in `supabase/` as plain SQL files. Apply all pending migrations with:
 
 ```bash
-node supabase/apply-migration.mjs supabase/2026-06-15_quality_score.sql
+npm run migrate
 ```
+
+Only files not yet recorded in `schema_migrations` are applied, each in its own transaction.
 
 The server does NOT run DDL on startup — migrations must be applied out-of-band during deploy.
 

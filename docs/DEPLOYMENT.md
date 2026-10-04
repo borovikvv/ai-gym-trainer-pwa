@@ -42,8 +42,9 @@ npm install
 # 3a. Sync the DB schema — ALWAYS, every deploy (idempotent, see below)
 node supabase/apply-migration.mjs supabase/schema.sql
 
-# 3b. Apply data migrations — only new supabase/2026-*.sql files since last deploy
-node supabase/apply-migration.mjs supabase/2026-XX-XX_new_migration.sql
+# 3b. Apply pending data migrations — only new supabase/2026-*.sql files,
+#     each tracked in schema_migrations
+npm run migrate
 
 # 4. Build frontend + type-check backend
 npm run build
@@ -91,12 +92,19 @@ reserved by infrastructure" above.
 `add column if not exists`, `drop trigger if exists` + recreate), so step 3a can
 run on every deploy and is the mechanism that keeps prod columns in sync. It
 carries DDL only — data migrations (exercise library seeds, backfills) live in
-`supabase/2026-*.sql` and still have to be applied by hand, once each.
+`supabase/2026-*.sql` and are applied by `npm run migrate`, once each.
 
 Issue #194: three columns (`user_rating`, `pain_log`, `performed_at`) were added
 to `schema.sql` without a delta file, prod never got them, and every workout
 failed to save for two days. Running `schema.sql` on deploy is what prevents the
 repeat — a delta file is a courtesy for review, not the sync mechanism.
+
+`schema_migrations` is the bookkeeping table; `migrate.mjs` creates it on every
+run. `npm run migrate` applies only new `supabase/2026-*.sql` files, in order,
+each in its own transaction. On prod, where some files were applied by hand
+before this mechanism existed, run `node supabase/migrate.mjs --baseline` once
+(marks the current files as applied without running them), then deploy with
+`npm run migrate`.
 
 ## When to regenerate planned workouts
 
