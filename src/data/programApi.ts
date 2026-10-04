@@ -2,7 +2,7 @@ import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import type { BodyWeightMeasurement } from '../../shared/bodyWeight'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { users as fallbackUsers, workoutDays as fallbackWorkoutDays } from './mockProgram'
-import type { ExercisePlan, UserProfile, WorkoutDay } from '../../shared/types'
+import type { BlockSummary, ExercisePlan, UserProfile, WorkoutDay } from '../../shared/types'
 import { formatWeight } from '../lib/format'
 import { apiFetch } from './apiAuth'
 
@@ -354,6 +354,20 @@ export async function loadCoachMemoryAndState(
     coachMemory: data.coachMemory ?? null,
     coachState: data.coachState ?? null,
   }
+}
+
+// Issue #350: итог мезоцикла — на разгрузочной неделе. Без baseUrl (например,
+// в тестах) запроса нет и итог не выдумывается.
+export async function fetchBlockSummaryFromApi(
+  userId: string,
+  fetcher: typeof fetch = apiFetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<BlockSummary | null> {
+  if (!baseUrl) return null
+  const response = await fetcher(`${baseUrl}/api/coach/block-summary/${encodeURIComponent(userId)}`)
+  if (!response.ok) throw new Error(`API block summary load failed: ${response.status}`)
+  const data = await response.json() as { summary?: BlockSummary }
+  return data.summary ?? null
 }
 
 export async function loadPlannedWorkoutsFromApi(

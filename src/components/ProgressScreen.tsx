@@ -5,6 +5,7 @@ import { isProgramApiConfigured } from '../data/programApi'
 import { apiFetch } from '../data/apiAuth'
 import { pluralRu } from '../lib/format'
 import { useBodyWeightLog } from '../hooks/useBodyWeightLog'
+import { BlockSummaryCard } from './BlockSummaryCard'
 import { BODY_WEIGHT_TREND_WINDOW_DAYS } from '../../shared/bodyWeight'
 
 type ProgressScreenProps = {
@@ -164,6 +165,9 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
     <section className="screen active progress-screen">
       <ScreenHeader eyebrow="Прогресс · 14 дней" title="Динамика" />
       <span className="sr-only">Панель динамики</span>
+
+      {/* Issue #350: итог блока на разгрузочной неделе. */}
+      <BlockSummaryCard userId={activeUserId} />
 
       {/* Issue #108: "Что изменил тренер" — shows decision.changes from the
           latest training record. Replaces the old "Анализ тренера" section

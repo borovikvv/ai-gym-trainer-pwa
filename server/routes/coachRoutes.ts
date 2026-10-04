@@ -16,6 +16,7 @@ import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/
 import { requireAllowedUserId } from '../privateUsers.js'
 import { llmRateLimiter } from '../rateLimit.js'
 import { loadGoals, loadLongTermMemoryBlock, loadMemoryFacts, refreshGoalProgress } from '../coachLongTermMemory.js'
+import { buildBlockSummary } from '../blockSummary.js'
 
 export const coachRoutes = Router()
 
@@ -143,6 +144,28 @@ coachRoutes.get('/coach/memory/:userId', requireAllowedUserId, async (req, res) 
   // Issue #174: blockGoal — цель текущего блока со сверкой факта и ожидания.
   // Issue #166: weeklyVolume — недельные цели по группам, факт и остаток.
   res.json({ ok: true, coachMemory, coachState, memoryFacts, goals, blockGoal, weeklyVolume })
+})
+
+// Issue #350: итог мезоцикла на разгрузочной неделе. preferredExerciseId — как
+// в syncBlockGoalForUser: первая активная цель с упражнением.
+coachRoutes.get('/coach/block-summary/:userId', requireAllowedUserId, async (req, res) => {
+  const userId = String(req.params.userId)
+  const { coachState, blockGoal, e1rmHistories, history, profile } = await loadCoachMemoryForUser(pool, userId)
+  const goals = await loadGoals(pool, userId, 'active').catch(() => [])
+  const summary = buildBlockSummary({
+    goal: blockGoal,
+    mesocycle: coachState.mesocycle,
+    e1rmHistories,
+    history,
+    profile: {
+      age: profile?.age,
+      level: profile?.level,
+      goal: profile?.goal,
+      workoutsPerWeek: profile?.workoutsPerWeek,
+    },
+    preferredExerciseId: goals.find((goal) => goal.exerciseId)?.exerciseId ?? null,
+  })
+  res.json({ ok: true, summary })
 })
 
 coachRoutes.post('/coach/live-strategy', requireAllowedUserId, llmRateLimiter, async (req, res) => {
