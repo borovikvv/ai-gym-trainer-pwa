@@ -6,6 +6,7 @@ import {
   strongerOf,
   easierOf,
   isWeightlessProgression,
+  isDisproportionateStep,
   nextRepRange,
   BODYWEIGHT_REP_CEILING,
   TIMED_SECONDS_CEILING,
@@ -116,6 +117,25 @@ describe('isWeightlessProgression', () => {
   it('без шага (дебрифы) считает по одному весу', () => {
     expect(isWeightlessProgression(0)).toBe(true)
     expect(isWeightlessProgression(47.5)).toBe(false)
+  })
+})
+
+describe('isDisproportionateStep', () => {
+  it('шаг 2.5 кг к весу 10 кг — это 25%, непропорционален', () => {
+    expect(isDisproportionateStep(10, 2.5)).toBe(true)
+  })
+
+  it('шаг 2.5 кг к весу 150 кг — это 1.7%, пропорционален', () => {
+    expect(isDisproportionateStep(150, 2.5)).toBe(false)
+  })
+
+  it('ровно 10% — порог строгий, непропорциональным не считается', () => {
+    expect(isDisproportionateStep(10, 1)).toBe(false)
+  })
+
+  it('нулевой вес или шаг — не непропорционален', () => {
+    expect(isDisproportionateStep(0, 2.5)).toBe(false)
+    expect(isDisproportionateStep(10, 0)).toBe(false)
   })
 })
 

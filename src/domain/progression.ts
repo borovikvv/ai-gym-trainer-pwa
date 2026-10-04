@@ -1,4 +1,4 @@
-import { resolveWeightDirection, harderWeight, easierWeight, isWeightlessProgression, nextRepRange } from '../../shared/weightDirection'
+import { resolveWeightDirection, harderWeight, easierWeight, isWeightlessProgression, isDisproportionateStep, nextRepRange } from '../../shared/weightDirection'
 import { isTimedExerciseName } from '../../shared/muscleGroups'
 import { EFFORT_RISE_DEVIATION } from './repExpectation'
 // Issue #98 PR2: ProgressionType unified in shared/types.ts
@@ -68,6 +68,10 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
   // Issue #294: для bodyweight-упражнений (equipment из справочника) весовая
   // ветка не включается даже при ненулевом шаге — прогрессия по повторам.
   const weightless = input.equipment === 'bodyweight' || isWeightlessProgression(input.currentWeight, input.weightStep)
+  // Issue #343: шаг веса непропорционален рабочему весу (например, +2.5 кг к
+  // 10 кг — это +25%) — рост идёт по повторам, пока запас не покроет шаг.
+  // Для assisted (гравитрон) «вес» — противовес, порог не применяем.
+  const disproportionateStep = !weightless && !assisted && isDisproportionateStep(input.currentWeight, input.weightStep)
   const timed = isTimedExerciseName(input.exerciseName)
   const unit = timed ? 'сек' : 'повторов'
 
@@ -109,17 +113,27 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
     // Issue #192: у отжиманий и планки шага веса нет — «+0 кг» было советом
     // сделать ровно то, что уже сделано. Растёт диапазон повторов (планировщик
     // выписывает его в следующий план), у потолка — вариант посложнее.
-    const next = weightless
+    // Issue #343: то же, когда шаг веса непропорционален рабочему весу — вес не
+    // трогаем, пока диапазон повторов не упёрся в потолок (запас «набран»).
+    const next = (weightless || disproportionateStep)
       ? nextRepRange({ repMin: input.repMin, repMax: input.repMax, timed })
       : null
     return {
       // Issue #294: для bodyweight рост — по повторам, вес не меняется
       // (harderWeight(0, step) создавал фиктивные +шаг кг).
-      recommendedWeight: weightless ? input.currentWeight : nextWeight,
+      // Issue #343: при непропорциональном шаге вес не трогаем, пока диапазон
+      // не упёрся в потолок, — у потолка обычный прыжок на weightStep.
+      recommendedWeight: weightless
+        ? input.currentWeight
+        : disproportionateStep
+          ? (next?.atCeiling ? nextWeight : input.currentWeight)
+          : nextWeight,
       type: 'increase',
       reason: next
         ? next.atCeiling
-          ? `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — по ${unit} расти дальше некуда, следующий шаг — вариант посложнее.`
+          ? weightless
+            ? `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — по ${unit} расти дальше некуда, следующий шаг — вариант посложнее.`
+            : `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — по ${unit} расти дальше некуда — следующий раз +${input.weightStep} кг.`
           : `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — следующий раз ${next.repMin}–${next.repMax} ${unit}.`
         : assisted
           ? `${input.exerciseName}: все подходы на верхней границе и RPE под контролем — следующий раз уменьшаем помощь на ${input.weightStep} кг.`
