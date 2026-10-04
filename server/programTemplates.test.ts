@@ -3,8 +3,8 @@ import { dayTemplate } from './programTemplates.js'
 
 describe('program day templates', () => {
   it('uses full body A/B templates for two trainings per week', () => {
-    const dayA = dayTemplate(1, 2)
-    const dayB = dayTemplate(2, 2)
+    const dayA = dayTemplate(1, 2)!
+    const dayB = dayTemplate(2, 2)!
 
     expect(dayA.label).toBe('Full Body A')
     expect(dayB.label).toBe('Full Body B')

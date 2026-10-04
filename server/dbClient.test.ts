@@ -3,10 +3,10 @@ import { nonFatal } from './dbClient.ts'
 
 /** Клиент с открытой транзакцией: savepoint принимается. */
 function transactionClient() {
-  const statements = []
+  const statements: string[] = []
   return {
     statements,
-    query: vi.fn(async (text) => {
+    query: vi.fn(async (text: string) => {
       statements.push(text)
       return { rows: [], rowCount: 0 }
     }),
@@ -42,10 +42,10 @@ describe('nonFatal', () => {
   it('ошибка, проглоченная внутри, ловится через release: возвращается запасное значение', async () => {
     // Транзакция уже aborted, но сама работа ошибки не бросила (внутренний
     // catch) — тогда падает release, и это единственный признак беды.
-    const statements = []
+    const statements: string[] = []
     const client = {
       statements,
-      query: vi.fn(async (text) => {
+      query: vi.fn(async (text: string) => {
         statements.push(text)
         if (text.startsWith('release')) throw new Error('current transaction is aborted')
         return { rows: [], rowCount: 0 }

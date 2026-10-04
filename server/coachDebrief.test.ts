@@ -5,14 +5,25 @@ describe('post-workout coach debrief', () => {
   it('builds a concise trainer debrief from completed sets', () => {
     const debrief = buildWorkoutDebrief({
       totalVolume: 640,
-      readinessCheckIn: { sleepQuality: 2, energy: 2, stress: 4, availableMinutes: 35 },
+      readinessCheckIn: {
+        sleepQuality: 2,
+        energy: 2,
+        stress: 4,
+        soreness: 'none',
+        soreMuscleGroups: [],
+        painAreas: [],
+        availableMinutes: 35,
+        notes: '',
+      },
       exercises: [
         {
+          exerciseId: 'bench-press',
           exerciseName: 'Жим лёжа',
           pain: false,
           progressionType: 'deload',
           progressionReason: 'был подход на пределе',
           nextRecommendedWeight: 37.5,
+          volume: 640,
           sets: [{ weight: 40, reps: 8, rpe: 10, completed: true }],
         },
       ],
@@ -34,6 +45,7 @@ describe('post-workout coach debrief', () => {
       progressed: ['прогресс'],
       nextChanges: ['дальше'],
       why: 'почему',
+      qualityScore: 0,
     }
 
     await saveWorkoutDebriefRecommendation(client, entry, debrief)

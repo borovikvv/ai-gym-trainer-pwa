@@ -3,15 +3,16 @@ import { buildCoachDecisionLogEntry, storeCoachDecisionLog } from './coachDecisi
 
 describe('coach decision log', () => {
   it('builds a compact structured decision entry without raw secrets', () => {
+    const inputs = {
+      coachState: { readinessScore: 62, recoveryStatus: 'partial' },
+      apiKey: 'secret',
+    }
     const entry = buildCoachDecisionLogEntry({
       userId: 'oleg',
       sessionId: 'session-1',
       decisionType: 'live_strategy',
       source: 'llm',
-      inputs: {
-        coachState: { readinessScore: 62, recoveryStatus: 'partial' },
-        apiKey: 'secret',
-      },
+      inputs,
       decision: {
         summary: 'Убрать отказные подходы.',
         actions: [{ type: 'reduce_remaining_volume', reason: 'RPE высокий.' }],
@@ -33,6 +34,8 @@ describe('coach decision log', () => {
       sessionId: 'session-2',
       decisionType: 'post_workout_plan',
       source: 'rules',
+      createdAt: new Date().toISOString(),
+      inputSummary: { readinessScore: null, recoveryStatus: null, weeklyLoadStatus: null, painWarnings: [] },
       decisionSummary: 'Следующую тренировку сделать умеренной.',
       payload: { ok: true },
     })
