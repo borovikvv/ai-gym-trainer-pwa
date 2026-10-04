@@ -4,6 +4,9 @@ import { deleteWorkoutDraft, loadActiveWorkoutDraft, loadWorkoutHistory, saveWor
 import { runMemoryReflection } from '../services/memoryReflectionService.js'
 import { buildWorkoutSavedEvent, logActivity } from '../activityLog.js'
 import { assertAllowedUserId, getAllowedUserIds } from '../privateUsers.js'
+import { workoutHistoryEntrySchema } from '../../shared/schemas/workoutHistory.js'
+import { workoutDraftSchema } from '../../shared/schemas/workoutDraft.js'
+import { parseOrThrow } from '../../shared/validate.js'
 
 export const workoutRoutes = Router()
 
@@ -13,6 +16,7 @@ workoutRoutes.get('/workout-history', async (_req, res) => {
 
 workoutRoutes.post('/workout-history', async (req, res, next) => {
   assertAllowedUserId(req.body?.userId)
+  req.body = parseOrThrow(workoutHistoryEntrySchema, req.body)
   const client = await pool.connect()
   try {
 	    await client.query('begin')
@@ -39,7 +43,7 @@ workoutRoutes.post('/workout-history', async (req, res, next) => {
 
 workoutRoutes.post('/workout-drafts', async (req, res) => {
   assertAllowedUserId(req.body?.userId)
-  const id = await saveWorkoutDraft(pool, req.body ?? {})
+  const id = await saveWorkoutDraft(pool, parseOrThrow(workoutDraftSchema, req.body ?? {}))
   res.status(201).json({ ok: true, id })
 })
 
