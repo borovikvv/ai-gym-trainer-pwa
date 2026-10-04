@@ -15,12 +15,13 @@ alter table public.exercise_library
   add constraint exercise_library_weight_direction_check
   check (weight_direction is null or weight_direction in ('load', 'assistance'));
 
--- Backfill: assisted machines (gravitron / assisted) get 'assistance',
--- everything else 'load'. Matches the legacy isAssistedExercise name check.
+-- Backfill: assisted machines (gravitron / assisted) get 'assistance' by
+-- name match, regardless of the current value — on a fresh DB schema.sql
+-- already sets weight_direction not null default 'load', so gating this
+-- on `is null` (issue #374) never matches and gravitron rows stay 'load'.
 update public.exercise_library
 set weight_direction = 'assistance'
-where weight_direction is null
-  and (lower(name) like '%гравитрон%' or lower(name) like '%assisted%');
+where lower(name) like '%гравитрон%' or lower(name) like '%assisted%';
 
 update public.exercise_library
 set weight_direction = 'load'
