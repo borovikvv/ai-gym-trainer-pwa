@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import {
   fallbackProgramData,
@@ -143,10 +143,10 @@ export function useProgramData({
   // Wrap setActiveUserId to also persist to localStorage + sessionStorage.
   // This ensures the selected user survives page refreshes even when the
   // workout draft is lost (iOS Safari localStorage eviction).
-  const setActiveUserId = (userId: string) => {
+  const setActiveUserId = useCallback((userId: string) => {
     setActiveUserIdState(userId)
     persistActiveUserId(userId)
-  }
+  }, [])
   const [activeWorkoutDayId, setActiveWorkoutDayId] = useState(initialDraft?.workoutDayId ?? fallbackFirstWorkoutDayId)
   const [history, setHistory] = useState<WorkoutHistoryEntry[]>(loadHistory)
   const [plannedWorkouts, setPlannedWorkouts] = useState<PlannedWorkout[]>([])
@@ -209,7 +209,7 @@ export function useProgramData({
     return () => {
       cancelled = true
     }
-  }, [loadAttempt])
+  }, [loadAttempt, initialDraft, setActiveExerciseIndex, setLogs, createInitialLogs, restoreSessionExercises, notify])
 
   useEffect(() => {
     if (!isWorkoutApiConfigured || !activeUserId || remoteDraftLoadedUsers.current.has(activeUserId)) return
@@ -242,7 +242,7 @@ export function useProgramData({
     return () => {
       cancelled = true
     }
-  }, [activeUserId])
+  }, [activeUserId, restoredDraftKey, setActiveUserId, setActiveExerciseIndex, setLogs, restoreSessionExercises, notify])
 
   useEffect(() => {
     let cancelled = false
@@ -266,7 +266,7 @@ export function useProgramData({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [notify])
 
   useEffect(() => {
     if (!isProgramApiConfigured || !activeUserId) return
@@ -281,7 +281,7 @@ export function useProgramData({
     return () => {
       cancelled = true
     }
-  }, [activeUserId])
+  }, [activeUserId, notify])
 
   return {
     programData,

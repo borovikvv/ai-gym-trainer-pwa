@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { ProgramData, PlannedWorkout } from '../data/programApi'
 import { fallbackProgramData } from '../data/programApi'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
@@ -111,11 +111,11 @@ export function useActiveWorkoutContext({
   const activeUser = users.find((user) => user.id === activeUserId) ?? users[0] ?? fallbackProgramData.users[0]
   const activeExercise = activeWorkoutDay.exercises[activeExerciseIndex] ?? activeWorkoutDay.exercises[0]
 
-  const createExerciseLog = (exercise: ExercisePlan): ExerciseLog => ({
+  const createExerciseLog = useCallback((exercise: ExercisePlan): ExerciseLog => ({
     exerciseId: exercise.id,
     pain: false,
     sets: createSets(exercise, nextTargets[exercise.id] ?? exercise.targetWeight),
-  })
+  }), [nextTargets])
   const activeLog = logs[activeExercise.id] ?? createExerciseLog(activeExercise)
   const activeSetIndex = activeLog.sets.findIndex((set) => !set.completed)
   const allSetsCompleted = activeSetIndex === -1
@@ -165,7 +165,7 @@ export function useActiveWorkoutContext({
           }),
         })
       }),
-    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets, userHistory],
+    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets, userHistory, createExerciseLog],
   )
 
   const totalVolume = useMemo(

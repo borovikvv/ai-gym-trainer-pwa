@@ -16,6 +16,16 @@ vi.mock('../data/programApi', async (importActual) => ({
 
 const loadProgram = vi.mocked(loadProgramDataFromApi)
 
+// Issue #329: эффект загрузки программы теперь зависит от переданных колбэков.
+// В проде они стабильны (setState-сеттеры, модульная функция, useCallback),
+// поэтому здесь тоже держим их на уровне модуля — иначе renderHook пересоздаёт
+// их на каждом рендере и эффект уходит в бесконечный цикл.
+const stableCreateInitialLogs = vi.fn(() => ({}))
+const stableSetActiveExerciseIndex = vi.fn()
+const stableSetLogs = vi.fn()
+const stableRestoreSessionExercises = vi.fn()
+const notifyMock = vi.fn()
+
 const remoteProgramData: ProgramData = {
   ...fallbackProgramData,
   users: [{ id: 'remote-user', name: 'Из базы', initials: 'Б', goal: 'сила', streak: '1 неделя' }],
@@ -27,20 +37,19 @@ function httpError(status: number) {
 }
 
 function renderProgramData() {
-  const notify = vi.fn()
   const hook = renderHook(() =>
     useProgramData({
       initialDraft: null,
       fallbackFirstUserId: fallbackProgramData.users[0].id,
       fallbackFirstWorkoutDayId: fallbackProgramData.workoutDays[0].id,
-      createInitialLogs: vi.fn(() => ({})),
-      setActiveExerciseIndex: vi.fn(),
-      setLogs: vi.fn(),
-      restoreSessionExercises: vi.fn(),
-      notify,
+      createInitialLogs: stableCreateInitialLogs,
+      setActiveExerciseIndex: stableSetActiveExerciseIndex,
+      setLogs: stableSetLogs,
+      restoreSessionExercises: stableRestoreSessionExercises,
+      notify: notifyMock,
     }),
   )
-  return { ...hook, notify }
+  return { ...hook, notify: notifyMock }
 }
 
 describe('useProgramData: состояние загрузки программы (#368)', () => {
@@ -48,6 +57,7 @@ describe('useProgramData: состояние загрузки программы
     window.localStorage.clear()
     window.sessionStorage.clear()
     loadProgram.mockReset()
+    notifyMock.mockClear()
   })
 
   it('пока программа грузится — статус loading, а не готовый мок', () => {
