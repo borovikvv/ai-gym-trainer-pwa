@@ -492,6 +492,9 @@ describe('Issue #343: шаг непропорционален весу', () => {
 
     expect(result.type).toBe('increase')
     expect(result.recommendedWeight).toBe(12.5)
+    // Различает новую потолочную ветку и старое поведение: до фикса потолок
+    // шёл через else-ветку («следующий раз +2.5 кг») без «расти дальше некуда».
+    expect(result.reason).toContain('расти дальше некуда')
     expect(result.reason).toContain('+2.5 кг')
     expect(result.reason).not.toContain('вариант посложнее')
   })
