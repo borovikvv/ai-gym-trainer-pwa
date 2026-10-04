@@ -23,6 +23,10 @@ export default defineConfig([
       },
     },
     rules: {
+      // Issue #329: exhaustive-deps warnings are now errors so stale closures
+      // cannot slip back in. Keep callbacks stable (useCallback/useState)
+      // before listing them as dependencies.
+      'react-hooks/exhaustive-deps': 'error',
       // Allow intentional unused vars/args prefixed with underscore.
       '@typescript-eslint/no-unused-vars': [
         'error',

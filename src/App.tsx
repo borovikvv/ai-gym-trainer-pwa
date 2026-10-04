@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { ProgramExerciseEditor } from './components/ProgramExerciseEditor'
 import { ProgramLoadGate } from './components/ProgramLoadGate'
@@ -47,7 +47,7 @@ const fallbackFirstWorkoutDay = fallbackProgramData.workoutDays[0]
 const fallbackFirstUser = fallbackProgramData.users[0]
 
 function App() {
-  const initialDraft = loadActiveWorkoutDraft()
+  const [initialDraft] = useState(loadActiveWorkoutDraft)
   // Show onboarding on first ever launch; user can skip or finish it.
   // Subsequent launches go straight to 'home'. The onboarding can also be
   // re-opened from UserProfileScreen.
@@ -69,10 +69,10 @@ function App() {
   const [toast, setToast] = useState('')
   const [coachMemory, setCoachMemory] = useState<CoachMemory | null>(null)
   const [coachState, setCoachState] = useState<CoachState | null>(null)
-  const notify = (message: string) => {
+  const notify = useCallback((message: string) => {
     setToast(message)
     window.setTimeout(() => setToast(''), 1700)
-  }
+  }, [])
   // Issue #242: состав дня, восстановленный из черновика. Применяется, только
   // когда базовый день с тем же id разрешился (программа приезжает из API
   // асинхронно) — иначе упражнения приклеились бы к fallback-дню с чужим id.
@@ -83,10 +83,10 @@ function App() {
       ? { workoutDayId: initialDraft.workoutDayId, exercises: initialDraft.exercises }
       : null,
   )
-  const restoreSessionExercises = (draft: { workoutDayId: string; exercises?: ExercisePlan[] }) => {
+  const restoreSessionExercises = useCallback((draft: { workoutDayId: string; exercises?: ExercisePlan[] }) => {
     if (!draft.exercises?.length) return
     setDraftSessionExercises({ workoutDayId: draft.workoutDayId, exercises: draft.exercises })
-  }
+  }, [])
   const {
     programData,
     setProgramData,
@@ -467,7 +467,7 @@ function App() {
       cancelled = true
       window.removeEventListener('online', tryReplay)
     }
-  }, [])
+  }, [notify, setHistory])
 
           const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
     activeUserId,
