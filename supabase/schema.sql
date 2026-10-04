@@ -56,6 +56,16 @@ create table if not exists public.exercise_library (
   updated_at timestamptz not null default now()
 );
 
+-- Issue #374: эти колонки были заведены вручную на проде без DDL; добавляем
+-- их здесь, чтобы чистая БД совпадала с боевой и миграции добавления
+-- упражнений (которые в них пишут) не падали на "column ... does not exist".
+alter table public.exercise_library add column if not exists default_sets_count integer;
+alter table public.exercise_library add column if not exists default_rep_min integer;
+alter table public.exercise_library add column if not exists default_rep_max integer;
+alter table public.exercise_library add column if not exists default_target_weight numeric;
+alter table public.exercise_library add column if not exists default_weight_step numeric;
+alter table public.exercise_library add column if not exists default_rest_seconds integer;
+
 create table if not exists public.programs (
   id text primary key,
   user_id text not null references public.app_users(id) on delete cascade,
