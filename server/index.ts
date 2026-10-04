@@ -9,8 +9,10 @@ import { profileRoutes } from './routes/profileRoutes.js'
 import { programRoutes } from './routes/programRoutes.js'
 import { workoutRoutes } from './routes/workoutRoutes.js'
 import { memoryRoutes } from './routes/memoryRoutes.js'
+import { healthRoutes } from './routes/healthRoutes.js'
 import { errorHandler } from './errorHandler.js'
 import { requireApiToken } from './auth.js'
+import { registerGracefulShutdown } from './shutdown.js'
 
 const port = Number(process.env.API_PORT ?? 8910)
 const host = process.env.API_HOST ?? '127.0.0.1'
@@ -38,10 +40,7 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }))
 app.use('/api', requireApiToken)
 
-app.get('/health', async (_req, res) => {
-  const result = await pool.query('select now() as now')
-  res.json({ ok: true, dbTime: result.rows[0].now })
-})
+app.use(healthRoutes)
 
 app.use('/api', apiRateLimiter)
 app.use('/api', programRoutes)
@@ -53,6 +52,7 @@ app.use('/api', memoryRoutes)
 
 app.use(errorHandler)
 
-app.listen(port, host, () => {
+const server = app.listen(port, host, () => {
   console.log(`AI Gym Trainer API listening on http://${host}:${port}`)
 })
+registerGracefulShutdown(server, pool)
