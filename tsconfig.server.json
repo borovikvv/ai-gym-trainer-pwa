@@ -36,7 +36,6 @@
     "scripts/**/*.ts"
   ],
   "exclude": [
-    "server/**/*.test.js",
-    "server/**/*.test.ts"
+    "server/**/*.test.js"
   ]
 }

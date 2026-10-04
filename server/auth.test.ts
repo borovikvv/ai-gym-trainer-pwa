@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { Request, Response } from 'express'
 import { requireApiToken } from './auth.ts'
 
 const TOKEN = 'test-secret-token-123'
 
-function run(headers, envValue) {
+function run(headers: Request['headers'], envValue: string | undefined) {
   const next = vi.fn()
-  requireApiToken({ headers }, {}, next, envValue)
+  requireApiToken({ headers } as unknown as Request, {} as Response, next, envValue)
   return next
 }
 
