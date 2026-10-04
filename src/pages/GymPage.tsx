@@ -69,6 +69,8 @@ interface GymPageProps {
   onAddExerciseToCurrentWorkout: (exercise: ExercisePlan) => void
   onReplaceCurrentExercise: (replacement: ExercisePlan) => void
   onReplaceNextExercise: (exercise: ExercisePlan) => void
+  onReplacePreviewExercise: (exerciseId: string, replacement: ExercisePlan) => void
+  onSkipPreviewExercise: (exerciseId: string) => void
   onAcceptCoachDecision: (recommendation: NextSetHint) => void
   onGoToNextExercise: () => void
   onUpdateExercisePain: (painData: Partial<Pick<ExerciseLog, 'pain' | 'painLocation' | 'painIntensity' | 'redFlags'>>) => void
@@ -143,6 +145,9 @@ export function GymPage(props: GymPageProps) {
           estimateWorkoutMinutes={props.estimateWorkoutMinutes}
           formatWeight={formatWeight}
           bodyWeightCard={bodyWeightCard}
+          exerciseLibrary={program.exerciseLibrary}
+          onReplacePreviewExercise={props.onReplacePreviewExercise}
+          onSkipPreviewExercise={props.onSkipPreviewExercise}
         />
       )}
 

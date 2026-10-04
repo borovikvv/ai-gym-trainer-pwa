@@ -2,6 +2,7 @@ import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { matchesPainArea } from '../../shared/painAreaMuscleMap'
 import { normalizeExerciseMuscleGroup } from '../../shared/muscleGroups'
 import { formatWeight } from '../lib/format'
+import { getCanonicalExerciseId } from './exerciseIdentity'
 import type { ReadinessCheckIn } from './readinessCheckIn'
 
 const ACCESSORY_MUSCLE_KEYS = ['arms', 'shoulders', 'core']
@@ -91,6 +92,51 @@ function targetedReadinessState(exercise: ExercisePlan, checkIn?: ReadinessCheck
   if ((checkIn.painAreas ?? []).some((area) => matchesPainArea(exercise, area))) return 'pain'
   if ((checkIn.soreMuscleGroups ?? []).some((group) => matchesPainArea(exercise, group))) return 'sore'
   return 'none'
+}
+
+export type PainAlternativeSuggestion =
+  | { type: 'replace'; alternative: ExercisePlan['alternatives'][number]; replacement: ExercisePlan }
+  | { type: 'skip' }
+
+// Issue #339: при боли в связанной зоне предлагаем замену вместо «1 подход,
+// −15%» — тренер в такой ситуации меняет движение, а не просто облегчает то же.
+export function suggestPainSafeAlternative(
+  exercise: ExercisePlan,
+  painAreas: string[],
+  exerciseLibrary: ExercisePlan[],
+): PainAlternativeSuggestion | null {
+  if (!painAreas.some((area) => matchesPainArea(exercise, area))) return null
+
+  for (const alternative of exercise.alternatives) {
+    const replacement = exerciseLibrary.find((item) => item.name.toLowerCase() === alternative.name.toLowerCase())
+      ?? {
+        ...exercise,
+        id: getCanonicalExerciseId({ name: alternative.name }),
+        name: alternative.name,
+        previous: 'замена на сегодня',
+        coachFocus: `${alternative.name}: ${alternative.reason}`,
+      }
+    if (!painAreas.some((area) => matchesPainArea(replacement, area))) {
+      return { type: 'replace', alternative, replacement }
+    }
+  }
+  return { type: 'skip' }
+}
+
+// Issue #339: применить выбор пользователя (замена/пропуск) на предпросмотре
+// к дню до начала тренировки.
+export function applyPreviewPainOverrides(
+  day: WorkoutDay,
+  overrides: Record<string, ExercisePlan | 'skip'>,
+): WorkoutDay {
+  if (Object.keys(overrides).length === 0) return day
+  const exercises = day.exercises
+    .filter((exercise) => overrides[exercise.id] !== 'skip')
+    .map((exercise) => {
+      const override = overrides[exercise.id]
+      return override && override !== 'skip' ? override : exercise
+    })
+  return { ...day, exercises }
 }
 
 export function estimateWorkoutMinutes(day: WorkoutDay) {
