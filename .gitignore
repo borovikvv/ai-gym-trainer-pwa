@@ -31,6 +31,7 @@ references/
 *.sw?
 .playwright-cli/
 test-results/
+playwright-report/
 .env
 .env.local
 coach-self-audit-*.txt
