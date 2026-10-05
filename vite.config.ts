@@ -9,6 +9,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Манифест за авторизацией (Caddy basic auth / cookie): без этого браузер
+      // запрашивает его без учётных данных — второй запрос пароля (#401).
+      useCredentials: true,
       workbox: {
         cleanupOutdatedCaches: true,
         clientsClaim: true,
