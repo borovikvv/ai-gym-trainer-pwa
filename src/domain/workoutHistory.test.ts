@@ -292,4 +292,50 @@ describe('workout history', () => {
       expect(entry.exercises[0].nextRecommendedWeight).toBe(62.5)
     })
   })
+
+  // Issue #349: упражнение без истории получает калибровку стартового веса по
+  // рампу; упражнение с историей — только обычную прогрессию.
+  describe('начальная калибровка веса (#349)', () => {
+    const rampLog = {
+      'bench-press': {
+        exerciseId: 'bench-press',
+        pain: false,
+        sets: [
+          { weight: 50, reps: 12, rpe: 5, completed: true },
+          { weight: 60, reps: 11, rpe: 6, completed: true },
+          { weight: 70, reps: 10, rpe: 7.5, completed: true },
+        ],
+      },
+    }
+    const base = {
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      exercises: [bench],
+      logs: rampLog,
+    }
+
+    it('без истории калибрует рабочий вес по рампу через e1RM', () => {
+      const entry = createWorkoutHistoryEntry({ ...base, completedAt: '2026-06-03T15:00:00.000Z' })
+
+      // 70 × (1 + 10/40) = 87.5; 87.5 / (1 + 8/40) = 72.916… → floor to 2.5 = 72.5
+      expect(entry.exercises[0].progressionType).toBe('calibration')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(72.5)
+    })
+
+    it('упражнение с историей калибровку не получает — работает обычная прогрессия', () => {
+      const previousEntry = createWorkoutHistoryEntry({
+        ...base,
+        completedAt: '2026-06-03T15:00:00.000Z',
+      })
+      const entry = createWorkoutHistoryEntry({
+        ...base,
+        history: [previousEntry],
+        completedAt: '2026-06-10T15:00:00.000Z',
+      })
+
+      expect(entry.exercises[0].progressionType).not.toBe('calibration')
+      expect(entry.exercises[0].progressionType).toBe('increase')
+    })
+  })
 })
