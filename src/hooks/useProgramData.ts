@@ -9,7 +9,7 @@ import {
   type ProgramData,
 } from '../data/programApi'
 import { loadCachedProgramData, saveCachedProgramData } from '../data/programDataCache'
-import { supabase } from '../lib/supabaseClient'
+import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabaseClient'
 import { loadWorkoutHistoryFromSupabase } from '../data/workoutRepository'
 import { isWorkoutApiConfigured, loadActiveWorkoutDraftFromApi, loadWorkoutHistoryFromApi } from '../data/workoutApi'
 import { buildNextTargets, type ExerciseLog, type WorkoutHistoryEntry } from '../domain/workoutHistory'
@@ -248,8 +248,11 @@ export function useProgramData({
     let cancelled = false
     const loader = isWorkoutApiConfigured
       ? loadWorkoutHistoryFromApi()
-      : supabase
-        ? loadWorkoutHistoryFromSupabase(supabase)
+      : isSupabaseConfigured
+        ? getSupabaseClient().then((client) => {
+            if (!client) throw new Error('Supabase client unavailable')
+            return loadWorkoutHistoryFromSupabase(client)
+          })
         : null
 
     if (!loader) return

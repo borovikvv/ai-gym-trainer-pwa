@@ -4,9 +4,6 @@ import { useProgram } from '../contexts/ProgramContext'
 import { ProgressScreen } from '../components/ProgressScreen'
 import { UserProfileScreen } from '../components/UserProfileScreen'
 import { ExerciseLibraryScreen } from '../components/ExerciseLibraryScreen'
-import { OnboardingScreen } from '../components/OnboardingScreen'
-
-const ONBOARDING_STORAGE_KEY = 'ai-gym-trainer:v0.1:onboarding-completed'
 
 interface ProgressPageProps {
   progressDashboard: unknown
@@ -44,18 +41,4 @@ export function ProfilePage(props: ProfilePageProps) {
 export function LibraryPage() {
   const program = useProgram()
   return <ExerciseLibraryScreen exerciseLibrary={program.exerciseLibrary} />
-}
-
-interface OnboardingPageProps {
-  onComplete: () => void
-}
-
-export function OnboardingPage(props: OnboardingPageProps) {
-  function complete() {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(ONBOARDING_STORAGE_KEY, '1')
-    }
-    props.onComplete()
-  }
-  return <OnboardingScreen onFinish={complete} onSkip={complete} />
 }

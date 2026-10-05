@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { ProgramExerciseEditor } from './components/ProgramExerciseEditor'
 import { ProgramLoadGate } from './components/ProgramLoadGate'
 import { CoachHomePage } from './pages/CoachHomePage'
 import { GymPage } from './pages/GymPage'
-import { PlanPage } from './pages/PlanPage'
-import { ProgressPage, ProfilePage, LibraryPage, OnboardingPage } from './pages/SimplePages'
+import { OnboardingPage } from './pages/OnboardingPage'
 import { ProgramProvider } from './contexts'
 import { AppShell } from './components/ui'
 import './App.css'
@@ -41,6 +40,11 @@ import {
   resolveReadinessMode,
   type ReadinessCheckIn,
 } from './domain/readinessCheckIn'
+
+const ProgressPage = lazy(() => import('./pages/SimplePages').then((m) => ({ default: m.ProgressPage })))
+const ProfilePage = lazy(() => import('./pages/SimplePages').then((m) => ({ default: m.ProfilePage })))
+const LibraryPage = lazy(() => import('./pages/SimplePages').then((m) => ({ default: m.LibraryPage })))
+const PlanPage = lazy(() => import('./pages/PlanPage').then((m) => ({ default: m.PlanPage })))
 
 const ONBOARDING_STORAGE_KEY = 'ai-gym-trainer:v0.1:onboarding-completed'
 
@@ -638,43 +642,51 @@ function App() {
         )}
 
         {screen === 'progress' && (
-          <ProgressPage progressDashboard={progressDashboard} activeUserId={activeUserId} />
+          <Suspense fallback={null}>
+            <ProgressPage progressDashboard={progressDashboard} activeUserId={activeUserId} />
+          </Suspense>
         )}
 
         {screen === 'profile' && (
-          <ProfilePage
-            activeProfile={activeProfile}
-            activeUser={activeUser}
-            onSelectUser={selectUser}
-            onUpdateQuestionnaire={updateQuestionnaire}
-            onSaveQuestionnaire={saveQuestionnaire}
-          />
+          <Suspense fallback={null}>
+            <ProfilePage
+              activeProfile={activeProfile}
+              activeUser={activeUser}
+              onSelectUser={selectUser}
+              onUpdateQuestionnaire={updateQuestionnaire}
+              onSaveQuestionnaire={saveQuestionnaire}
+            />
+          </Suspense>
         )}
 
         {screen === 'plan' && (
-          <PlanPage
-            activeProfile={activeProfile}
-            activeWorkoutDay={activeWorkoutDay}
-            trainingCalendar={trainingCalendar}
-            selectedWeekDates={selectedWeekDates}
-            weekDateOptions={weekDateOptions}
-            editingPlannedWorkoutId={editingPlannedWorkoutId}
-            editingPlannedDate={editingPlannedDate}
-            coachState={coachState}
-            onToggleWeekDate={toggleWeekDate}
-            setEditingPlannedWorkoutId={setEditingPlannedWorkoutId}
-            setEditingPlannedDate={setEditingPlannedDate}
-            onSavePlannedWorkoutDate={savePlannedWorkoutDate}
-            onRegeneratePlannedWorkout={regeneratePlannedWorkout}
-            onCancelPlannedWorkout={cancelPlannedWorkout}
-            onSelectWorkoutDay={selectWorkoutDay}
-            onStartWorkout={startWorkout}
-            onStartEditExercise={startEditExercise}
-          />
+          <Suspense fallback={null}>
+            <PlanPage
+              activeProfile={activeProfile}
+              activeWorkoutDay={activeWorkoutDay}
+              trainingCalendar={trainingCalendar}
+              selectedWeekDates={selectedWeekDates}
+              weekDateOptions={weekDateOptions}
+              editingPlannedWorkoutId={editingPlannedWorkoutId}
+              editingPlannedDate={editingPlannedDate}
+              coachState={coachState}
+              onToggleWeekDate={toggleWeekDate}
+              setEditingPlannedWorkoutId={setEditingPlannedWorkoutId}
+              setEditingPlannedDate={setEditingPlannedDate}
+              onSavePlannedWorkoutDate={savePlannedWorkoutDate}
+              onRegeneratePlannedWorkout={regeneratePlannedWorkout}
+              onCancelPlannedWorkout={cancelPlannedWorkout}
+              onSelectWorkoutDay={selectWorkoutDay}
+              onStartWorkout={startWorkout}
+              onStartEditExercise={startEditExercise}
+            />
+          </Suspense>
         )}
 
         {screen === 'library' && (
-          <LibraryPage />
+          <Suspense fallback={null}>
+            <LibraryPage />
+          </Suspense>
         )}
 
         {screen === 'onboarding' && (

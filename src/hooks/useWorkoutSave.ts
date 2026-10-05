@@ -11,12 +11,11 @@ import {
 } from '../domain/workoutHistory'
 import { isWorkoutApiConfigured, loadWorkoutHistoryFromApi, saveWorkoutEntryToApi } from '../data/workoutApi'
 import { saveHistory } from './useProgramData'
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabaseClient'
 import { saveWorkoutEntryToSupabase } from '../data/workoutRepository'
 import { createInitialLogs } from './useWorkoutSession'
 import { loadPlannedWorkoutsFromApi, type PlannedWorkout } from '../data/programApi'
 import { apiAuthHeaders } from '../data/apiAuth'
-import { enqueueRequest } from '../lib/offlineQueue'
 
 type UseWorkoutSaveOptions = {
   activeUserId: string
@@ -100,6 +99,7 @@ export function useWorkoutSave({
                   // queued POST will be replayed automatically.
                   const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
                   if (apiBase) {
+                    const { enqueueRequest } = await import('../lib/offlineQueue')
                     await enqueueRequest(
                       `${apiBase}/api/workout-history`,
                       'POST',
@@ -109,9 +109,11 @@ export function useWorkoutSave({
                   }
                   notify('Сохранено локально. Отправим в базу при появлении интернета.')
                 }
-              } else if (supabase) {
+              } else if (isSupabaseConfigured) {
                 try {
-                  await saveWorkoutEntryToSupabase(supabase, baseEntry)
+                  const client = await getSupabaseClient()
+                  if (!client) throw new Error('Supabase client unavailable')
+                  await saveWorkoutEntryToSupabase(client, baseEntry)
                   clearActiveWorkoutDraft()
                   notify('Тренировка сохранена в базе')
                 } catch {
