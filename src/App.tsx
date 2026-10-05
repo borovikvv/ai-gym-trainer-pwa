@@ -30,6 +30,7 @@ import { computeSessionRepDeviation } from './domain/repExpectation'
 import { suggestExerciseToAdd } from './domain/exerciseSuggestion'
 import {
   adaptWorkoutDayForReadiness,
+  applyPreviewPainOverrides,
   estimateWorkoutMinutes,
   fitWorkoutDayToAvailableMinutes,
   readinessOptions,
@@ -190,6 +191,17 @@ function App() {
   // Фаза 3.2: экран не гаснет во время тренировки (feature-detected).
   useWakeLock(screen === 'session')
   const [manualWorkoutDaySelected, setManualWorkoutDaySelected] = useState(false)
+  // Issue #339: выбор пользователя на предпросмотре при боли — замена/пропуск.
+  // Сбрасывается при смене дня и чек-ина ниже.
+  const [previewPainOverrides, setPreviewPainOverrides] = useState<Record<string, ExercisePlan | 'skip'>>({})
+  const [previewPainOverridesDayId, setPreviewPainOverridesDayId] = useState(activeWorkoutDayId)
+  // Issue #339: смена дня не должна переносить замену/пропуск на другое
+  // упражнение. Сброс через рендер (не useEffect) — иначе линтер запрещает
+  // синхронный setState в эффекте.
+  if (previewPainOverridesDayId !== activeWorkoutDayId) {
+    setPreviewPainOverridesDayId(activeWorkoutDayId)
+    setPreviewPainOverrides({})
+  }
   const {
     draftStatus,
     activeDraftId,
@@ -211,9 +223,12 @@ function App() {
     clearDraftOriginal()
     setRestoredDraftKey(null)
   }
-  const previewWorkoutDay = fitWorkoutDayToAvailableMinutes(
-    adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn),
-    readinessCheckIn.availableMinutes,
+  const previewWorkoutDay = applyPreviewPainOverrides(
+    fitWorkoutDayToAvailableMinutes(
+      adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn),
+      readinessCheckIn.availableMinutes,
+    ),
+    previewPainOverrides,
   )
   const exerciseAddSuggestion = screen === 'session'
     ? suggestExerciseToAdd({ workoutDay: activeWorkoutDay, exerciseLibrary: programData.exerciseLibrary })
@@ -239,10 +254,19 @@ function App() {
   ])
 
   function updateReadinessCheckIn(patch: Partial<ReadinessCheckIn>) {
+    setPreviewPainOverrides({})
     const next = { ...readinessCheckIn, ...patch }
     setReadinessCheckIn(next)
     setReadinessTouched(true)
     setWorkoutReadinessMode(resolveReadinessMode(next))
+  }
+
+  function replacePreviewExercise(exerciseId: string, replacement: ExercisePlan) {
+    setPreviewPainOverrides((current) => ({ ...current, [exerciseId]: replacement }))
+  }
+
+  function skipPreviewExercise(exerciseId: string) {
+    setPreviewPainOverrides((current) => ({ ...current, [exerciseId]: 'skip' }))
   }
 
   const {
@@ -596,6 +620,8 @@ function App() {
             onAddExerciseToCurrentWorkout={addExerciseToCurrentWorkout}
             onReplaceCurrentExercise={replaceCurrentExerciseInCurrentWorkout}
             onReplaceNextExercise={replaceNextExerciseInCurrentWorkout}
+            onReplacePreviewExercise={replacePreviewExercise}
+            onSkipPreviewExercise={skipPreviewExercise}
             onAcceptCoachDecision={acceptCoachDecision}
             onGoToNextExercise={goToNextExercise}
             onUpdateExercisePain={updateExercisePain}

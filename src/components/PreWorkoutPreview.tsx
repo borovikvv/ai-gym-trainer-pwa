@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
-import type { WorkoutDay  } from '../../shared/types'
+import type { WorkoutDay, ExercisePlan  } from '../../shared/types'
 import { toHumanCoachText } from '../domain/coachCopy'
 import {
   summarizeReadinessCheckIn,
   type ReadinessCheckIn,
   type SorenessLevel,
 } from '../domain/readinessCheckIn'
+import { suggestPainSafeAlternative } from '../domain/workoutReadiness'
 import { exerciseGuideImageSrc } from './ExerciseGuideModal'
 import { InfoHint } from './ui'
 import { isTimedExercise } from '../domain/exerciseMetrics'
@@ -36,6 +37,9 @@ type PreWorkoutPreviewProps = {
   formatWeight: (weight: number) => string
   /** Issue #176: карточка веса тела, если с последнего замера прошла неделя. */
   bodyWeightCard?: ReactNode
+  exerciseLibrary: ExercisePlan[]
+  onReplacePreviewExercise: (exerciseId: string, replacement: ExercisePlan) => void
+  onSkipPreviewExercise: (exerciseId: string) => void
 }
 
 export function PreWorkoutPreview({
@@ -50,6 +54,9 @@ export function PreWorkoutPreview({
   estimateWorkoutMinutes,
   formatWeight,
   bodyWeightCard,
+  exerciseLibrary,
+  onReplacePreviewExercise,
+  onSkipPreviewExercise,
 }: PreWorkoutPreviewProps) {
   const painAreas = readinessCheckIn.painAreas
   const soreMuscleGroups = readinessCheckIn.soreMuscleGroups ?? []
@@ -219,16 +226,45 @@ export function PreWorkoutPreview({
           <span className="badge">{workoutDay.exercises.length} упр.</span>
         </div>
         <div className="preview-exercise-list top-gap">
-          {workoutDay.exercises.map((exercise, index) => (
-            <div className="preview-exercise" key={`${exercise.id}-${index}`}>
-              <img src={exerciseGuideImageSrc(exercise.id.replace(/-(light|very_light|heavy)$/u, ''))} alt="" />
-              <div>
-                <b>{index + 1}. {exercise.name}</b>
-                <div className="muted">{exercise.muscleGroup} · {exercise.setsCount}×{exercise.repMin}–{exercise.repMax}{isTimedExercise(exercise) ? ' сек' : ` · ${formatWeight(exercise.targetWeight)} кг`}</div>
-                <div className="muted">{toHumanCoachText(exercise.coachFocus)}</div>
+          {workoutDay.exercises.map((exercise, index) => {
+            const painSuggestion = suggestPainSafeAlternative(exercise, painAreas, exerciseLibrary)
+            return (
+              <div className="preview-exercise" key={`${exercise.id}-${index}`}>
+                <img src={exerciseGuideImageSrc(exercise.id.replace(/-(light|very_light|heavy)$/u, ''))} alt="" />
+                <div>
+                  <b>{index + 1}. {exercise.name}</b>
+                  <div className="muted">{exercise.muscleGroup} · {exercise.setsCount}×{exercise.repMin}–{exercise.repMax}{isTimedExercise(exercise) ? ' сек' : ` · ${formatWeight(exercise.targetWeight)} кг`}</div>
+                  <div className="muted">{toHumanCoachText(exercise.coachFocus)}</div>
+                  {painSuggestion?.type === 'replace' && (
+                    <div className="preview-pain-suggestion" data-testid="preview-pain-suggestion">
+                      <span className="muted">Похоже, безопаснее заменить: {painSuggestion.alternative.name}</span>
+                      <button
+                        type="button"
+                        className="secondary compact"
+                        aria-label={`Заменить ${exercise.name} на ${painSuggestion.alternative.name}`}
+                        onClick={() => onReplacePreviewExercise(exercise.id, painSuggestion.replacement)}
+                      >
+                        заменить
+                      </button>
+                    </div>
+                  )}
+                  {painSuggestion?.type === 'skip' && (
+                    <div className="preview-pain-suggestion" data-testid="preview-pain-suggestion">
+                      <span className="muted">Безопасной замены нет — можно пропустить сегодня</span>
+                      <button
+                        type="button"
+                        className="secondary compact"
+                        aria-label={`Пропустить ${exercise.name}`}
+                        onClick={() => onSkipPreviewExercise(exercise.id)}
+                      >
+                        пропустить
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

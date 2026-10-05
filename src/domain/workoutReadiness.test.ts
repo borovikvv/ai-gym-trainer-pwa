@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { defaultReadinessCheckIn } from './readinessCheckIn'
-import { adaptWorkoutDayForReadiness, estimateWorkoutMinutes, fitWorkoutDayToAvailableMinutes } from './workoutReadiness'
+import {
+  adaptWorkoutDayForReadiness,
+  applyPreviewPainOverrides,
+  estimateWorkoutMinutes,
+  fitWorkoutDayToAvailableMinutes,
+  suggestPainSafeAlternative,
+} from './workoutReadiness'
 
 const workoutDay: WorkoutDay = {
   id: 'day-a',
@@ -220,5 +226,82 @@ describe('fitWorkoutDayToAvailableMinutes', () => {
     expect(base?.setsCount).toBe(5)
     expect(base?.targetWeight).toBe(60)
     expect(result.exercises.some((item) => item.id === 'biceps-curl')).toBe(false)
+  })
+})
+
+describe('suggestPainSafeAlternative', () => {
+  const makePlan = (overrides: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name' | 'targetMuscles'>): ExercisePlan => ({
+    muscleGroup: 'Ноги',
+    instruction: '',
+    commonMistakes: [],
+    alternatives: [],
+    setsCount: 3,
+    repMin: 8,
+    repMax: 10,
+    targetWeight: 50,
+    weightStep: 2.5,
+    restSeconds: 120,
+    prescription: '',
+    previous: '',
+    todayGoal: '',
+    coachFocus: 'контроль техники',
+    ...overrides,
+  })
+
+  const painfulSquat = makePlan({
+    id: 'barbell-squat',
+    name: 'Присед со штангой',
+    targetMuscles: ['квадрицепс', 'ягодицы'],
+    alternatives: [
+      { name: 'Замена A', reason: 'вариант' },
+      { name: 'Замена B', reason: 'вариант' },
+    ],
+  })
+
+  it('подбирает первую альтернативу, которая не нагружает зону боли', () => {
+    const unsafe = makePlan({ id: 'alt-a', name: 'Замена A', targetMuscles: ['квадрицепс'] })
+    const safe = makePlan({ id: 'alt-b', name: 'Замена B', targetMuscles: ['кор'] })
+
+    expect(suggestPainSafeAlternative(painfulSquat, ['Колено/нога'], [unsafe, safe])).toEqual({
+      type: 'replace',
+      alternative: { name: 'Замена B', reason: 'вариант' },
+      replacement: safe,
+    })
+  })
+
+  it('предлагает пропустить, если все альтернативы нагружают зону боли', () => {
+    const first = makePlan({ id: 'alt-a', name: 'Замена A', targetMuscles: ['квадрицепс'] })
+    const second = makePlan({ id: 'alt-b', name: 'Замена B', targetMuscles: ['ягодицы'] })
+
+    expect(suggestPainSafeAlternative(painfulSquat, ['Колено/нога'], [first, second])).toEqual({ type: 'skip' })
+  })
+
+  it('не считает безопасной альтернативу, которой нет в справочнике', () => {
+    expect(suggestPainSafeAlternative(painfulSquat, ['Колено/нога'], [])).toEqual({ type: 'skip' })
+  })
+
+  it('возвращает null без боли в связанной зоне', () => {
+    expect(suggestPainSafeAlternative(painfulSquat, [], [])).toBeNull()
+    expect(suggestPainSafeAlternative(painfulSquat, ['Плечо'], [])).toBeNull()
+  })
+})
+
+describe('applyPreviewPainOverrides', () => {
+  const replacement: ExercisePlan = { ...workoutDay.exercises[3], name: 'Замена ног', coachFocus: 'замена' }
+
+  it('убирает пропущенные упражнения и подставляет замену по id', () => {
+    const result = applyPreviewPainOverrides(workoutDay, {
+      'barbell-squat': 'skip',
+      'leg-press': replacement,
+    })
+
+    expect(result.exercises.some((exercise) => exercise.id === 'barbell-squat')).toBe(false)
+    expect(result.exercises.find((exercise) => exercise.id === 'leg-press')).toBe(replacement)
+    expect(result.exercises.find((exercise) => exercise.id === 'bench-press')).toEqual(workoutDay.exercises[0])
+    expect(result.exercises.find((exercise) => exercise.id === 'lat-pulldown')).toEqual(workoutDay.exercises[1])
+  })
+
+  it('возвращает исходный день без переопределений', () => {
+    expect(applyPreviewPainOverrides(workoutDay, {})).toBe(workoutDay)
   })
 })
