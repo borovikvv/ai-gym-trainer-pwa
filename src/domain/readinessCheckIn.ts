@@ -17,6 +17,12 @@ export const defaultReadinessCheckIn: ReadinessCheckIn = {
   notes: '',
 }
 
+// #346: дефолтные 60 мин — «времени достаточно», а не лимит. Бюджет времени
+// включается, только если пользователь сам сократил время (кнопка «35 мин»).
+export function timeBudgetMinutes(checkIn: ReadinessCheckIn): number {
+  return checkIn.availableMinutes < defaultReadinessCheckIn.availableMinutes ? checkIn.availableMinutes : 0
+}
+
 export function resolveReadinessMode(checkIn: ReadinessCheckIn): ReadinessMode {
   if (checkIn.soreness === 'high') {
     return 'very_light'

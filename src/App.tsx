@@ -38,6 +38,7 @@ import {
 import {
   defaultReadinessCheckIn,
   resolveReadinessMode,
+  timeBudgetMinutes,
   type ReadinessCheckIn,
 } from './domain/readinessCheckIn'
 
@@ -230,7 +231,7 @@ function App() {
   const previewWorkoutDay = applyPreviewPainOverrides(
     fitWorkoutDayToAvailableMinutes(
       adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn),
-      readinessCheckIn.availableMinutes,
+      timeBudgetMinutes(readinessCheckIn),
     ),
     previewPainOverrides,
   )

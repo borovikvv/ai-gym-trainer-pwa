@@ -7,6 +7,11 @@ import type { ReadinessCheckIn } from './readinessCheckIn'
 
 const ACCESSORY_MUSCLE_KEYS = ['arms', 'shoulders', 'core']
 
+// Issue #346: оценка длительности должна учитывать не только подходы и отдых,
+// но и общую разминку один раз за тренировку и переходы между упражнениями.
+const GENERAL_WARMUP_MINUTES = 8
+const EXERCISE_TRANSITION_MINUTES = 1.5
+
 export type ReadinessMode = 'normal' | 'light' | 'very_light' | 'heavy'
 
 export type ReadinessOption = {
@@ -141,7 +146,8 @@ export function applyPreviewPainOverrides(
 
 export function estimateWorkoutMinutes(day: WorkoutDay) {
   const workMinutes = day.exercises.reduce((sum, exercise) => sum + exercise.setsCount * 2.2 + (exercise.setsCount * exercise.restSeconds) / 60, 0)
-  return Math.max(20, Math.round(workMinutes))
+  const transitionMinutes = Math.max(0, day.exercises.length - 1) * EXERCISE_TRANSITION_MINUTES
+  return Math.max(20, Math.round(workMinutes + GENERAL_WARMUP_MINUTES + transitionMinutes))
 }
 
 export function fitWorkoutDayToAvailableMinutes(day: WorkoutDay, availableMinutes: number): WorkoutDay {
