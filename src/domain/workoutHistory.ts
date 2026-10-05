@@ -3,6 +3,7 @@ import type { ReadinessCheckIn } from './readinessCheckIn'
 import { calculateProgression, countPreviousFailures, type WorkoutSetInput } from './progression'
 import { computeSessionRepDeviation } from './repExpectation'
 import { getCanonicalExerciseId } from './exerciseIdentity'
+import { calibrateWorkingWeight } from './weightCalibration'
 import { buildWorkoutDebrief } from './workoutDebrief'
 
 // Issue #98 PR3: CompletedExerciseHistory and WorkoutHistoryEntry unified
@@ -38,6 +39,7 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
   const userHistory = (input.history ?? []).filter((workout) => workout.userId === input.userId)
   const exercises = input.exercises.map((exercise) => {
     const log = input.logs[exercise.id] ?? { exerciseId: exercise.id, pain: false, sets: [] }
+    const canonicalExerciseId = getCanonicalExerciseId(exercise)
     const volume = log.sets.reduce((sum, set) => sum + (set.completed ? set.weight * set.reps : 0), 0)
     const currentWeight = firstCompletedWeight(log.sets) ?? exercise.targetWeight
     // Issue #247: отклонение факта от личного ожидания на этом весе — стоп-фактор
@@ -45,11 +47,28 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
     const avgRepDeviation = computeSessionRepDeviation(
       {
         completedAt,
-        exercises: [{ exerciseId: exercise.id, canonicalExerciseId: getCanonicalExerciseId(exercise), sets: log.sets }],
+        exercises: [{ exerciseId: exercise.id, canonicalExerciseId, sets: log.sets }],
       },
       userHistory,
     ).avgDeviation
-    const progression = calculateProgression({
+    // Issue #349: для упражнения без истории сначала пробуем калибровку
+    // стартового веса по рампу. С историей — только обычная прогрессия.
+    // Review #399: отметка боли — стоп-фактор для роста веса (инвариант
+    // `calculateProgression`). Калибровка не должна его обходить, поэтому при
+    // боли пропускаем её и отдаём решение обычной прогрессии, которая вернёт `pain`.
+    const hasHistory = userHistory.some((workout) =>
+      workout.exercises.some((item) => getCanonicalExerciseId(item) === canonicalExerciseId),
+    )
+    const calibration = hasHistory || log.pain
+      ? null
+      : calibrateWorkingWeight({
+          exerciseName: exercise.name,
+          repMin: exercise.repMin,
+          repMax: exercise.repMax,
+          weightStep: exercise.weightStep,
+          sets: log.sets,
+        })
+    const progression = calibration ?? calculateProgression({
       exerciseName: exercise.name,
       currentWeight,
       repMin: exercise.repMin,
@@ -60,14 +79,14 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       pain: log.pain,
       avgRepDeviation,
       previousFailureCount: countPreviousFailures(userHistory, {
-        canonicalExerciseId: getCanonicalExerciseId(exercise),
+        canonicalExerciseId,
         repMin: exercise.repMin,
       }),
     })
 
     return {
       exerciseId: exercise.id,
-      canonicalExerciseId: getCanonicalExerciseId(exercise),
+      canonicalExerciseId,
       exerciseName: exercise.name,
       pain: log.pain,
       // Issue #163: детали боли идут дальше вместе с булевым признаком —

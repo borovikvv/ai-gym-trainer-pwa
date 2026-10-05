@@ -52,7 +52,7 @@ export interface VolumeRecommendation {
 // Workout / Exercise / Set
 // ---------------------------------------------------------------------------
 
-export type ProgressionType = 'increase' | 'hold' | 'deload' | 'pain' | 'skip'
+export type ProgressionType = 'increase' | 'hold' | 'deload' | 'pain' | 'skip' | 'calibration'
 
 // Issue #98 PR3: WorkoutSet — rpe and completed are required in practice
 // (the frontend WorkoutSetInput type requires them, and the DB schema
