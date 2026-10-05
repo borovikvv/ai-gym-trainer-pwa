@@ -431,9 +431,9 @@ export function CoachHome({
 
       {userHistory.length > 0 && (
         <SectionList title="История">
-          <div className="review-card">
+          <div className="review-card" data-testid="history-section">
             {userHistory.slice(0, 3).map((workout) => (
-              <button key={workout.id} className="review-card__row" type="button" onClick={() => setHistoryDetail(workout)}>
+              <button key={workout.id} className="review-card__row" type="button" data-testid="history-entry" onClick={() => setHistoryDetail(workout)}>
                 <span className="review-card__dot review-card__dot--low" aria-hidden="true" />
                 <div className="review-card__body">
                   <div className="review-card__title">{workout.workoutDayName}</div>
