@@ -163,6 +163,37 @@ export interface MesocycleState {
   plannedWorkoutsThisCycle: number
 }
 
+/**
+ * Итог мезоцикла (#350): что выросло, где застой, что меняем. Собирается
+ * правилами на сервере (server/blockSummary.ts), без пересчёта.
+ */
+export interface BlockSummary {
+  blockStartedOn: string
+  weeks: number
+  goal: {
+    title: string
+    status: 'achieved' | 'missed'
+    baseline: number
+    target: number
+    actual: number
+  }
+  gains: Array<{
+    exerciseId: string
+    exerciseName: string
+    baseline: number
+    actual: number
+    delta: number
+  }>
+  stalled: Array<{
+    exerciseId: string
+    exerciseName: string
+    weeks: number
+    diagnosisNote: string | null
+  }>
+  adherence: { done: number; planned: number; skipped: number }
+  next: { goalTitle: string | null; why: string }
+}
+
 export interface CoachState {
   userId: string | null
   generatedAt: string
