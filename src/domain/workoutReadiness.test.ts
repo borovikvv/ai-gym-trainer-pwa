@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
-import { defaultReadinessCheckIn } from './readinessCheckIn'
+import { defaultReadinessCheckIn, resolveReadinessMode } from './readinessCheckIn'
 import {
   adaptWorkoutDayForReadiness,
   applyPreviewPainOverrides,
@@ -147,6 +147,20 @@ describe('workout readiness adaptation', () => {
       ...defaultReadinessCheckIn,
       painAreas: ['Локоть/рука'],
     })
+
+    const bench = adapted.exercises.find((exercise) => exercise.id === 'bench-press')
+    expect(bench?.setsCount).toBe(1)
+    expect(bench?.coachFocus).toContain('Есть боль')
+  })
+
+  it('only eases exercises linked to the reported pain area, not the whole day', () => {
+    const checkIn = { ...defaultReadinessCheckIn, painAreas: ['Локоть/рука'] }
+    const mode = resolveReadinessMode(checkIn)
+    const adapted = adaptWorkoutDayForReadiness(workoutDay, mode, checkIn)
+
+    const legPress = adapted.exercises.find((exercise) => exercise.id === 'leg-press')
+    expect(legPress?.setsCount).toBe(3)
+    expect(legPress?.targetWeight).toBe(60)
 
     const bench = adapted.exercises.find((exercise) => exercise.id === 'bench-press')
     expect(bench?.setsCount).toBe(1)

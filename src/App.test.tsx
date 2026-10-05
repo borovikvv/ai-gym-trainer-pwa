@@ -94,7 +94,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('button', { name: /боль: спина/i }))
     expect(screen.getByText(/Есть боль: Плечо, Спина/i)).toBeInTheDocument()
     expect(screen.getByText(/Уберём рискованные движения/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Очень легко$/i })).toHaveClass('active')
+    expect(screen.getByRole('button', { name: /^Полегче$/i })).toHaveClass('active')
   })
 
   it('lets the user open the gym, record a set, move to the next exercise, and finish the workout', async () => {
