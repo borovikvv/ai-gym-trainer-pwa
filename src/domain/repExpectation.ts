@@ -109,6 +109,7 @@ interface SetLike {
   weight: number
   reps: number
   completed?: boolean
+  isWarmup?: boolean
 }
 
 interface ExerciseLike {
@@ -260,12 +261,12 @@ function summarize(sets: SetRepDeviation[]): { avgDeviation: number | null; sets
 // ---------------------------------------------------------------------------
 
 /**
- * Рабочие подходы упражнения: выполненные, с повторами и весом.
- * Оговорка #166/#167: сейчас все залогированные подходы рабочие; когда тренер
- * начнёт назначать разминку (#172), её подходы надо отсекать здесь.
+ * Рабочие подходы упражнения: выполненные, с повторами и весом, без разминки.
+ * Разминочные подходы (#345) сюда не попадают, чтобы не сдвигать нумерацию и не
+ * портить ожидание повторов.
  */
 function workingSets(exercise: ExerciseLike): SetLike[] {
-  return (exercise?.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0 && Number(set?.weight) > 0)
+  return (exercise?.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0 && Number(set?.weight) > 0 && set?.isWarmup !== true)
 }
 
 function sameWeight(a: number, b: number): boolean {

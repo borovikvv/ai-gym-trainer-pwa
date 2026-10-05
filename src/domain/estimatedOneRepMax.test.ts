@@ -168,6 +168,18 @@ describe('bestE1RMFromExercise', () => {
     expect(result!.e1rm).toBe(67.5)
     expect(result!.weight).toBe(60)
   })
+
+  it('Issue #345: разминочный подход не побеждает как лучший e1RM', () => {
+    const exercise = {
+      sets: [
+        { weight: 100, reps: 3, completed: true, isWarmup: true }, // e1RM = 107.5
+        { weight: 70, reps: 5, completed: true },                   // e1RM = 78.8 ← best working
+      ],
+    }
+    const result = bestE1RMFromExercise(exercise)
+    expect(result!.weight).toBe(70)
+    expect(result!.e1rm).toBe(78.8)
+  })
 })
 
 // ---------------------------------------------------------------------------

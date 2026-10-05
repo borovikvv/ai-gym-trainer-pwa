@@ -15,6 +15,8 @@ export type WorkoutSetInput = {
   performedAt?: string
   // Issue #268: client-side timestamp when the set started — for net rest
   startedAt?: string
+  // Issue #345: разминочный подход — в прогрессию не берётся.
+  isWarmup?: boolean
 }
 
 export type ProgressionInput = {
@@ -53,12 +55,12 @@ export function countPreviousFailures(
     .flatMap((workout) => workout.exercises)
     .find((exercise) => getCanonicalExerciseId(exercise) === options.canonicalExerciseId)
   if (!previousExercise) return 0
-  const belowMinCount = previousExercise.sets.filter((set) => set.completed && set.reps < options.repMin).length
+  const belowMinCount = previousExercise.sets.filter((set) => set.completed && set.reps < options.repMin && !set.isWarmup).length
   return belowMinCount >= 2 ? 1 : 0
 }
 
 export function calculateProgression(input: ProgressionInput): ProgressionResult {
-  const completedSets = input.sets.filter((set) => set.completed && set.reps > 0)
+  const completedSets = input.sets.filter((set) => set.completed && set.reps > 0 && !set.isWarmup)
   // Issue #173: направление веса из общего хелпера (поле справочника приоритетно,
   // здесь — фолбэк по названию, т.к. вход содержит только exerciseName).
   const direction = resolveWeightDirection(input.exerciseName)

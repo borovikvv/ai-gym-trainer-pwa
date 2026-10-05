@@ -13,7 +13,7 @@ function set(weight: number, reps: number, completed = true) {
   return { weight, reps, rpe: 7, completed }
 }
 
-function bench(sets: Array<{ weight: number; reps: number; completed?: boolean }>) {
+function bench(sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean; isWarmup?: boolean }>) {
   return { exerciseId: 'bench-press', exerciseName: 'Жим лёжа', sets }
 }
 
@@ -246,5 +246,35 @@ describe('computeSessionRepDeviation', () => {
   it('упражнение без рабочих подходов в отчёт не попадает', () => {
     const entry = session('2026-07-22', [bench([set(60, 0, false)])])
     expect(computeSessionRepDeviation(entry, history).exercises).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Разминочные подходы (#345)
+// ---------------------------------------------------------------------------
+
+describe('разминочные подходы не учитываются', () => {
+  it('разминочный подход в истории не попадает в ожидание', () => {
+    const withWarmup = [
+      session('2026-07-01', [bench([{ weight: 60, reps: 15, rpe: 5, completed: true, isWarmup: true }])]),
+      session('2026-07-08', [bench([set(60, 8)])]),
+      session('2026-07-15', [bench([set(60, 8)])]),
+    ]
+    const expectation = buildRepExpectation(withWarmup, { exerciseId: 'bench-press', weight: 60, setIndex: 1 })
+
+    expect(expectation.sessionsUsed).toBe(2)
+    expect(expectation.expectedReps).toBe(8)
+  })
+
+  it('разминочный подход в текущей сессии не сдвигает нумерацию рабочих', () => {
+    const entry = session('2026-07-22', [bench([
+      { weight: 60, reps: 15, rpe: 5, completed: true, isWarmup: true },
+      set(60, 9),
+      set(60, 8),
+    ])])
+    const result = computeSessionRepDeviation(entry, history)
+
+    expect(result.setsWithExpectation).toBe(2)
+    expect(result.exercises[0].sets.map((s) => s.setIndex)).toEqual([1, 2])
   })
 })

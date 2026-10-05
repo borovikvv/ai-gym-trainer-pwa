@@ -148,12 +148,12 @@ export function buildAllMuscleVolumeSnapshots(
 
 /**
  * Рабочие подходы упражнения. Issue #166: единственное место, где объём
- * превращается в число — когда тренер начнёт назначать разминку (#172),
- * разминочные подходы должны отсеиваться именно здесь.
+ * превращается в число. Issue #345: разминочные подходы (`isWarmup`) отсеиваются
+ * здесь и в объём не попадают.
  */
 export function countCompletedSets(exercise: CompletedExerciseHistory): number {
   return (exercise.sets ?? [])
-    .filter((s) => s?.completed !== false && Number(s?.reps) > 0)
+    .filter((s) => s?.completed !== false && Number(s?.reps) > 0 && s?.isWarmup !== true)
     .length
 }
 
