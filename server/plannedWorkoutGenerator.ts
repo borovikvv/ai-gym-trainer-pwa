@@ -19,19 +19,18 @@ import { buildCoachDecision } from './coachDecision.js'
 import type { WeeklyVolumeStatus } from './weeklyVolumeTargets.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 import { canonicalExerciseId } from '../shared/exerciseIdentity.js'
-import { findLatestExerciseEntry, passesAssistedGraduation } from '../shared/pullUpProgression.js'
-import { CANONICAL_MUSCLE_KEYS, normalizeArmSubMuscles, normalizeBackPullPattern, normalizeExerciseMuscleGroup, normalizeLegSubMuscles, normalizeMuscleGroup } from '../shared/muscleGroups.js'
-import { resolveWeightDirection, harderWeight, easierWeight, strongerOf, easierOf } from '../shared/weightDirection.js'
-import { roundWeight } from '../shared/format.js'
-import { TEEN_LIMIT_REASONS, TEEN_MIN_REPS, teenLimitsApply } from '../shared/teenLimits.js'
-import { isDeloadWeek, applyDeloadReduction } from './mesocycle.js'
-import { applyPeriodization } from './periodization.js'
-import { russianWeekdayName } from './utils.js'
+import { passesAssistedGraduation } from '../shared/pullUpProgression.js'
+import { normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { generateCoachNarration } from './coachNarrator.js'
 // Issue #139: LLM уточняет предписания baseline-плана, кламп держит их в границах.
 import { refinePlannedWorkoutPrescriptions, type PlannedExercisePrescription } from './services/plannedWorkoutAdvisor.js'
 // Issue #106: consume structured analysis flags from coachProgressAnalysis (#105)
 import type { ProgressAnalysis, ExerciseAnalysisFlag } from './coachProgressAnalysis.js'
+// Issue #328: вынесенные модули (чистый перенос кода, логика не менялась).
+import { daysBetweenDates, emptyPreferences, isBannedExercise, isCoachDecisionRestricted, isCoachMemoryRestricted, isHighFatigue, isRecoveryRestricted, isReturningAfterBreak, normalizeText } from './workoutExerciseEligibility.js'
+import { chooseTargetPattern, isIsolationOrAccessory, orderExercisesForWorkout, orderPatternByWeeklyDeficit } from './workoutPatternRotation.js'
+import { chooseBestExerciseForMuscle, exerciseScore, normalizeExerciseLibrary } from './workoutExerciseSelection.js'
+import { applyPrescription } from './workoutLoadPrescription.js'
 
 
 // ---------------------------------------------------------------------------
@@ -39,7 +38,7 @@ import type { ProgressAnalysis, ExerciseAnalysisFlag } from './coachProgressAnal
 // CoachMemory and CoachDecision will be reconciled in #66 (coach runtime).
 // ---------------------------------------------------------------------------
 
-interface CoachMemoryForGenerator {
+export interface CoachMemoryForGenerator {
   userId?: string | null
   summary?: string
   weeklyBalance?: {
@@ -55,7 +54,7 @@ interface CoachMemoryForGenerator {
   exerciseProfiles?: Record<string, ExerciseProfile | undefined>
 }
 
-interface CoachDecisionForGenerator {
+export interface CoachDecisionForGenerator {
   type?: string
   priorityMuscleGroups?: string[]
   avoidMuscleGroups?: string[]
@@ -74,7 +73,7 @@ interface CoachDecisionForGenerator {
   }
 }
 
-interface UserTrainingPolicyForGenerator {
+export interface UserTrainingPolicyForGenerator {
   userId?: string
   allowFailureSets?: boolean
   maxIntensity?: string
@@ -93,7 +92,7 @@ interface UserTrainingPolicyForGenerator {
 // Input / output interfaces
 // ---------------------------------------------------------------------------
 
-interface ProfileForGenerator {
+export interface ProfileForGenerator {
   userId?: string
   age?: number | null
   goal?: string
@@ -115,7 +114,7 @@ interface ProfileForGenerator {
   } | null
 }
 
-interface LibraryExerciseInput {
+export interface LibraryExerciseInput {
   id?: string
   name?: string
   muscleGroup?: string
@@ -148,7 +147,7 @@ interface LibraryExerciseInput {
   target_muscles?: string[] | null
 }
 
-interface NormalizedLibraryExercise {
+export interface NormalizedLibraryExercise {
   id: string
   name: string
   muscleGroup: string
@@ -170,7 +169,7 @@ interface NormalizedLibraryExercise {
   subMuscleKeys: string[]
 }
 
-interface PreviousGeneratedWorkout {
+export interface PreviousGeneratedWorkout {
   scheduledDate?: string
   exercises?: Array<{
     exerciseId?: string
@@ -204,7 +203,7 @@ interface BuildGeneratedPlannedWorkoutInput {
   weeklyVolume?: Record<string, WeeklyVolumeStatus> | null
 }
 
-interface GeneratedExercise {
+export interface GeneratedExercise {
   exerciseId: string
   exerciseName: string
   muscleGroup: string
@@ -239,7 +238,7 @@ interface GeneratedPlannedWorkout {
   exercises: GeneratedExercise[]
 }
 
-interface NormalizedPreferences {
+export interface NormalizedPreferences {
   focusAreas: string[]
   focusMuscleKeys: string[]
   bannedExerciseNames: string[]
@@ -253,7 +252,7 @@ interface NormalizedPreferences {
   lightDays: string[]
 }
 
-interface WeeklyContext {
+export interface WeeklyContext {
   previousExerciseIds: Set<string>
   recentExerciseIds: Set<string>
   previousMuscleCounts: Map<string, number>
@@ -265,39 +264,6 @@ interface WeeklyContext {
   daysSincePreviousWorkout: number | null
   /** Issue #166: остаток недельной цели по группам (цель минус факт). */
   weeklyVolume: Record<string, WeeklyVolumeStatus>
-}
-
-interface ChooseBestExerciseParams {
-  muscleKey: string
-  library: NormalizedLibraryExercise[]
-  coachState: CoachState | null
-  coachMemory: CoachMemoryForGenerator | null
-  coachDecision: CoachDecisionForGenerator | null
-  history: WorkoutHistoryEntry[]
-  usedExerciseIds: Set<string>
-  // Issue #309: под-мышцы, уже занятые более ранним слотом в ЭТОМ дне —
-  // дубль слота группы не должен вслепую повторять тот же под-ключ.
-  usedSubMuscleKeys?: Set<string>
-  lowReadiness: boolean
-  preferences: NormalizedPreferences
-  weeklyContext: WeeklyContext
-  // Issue #106: skip plateau exercises when alternatives exist
-  exerciseFlags?: ExerciseAnalysisFlag[]
-}
-
-interface ApplyPrescriptionParams {
-  exercise: NormalizedLibraryExercise
-  profile?: ProfileForGenerator
-  coachState: CoachState | null
-  coachMemory?: CoachMemoryForGenerator | null
-  coachDecision?: CoachDecisionForGenerator | null
-  history: WorkoutHistoryEntry[]
-  lowReadiness: boolean
-  preferences?: NormalizedPreferences
-  weeklyContext?: WeeklyContext
-  userTrainingPolicy?: UserTrainingPolicyForGenerator | null
-  // Issue #106: react to per-exercise analysis flags
-  exerciseFlag?: ExerciseAnalysisFlag | null
 }
 
 interface EnsureCoreFinisherParams {
@@ -624,16 +590,6 @@ function targetExerciseCount({ targetMinutes, preferences = emptyPreferences(), 
   return lowReadiness ? Math.max(3, styled - 1) : styled
 }
 
-function orderExercisesForWorkout(exercises: GeneratedExercise[]): GeneratedExercise[] {
-  return [...(exercises ?? [])]
-    .map((exercise, index) => ({ exercise, index }))
-    .sort((left, right) => {
-      const priorityDelta = exerciseOrderPriority(left.exercise) - exerciseOrderPriority(right.exercise)
-      return priorityDelta || left.index - right.index
-    })
-    .map(({ exercise }) => exercise)
-}
-
 function ensureCoreFinisher({ selected, library, coachState, coachMemory, decision, history, lowReadiness, preferences, weeklyContext, userTrainingPolicy, profile, exerciseTarget }: EnsureCoreFinisherParams): GeneratedExercise[] {
   const current = [...(selected ?? [])]
   if (current.length === 0) return current
@@ -699,534 +655,6 @@ function findCoreFinisherReplacementIndex(exercises: GeneratedExercise[]): numbe
     if (isIsolationOrAccessory(text, muscleKey) || muscleKey === 'arms' || muscleKey === 'shoulders') return index
   }
   return exercises.length - 1
-}
-
-function exerciseOrderPriority(exercise: GeneratedExercise | null | undefined): number {
-  const text = normalizeText(`${exercise?.exerciseName ?? ''} ${exercise?.muscleGroup ?? ''}`)
-  // Issue #301: группа — из справочника, а не из имени: алиас «жим» в
-  // «Французском жиме» (трицепс) тянул его в полосу груди, вровень с жимом лёжа.
-  const muscleKey = normalizeExerciseMuscleGroup(exercise?.muscleGroup ?? '', exercise?.exerciseName ?? '')
-  if (muscleKey === 'core') return 70
-  if (isLowerBackAccessory(text)) return 55
-  if (isPrimaryCompound(text, muscleKey)) return 10 + compoundMuscleOrder(muscleKey)
-  if (isSecondaryCompound(text, muscleKey)) return 25 + compoundMuscleOrder(muscleKey)
-  if (isIsolationOrAccessory(text, muscleKey)) return 45 + compoundMuscleOrder(muscleKey)
-  if (muscleKey === 'arms') return 50
-  if (muscleKey === 'shoulders') return 35
-  return 60
-}
-
-function compoundMuscleOrder(muscleKey: string): number {
-  if (muscleKey === 'legs') return 1
-  if (muscleKey === 'chest') return 2
-  if (muscleKey === 'back') return 3
-  if (muscleKey === 'shoulders') return 4
-  return 5
-}
-
-function isPrimaryCompound(text: string, muscleKey: string): boolean {
-  if (muscleKey === 'legs' && /(присед|squat|станов|deadlift|румын|romanian|выпад|lunge)/u.test(text)) return true
-  if (muscleKey === 'chest' && /(жим|bench|press|отжим)/u.test(text)) return true
-  if (muscleKey === 'back' && /(тяга|row|pulldown|pull-up|подтяг)/u.test(text) && !isLowerBackAccessory(text)) return true
-  return false
-}
-
-function isSecondaryCompound(text: string, muscleKey: string): boolean {
-  if (muscleKey === 'shoulders' && /(жим|press)/u.test(text)) return true
-  if (muscleKey === 'legs' && /(leg press|жим ногами|step-up|болгар)/u.test(text)) return true
-  return false
-}
-
-function isIsolationOrAccessory(text: string, muscleKey: string): boolean {
-  if (muscleKey === 'arms') return true
-  if (muscleKey === 'legs' && /(сгиб|разгиб|curl|extension|икр|calf)/u.test(text)) return true
-  if (muscleKey === 'shoulders' && /(развед|raise|face pull|мах)/u.test(text)) return true
-  return false
-}
-
-function isLowerBackAccessory(text: string): boolean {
-  return /(гиперэкстенз|hyperextension|back extension|разгибание спины)/u.test(text)
-}
-
-function chooseTargetPattern(
-  coachState: CoachState | null,
-  preferences: NormalizedPreferences = emptyPreferences(),
-  coachDecision: CoachDecisionForGenerator | null = null,
-  lowReadiness = false,
-  scheduledDate = '',
-  previousGeneratedWorkouts: PreviousGeneratedWorkout[] = [],
-): string[] {
-  const all: readonly string[] = CANONICAL_MUSCLE_KEYS
-  const avoid = new Set(coachDecision?.avoidMuscleGroups ?? [])
-
-  // Issue #78: light day — if scheduledDate falls on a light day, avoid
-  // large muscle groups (legs, back, chest). Useful when the user has
-  // another physical activity (e.g. boxing) on the same day and can't
-  // recover in time for heavy compound lifts.
-  const scheduledWeekday = normalizeText(russianWeekdayName(new Date(scheduledDate)))
-  const isLightDay = preferences.lightDays.some((d) => normalizeText(d) === scheduledWeekday)
-  if (isLightDay) {
-    avoid.add('legs')
-    avoid.add('back')
-    avoid.add('chest')
-  }
-
-  const fresh = all.filter((muscleKey) => !avoid.has(muscleKey) && !isHighFatigue(muscleKey, coachState))
-  const hasFresh = (muscleKey: string) => fresh.includes(muscleKey)
-  const pattern: string[] = []
-  // Issue #75: reorder priority groups — groups NOT in the previous workout
-  // go first, groups that WERE in the previous workout go later.
-  const recentMuscleKeys = extractRecentMuscleKeys(previousGeneratedWorkouts, scheduledDate)
-  const recentSet = new Set(recentMuscleKeys)
-  // Issue #219: одного бита «было / не было в прошлый раз» мало — одна сессия
-  // накрывает почти все канонические группы, поэтому при равном бите порядок
-  // оставался фиксированным (DEFAULT_PRIORITY), и подряд идущие дни собирались
-  // одинаково. Внутри каждого разряда сортируем по тому, сколько дней группу не
-  // трогали: сначала самые застоявшиеся. Кор из сортировки выведен — он
-  // финишер и не должен всплывать в начало сессии.
-  const muscleRecencyDays = buildMuscleRecencyDays(previousGeneratedWorkouts, scheduledDate)
-  const staleFirst = (keys: string[]): string[] => sortByStalenessKeepingCore(keys, muscleRecencyDays)
-  const priorityNotRecent = staleFirst((coachDecision?.priorityMuscleGroups ?? []).filter((p) => !recentSet.has(p)))
-  const priorityWasRecent = staleFirst((coachDecision?.priorityMuscleGroups ?? []).filter((p) => recentSet.has(p)))
-  for (const priority of [...priorityNotRecent, ...priorityWasRecent]) {
-    if (hasFresh(priority) && !pattern.includes(priority)) pattern.push(priority)
-  }
-  for (const focus of preferences.focusMuscleKeys ?? []) {
-    if (hasFresh(focus) && !pattern.includes(focus)) pattern.push(focus)
-  }
-  // Issue #223: здесь стоял ранний выход по фиксированному списку
-  // back/shoulders/arms/core — то есть по группам, которые чаще всего и
-  // работали в прошлый раз, а свежие грудь и ноги выпадали из дня целиком.
-  // Выбор групп локален и делается ниже общей ротацией: ставим то, что давно не
-  // трогали. Системная готовность решает не «что», а «насколько тяжело» — это
-  // applyPrescription. Единственный структурный след разгрузки — день не
-  // удваивает слоты (см. дедупликацию в конце функции).
-
-  // Issue #75: compute recently used muscle groups from previous workouts.
-  // This replaces the weekday parity rotation (a7d98b5) with real rotation
-  // based on what was actually trained in the previous planned workout.
-  // (recentMuscleKeys and recentSet already computed above)
-
-  // Build the full candidate list in a rotation-aware order.
-  // Muscle groups NOT in the previous workout go first (for variety),
-  // then muscle groups that WERE in the previous workout (lower priority).
-  const notRecent = staleFirst(all.filter((key) => hasFresh(key) && !recentSet.has(key) && !pattern.includes(key)))
-  const wasRecent = staleFirst(all.filter((key) => hasFresh(key) && recentSet.has(key) && !pattern.includes(key)))
-
-  // Rotation: if previous workout was push-heavy (chest+shoulders+arms),
-  // prioritize pull (back+legs) this time, and vice versa.
-  const pushGroups = new Set(['chest', 'shoulders', 'arms'])
-  const pullGroups = new Set(['back', 'legs'])
-  const wasPushHeavy = recentMuscleKeys.filter((k) => pushGroups.has(k)).length >= 2
-  const wasPullHeavy = recentMuscleKeys.filter((k) => pullGroups.has(k)).length >= 2
-
-  if (wasPushHeavy) {
-    // Previous was push → prioritize pull this time
-    for (const key of ['legs', 'back'] as const) {
-      if (hasFresh(key) && !pattern.includes(key)) pattern.push(key)
-    }
-  } else if (wasPullHeavy) {
-    // Previous was pull → prioritize push this time
-    for (const key of ['chest', 'shoulders', 'arms'] as const) {
-      if (hasFresh(key) && !pattern.includes(key)) pattern.push(key)
-    }
-  }
-
-  // Add remaining not-recent groups (allow duplicates — the main loop
-  // picks different exercises from the same muscle group via usedExerciseIds).
-  for (const key of notRecent) pattern.push(key)
-  // Add recent groups last (they'll only be used if we need more exercises)
-  for (const key of wasRecent) pattern.push(key)
-  // Core finisher always at the end
-  if (hasFresh('core')) pattern.push('core')
-
-  // Issue #75: append ALL fresh groups again as duplicates so the main
-  // loop can pick a second exercise from the same muscle group (e.g.
-  // compound back + lower-back accessory). This preserves the old behavior.
-  // Not-recent groups come first (higher priority), then recent groups.
-  for (const key of notRecent) pattern.push(key)
-  for (const key of wasRecent) pattern.push(key)
-  // Also append groups that were already in pattern from priorities/focus
-  // (they were skipped by notRecent/wasRecent due to !pattern.includes).
-  // Issue #219: второе упражнение в дне достаётся застоявшейся группе, а не
-  // просто первой по каноническому списку.
-  for (const key of staleFirst(fresh)) {
-    if (!notRecent.includes(key) && !wasRecent.includes(key)) pattern.push(key)
-  }
-
-  // Issue #223: разгрузочный день не удваивает слоты — по одному упражнению на
-  // группу. Порядок при этом остаётся общим: застоявшиеся группы впереди.
-  const orderedPattern = lowReadiness ? [...new Set(pattern)] : pattern
-
-  return orderedPattern.length ? orderedPattern : ['arms', 'shoulders', 'core'].filter((key) => !avoid.has(key))
-}
-
-/**
- * Issue #166: группы с недобором недельной цели идут первыми, выбравшие свою
- * цель — последними. Не исключаем их совсем: день не должен остаться без
- * упражнений, если все цели уже выполнены. Сортировка стабильная, поэтому
- * ротация и порядок дубликатов внутри одного ранга сохраняются, а кор
- * остаётся финишером.
- */
-function orderPatternByWeeklyDeficit(pattern: string[], weeklyVolume: Record<string, WeeklyVolumeStatus>): string[] {
-  if (pattern.length === 0 || Object.keys(weeklyVolume ?? {}).length === 0) return pattern
-  const rank = (muscleKey: string): number => {
-    if (muscleKey === 'core') return 0
-    const remaining = weeklyVolume[muscleKey]?.remainingSets
-    if (!Number.isFinite(remaining)) return 0
-    return remaining > 0 ? -1 : 1
-  }
-  return [...pattern].sort((a, b) => rank(a) - rank(b))
-}
-
-function chooseBestExerciseForMuscle({ muscleKey, library, coachState, coachMemory, coachDecision, history, usedExerciseIds, usedSubMuscleKeys = new Set(), lowReadiness, preferences, weeklyContext, exerciseFlags = [] }: ChooseBestExerciseParams): NormalizedLibraryExercise | null {
-  if (isRecoveryRestricted(muscleKey, weeklyContext) || isCoachMemoryRestricted(muscleKey, coachMemory) || coachDecision?.avoidMuscleGroups?.includes(muscleKey)) return null
-  // Issue #106: build a set of plateau exercise ids (recommendation =
-  // swap_exercise) so we can skip them IF alternatives exist for this muscle
-  const plateauIds = new Set(
-    exerciseFlags
-      .filter((f) => f.recommendation === 'swap_exercise')
-      .map((f) => f.exerciseId),
-  )
-  const candidates = library
-    .filter((exercise) => exercise.muscleKey === muscleKey)
-    .filter((exercise) => !usedExerciseIds.has(exercise.id))
-    .filter((exercise) => !isBannedExercise(exercise, preferences))
-    .filter((exercise) => !isCoachDecisionRestricted(exercise, coachDecision))
-    .filter((exercise) => lowReadiness ? !isHighFatigue(exercise.muscleKey, coachState) : true)
-    .sort((a, b) => exerciseScore(b, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, coachDecision) - exerciseScore(a, coachState, history, lowReadiness, preferences, weeklyContext, coachMemory, coachDecision))
-  // Issue #106: prefer non-plateau candidates; only fall back to a plateau
-  // exercise if no alternative exists for this muscle group
-  const nonPlateau = candidates.filter((c) => !plateauIds.has(c.id))
-  // Issue #309: дубль слота группы (второе упражнение arms/back/legs в том же
-  // дне) раньше не знал, какой под-ключ уже занят первым слотом — бицепс мог
-  // повториться дублем arms, горизонтальная тяга — дублем back. Предпочитаем
-  // кандидата со свежим (ещё не занятым в этом дне) под-ключом, но только как
-  // прибавку поверх уже существующих приоритетов (плато остаётся сильнее): при
-  // отсутствии кандидата со свежим под-ключом откатываемся к прежнему выбору.
-  const hasFreshSubMuscle = (exercise: NormalizedLibraryExercise) =>
-    exercise.subMuscleKeys.length === 0 || exercise.subMuscleKeys.some((key) => !usedSubMuscleKeys.has(key))
-  return nonPlateau.filter(hasFreshSubMuscle)[0]
-    ?? nonPlateau[0]
-    ?? candidates.filter(hasFreshSubMuscle)[0]
-    ?? candidates[0]
-    ?? null
-}
-
-function applyPrescription({ exercise, profile, coachState, coachMemory = null, coachDecision = null, history, lowReadiness, preferences = emptyPreferences(), weeklyContext = emptyWeeklyContext(), userTrainingPolicy = null, exerciseFlag = null }: ApplyPrescriptionParams): GeneratedExercise {
-  const recent = latestExerciseHistory(history, exercise.id)
-  // Issue #294: для bodyweight-упражнений «исторический» вес не участвует —
-  // старые фиктивные записи (вес 0 + шаг 2.5 → рекомендация 2.5) не должны
-  // назначаться плану как реальный кандидат. Прогрессия у них по повторам.
-  const historicWeight = exercise.equipment === 'bodyweight' ? NaN : Number(recent?.nextRecommendedWeight ?? NaN)
-  // Разгрузка нужна дважды: она снимает инвариант рабочего веса (#170) и
-  // переписывает предписание в самом конце — считаем один раз.
-  const mesocycleState = coachState?.mesocycle
-  const isDeloadSession = isDeloadWeek(mesocycleState as Parameters<typeof isDeloadWeek>[0])
-  // Issue #100: use currentWorkingWeight from coachMemory as a fallback.
-  // coachMemory computes currentWorkingWeight as the MAX of the last 3
-  // sessions (issue #99), so after a deload it remembers the real working
-  // weight. Without this fallback, the plan would use nextRecommendedWeight
-  // from the last (deload) session, which is too low.
-  const coachWorkingWeight = Number(
-    coachMemory?.exerciseProfiles?.[exercise.id]?.currentWorkingWeight ?? NaN,
-  )
-  // historicWeight must be > 0 to be considered valid (0 means no
-  // progression recommendation was recorded, e.g. first session or deload).
-  //
-  // Issue #136: раньше historicWeight (nextRecommendedWeight последней сессии)
-  // имел безусловный приоритет над coachWorkingWeight. После разгрузки
-  // nextRecommendedWeight занижен (напр. 47.5), а фактический рабочий вес был
-  // выше (60кг подняли легко) — план ставил вес НИЖЕ факта. coachMemory уже
-  // считает currentWorkingWeight как MAX топ-подхода за 3 сессии (#99), поэтому
-  // берём максимум: обычная прогрессия сохраняется (historicWeight обычно ≥
-  // рабочего), а после разгрузки не проваливаемся ниже реального рабочего веса.
-  // Issue #139 (единый источник весов): exercise.targetWeight здесь — это вес из
-  // program_exercises, который LLM-планировщик (planAndApplyNextWorkout →
-  // applyPlanAndLog) обновляет после КАЖДОЙ тренировки и клампит
-  // (clampCoachPlanToNextWorkout). Берём его авторитетным кандидатом базы —
-  // так решение LLM о прогрессии программы доходит до видимого плана календаря,
-  // а не расходится с ним (корень #136/#137). Максимум с рабочим весом
-  // сохраняет инвариант #136: план не опускается ниже фактического рабочего веса.
-  const programWeight = Number(exercise.targetWeight)
-  const weightCandidates = [historicWeight, coachWorkingWeight, programWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
-  // Issue #173: «сильнейший» кандидат зависит от направления веса. Для
-  // обычных упражнений это максимум, для гравитрона (помощь) — минимум:
-  // инвариант #136 там работает в обратную сторону (помощь не растёт).
-  const direction = resolveWeightDirection(exercise)
-  // Issue #170: инвариант #136 разрешает неопределённость ВВЕРХ — при трёх
-  // расходящихся кандидатах берётся сильнейший. Внутри нормального цикла это
-  // верно, но цена недогруженной тренировки близка к нулю, а цена
-  // перегруженной на невосстановленном организме — травма. Поэтому инвариант
-  // не отменяется, а приостанавливается: в трёх ситуациях ниже из тех же
-  // кандидатов берётся самый лёгкий, и вес свободно опускается.
-  const isLongBreak = isLongBreakBeforeSession(coachState, weeklyContext)
-  const invariantSuspended = isLongBreak
-    || hasActivePainFlag(exercise.id, coachState, coachMemory)
-    || isDeloadSession
-  const resolveCandidates = invariantSuspended ? easierOf : strongerOf
-  // Issue #263: приостановка инварианта означает «легче реального рабочего», а
-  // не «легче чего угодно». programWeight для упражнения вне программы — это
-  // статичный default_target_weight справочника (у skull-crusher 20 при рабочих
-  // 35), и как кандидат «полегче» он назначал дефолт новичка вместо шага вниз.
-  // Поэтому при приостановке пул — только реальные сигналы. Направление здесь
-  // не различается: для assistance easierOf = max, и дефолт справочника
-  // завышал помощь ровно так же (#173). Нет ни одного реального сигнала —
-  // остаётся прежний полный пул, поведение для новых упражнений не меняется.
-  const realWeightCandidates = [historicWeight, coachWorkingWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
-  const candidatePool = invariantSuspended && realWeightCandidates.length > 0 ? realWeightCandidates : weightCandidates
-  let baseWeight = candidatePool.length > 0
-    ? candidatePool.reduce((best, weight) => resolveCandidates(best, weight, direction))
-    : exercise.targetWeight
-  // Issue #283: приостановка инварианта после перерыва означает «самый лёгкий
-  // из реальных кандидатов», а не «рабочий минус шаг». Когда оба реальных
-  // сигнала совпадают, опускаться вниз некуда, и план выдаёт ровно
-  // доперерывный рабочий вес, взятый на RPE 10. Поэтому при совпадении двух
-  // независимых реальных сигналов снимается один шаг через easierWeight.
-  // Правило завязано именно на isLongBreak, а не на invariantSuspended: боль и
-  // разгрузка не меняются (у разгрузки свой шаг вниз — второй дал бы −2 шага).
-  // Совпадение — это строго две оценки, historicWeight и coachWorkingWeight,
-  // а не совпадение базы с «сильнейшим»: единственный реальный кандидат —
-  // дефолт справочника из coachMemory (ветка no_data, #263) — «совпасть» с
-  // собой не может, и с него шаг вниз не снимается.
-  if (isLongBreak && realWeightCandidates.length > 1 && historicWeight === coachWorkingWeight) {
-    baseWeight = roundWeight(easierWeight(baseWeight, exercise.weightStep, direction))
-  }
-  const baseSetsCount = preferences.sessionStyle === 'volume_light'
-    ? clamp(exercise.setsCount + 1, 2, 4)
-    : clamp(exercise.setsCount, 2, preferences.sessionStyle === 'heavy_short' ? 3 : 4)
-  // Issue #166: не выписываем больше, чем осталось от недельной цели группы
-  // (но не опускаемся ниже минимальных двух рабочих подходов).
-  const remainingWeeklySets = weeklyContext.weeklyVolume?.[exercise.muscleKey]?.remainingSets
-  let setsCount = Number.isFinite(remainingWeeklySets) && remainingWeeklySets > 0
-    ? Math.max(2, Math.min(baseSetsCount, remainingWeeklySets))
-    : baseSetsCount
-  let repMin = lowReadiness ? Math.max(exercise.repMin, Math.min(exercise.repMax, 10)) : exercise.repMin
-  let repMax = lowReadiness ? Math.max(repMin, exercise.repMax) : exercise.repMax
-  const hasRecentWorkingWeight = Boolean(recent) && Number.isFinite(historicWeight)
-  const policy = coachDecision?.exercisePolicies?.[exercise.id]
-  const shouldConsolidate = policy === 'consolidate'
-  let targetWeight = roundWeight(lowReadiness && baseWeight > 0 && !hasRecentWorkingWeight ? easierWeight(baseWeight, exercise.weightStep, direction) : baseWeight)
-
-  // Issue #106: react to per-exercise analysis flags from #105.
-  // These override the default weight progression based on e1RM trends.
-  if (exerciseFlag) {
-    const step = Math.max(0, Number(exercise.weightStep ?? 2.5))
-    switch (exerciseFlag.recommendation) {
-      case 'increase_weight':
-        // e1RM trending up — один шаг ТЯЖЕЛЕЕ базы (для гравитрона = меньше помощи, #173)
-        // Issue #192: у веса тела повышать нечего, и диапазон повторов здесь
-        // тоже НЕ трогаем: генератор прогоняется заново на каждой
-        // перегенерации и каскаде, счёт был бы кратным. Рост повторов живёт в
-        // buildSafeCoachPlan — один раз на завершённую тренировку.
-        if (targetWeight > 0) targetWeight = roundWeight(harderWeight(targetWeight, step, direction))
-        break
-      case 'decrease_weight':
-        // e1RM trending down (non-deload) — один шаг ЛЕГЧЕ (для гравитрона = больше помощи, #173)
-        if (targetWeight > 0) targetWeight = roundWeight(easierWeight(targetWeight, step, direction))
-        break
-      case 'consolidate':
-        // Hold the weight, don't increase, keep intensity easy
-        // (targetWeight stays at baseWeight, intensityTarget forced easy via flagConsolidate below)
-        break
-      case 'hold_weight':
-      case 'monitor':
-      case 'swap_exercise':
-        // swap_exercise should not reach here (filtered in chooseBestExerciseForMuscle),
-        // but if it does (no alternative), just hold the weight
-        break
-    }
-  }
-  const restSeconds = lowReadiness ? Math.min(120, Math.max(60, exercise.restSeconds)) : exercise.restSeconds
-  const noFailurePolicy = userTrainingPolicy?.allowFailureSets === false
-  // Issue #106: consolidate flag from analysis also forces easy intensity
-  const flagConsolidate = exerciseFlag?.recommendation === 'consolidate'
-  let intensityTarget = lowReadiness || shouldConsolidate || flagConsolidate || noFailurePolicy || preferences.intensityTolerance === 'avoid_max'
-    ? 'easy'
-    : preferences.intensityTolerance === 'rare_max'
-      ? 'controlled'
-      : preferences.intensityTolerance === 'aggressive'
-        ? 'max_effort_allowed'
-        : intensityForGoal(profile?.goal)
-  let focusText = noFailurePolicy
-    ? 'контролируемая работа без отказа, техника важнее веса'
-    : lowReadiness
-      ? 'лёгкий контролируемый объём, без отказа'
-      : 'рабочая нагрузка под цель, 1–2 повтора в запасе'
-
-  // Issue #35: apply intra-cycle periodization (loading/accumulation/intensification).
-  const mesocyclePhase = coachState?.mesocycle?.phase
-  if (mesocyclePhase && mesocyclePhase !== 'idle' && mesocyclePhase !== 'deload') {
-    const periodized = applyPeriodization({
-      targetWeight,
-      repMin,
-      repMax,
-      setsCount,
-      intensityTarget,
-      weightStep: exercise.weightStep,
-      equipment: exercise.equipment,
-    }, mesocyclePhase, direction)
-    targetWeight = roundWeight(periodized.targetWeight)
-    repMin = periodized.repMin
-    repMax = periodized.repMax
-    setsCount = periodized.setsCount
-    intensityTarget = periodized.intensityTarget
-    if (periodized.periodizationNote) {
-      focusText = periodized.periodizationNote
-    }
-  }
-
-  // Mesocycle deload: if the user's mesocycle is in a deload week, override
-  // the prescription with reduced sets/weight/reps and 'easy' intensity.
-  let deloadNote: string | null = null
-  if (isDeloadSession) {
-    const deload = applyDeloadReduction({
-      name: exercise.name,
-      weightDirection: exercise.weightDirection,
-      setsCount,
-      targetWeight,
-      repMin,
-      repMax,
-      weightStep: exercise.weightStep,
-    })
-    setsCount = deload.setsCount
-    targetWeight = deload.targetWeight
-    repMin = deload.repMin
-    repMax = deload.repMax
-    intensityTarget = deload.intensityTarget // 'easy'
-    deloadNote = deload.deloadNote
-    focusText = 'разгрузочная неделя мезоцикла — снижаем объём и интенсивность'
-  }
-
-  // Issue #171: подростковые ограничения — последнее слово в предписании.
-  // Стоят ПОСЛЕ периодизации и разгрузки, потому что обе переписывают диапазон
-  // повторов: у становой в справочнике он и так 4–6, а интенсификация уводит
-  // его ещё ниже. Подход на 1–4 повтора — это проходка, а не рабочий подход.
-  const teenLimited = teenLimitsApply(profile?.age, exercise)
-  const teenNotes: string[] = []
-  if (teenLimited) {
-    teenNotes.push(TEEN_LIMIT_REASONS.no_failure)
-    if (repMin < TEEN_MIN_REPS) teenNotes.push(TEEN_LIMIT_REASONS.min_reps)
-    repMin = Math.max(TEEN_MIN_REPS, repMin)
-    repMax = Math.max(repMin, repMax)
-  }
-
-  return {
-    exerciseId: exercise.id,
-    exerciseName: exercise.name,
-    muscleGroup: exercise.muscleGroup,
-    setsCount,
-    repMin,
-    repMax,
-    targetWeight,
-    weightStep: exercise.weightStep,
-    restSeconds,
-    intensityTarget,
-    weightDirection: direction,
-    teenLimited,
-    workingFloorSuspended: invariantSuspended,
-    // Причина ограничения идёт вместе с предписанием: необъяснённое ограничение
-    // читается как недоверие (см. #171, правило 5).
-    coachFocus: `${exercise.name}: ${shouldConsolidate && !deloadNote ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}${deloadNote ? `. ${deloadNote}` : ''}.${teenNotes.length ? ` ${teenNotes.join('; ')}.` : ''}`,
-    reason: reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext, policy }),
-  }
-}
-
-interface ReasonForExerciseParams {
-  exercise: NormalizedLibraryExercise
-  coachState: CoachState | null
-  recent: CompletedExerciseHistoryEntry | null
-  lowReadiness: boolean
-  weeklyContext: WeeklyContext
-  policy: string | null | undefined
-}
-
-interface CompletedExerciseHistoryEntry {
-  nextRecommendedWeight?: number
-}
-
-function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext = emptyWeeklyContext(), policy = null }: ReasonForExerciseParams): string {
-  const fatigue = coachState?.muscleGroups?.[exercise.muscleKey as keyof typeof coachState.muscleGroups]?.fatigue ?? 'unknown'
-  const historyText = recent ? 'учтён последний рабочий вес' : 'стартовый вес взят из библиотеки'
-  const loadText = lowReadiness ? 'нагрузка снижена из-за восстановления' : 'группа мышц доступна для работы'
-  const diversityText = weeklyContext.previousExerciseIds?.size && !weeklyContext.previousExerciseIds.has(exercise.id)
-    ? 'учтено разнообразие недели'
-    : null
-  const policyText = policy === 'consolidate' ? 'решение тренера: закрепить текущий вес' : null
-  // Issue #166: расхождение недельной цели и факта видно прямо в плане.
-  const weekly = weeklyContext.weeklyVolume?.[exercise.muscleKey]
-  const volumeText = weekly ? `недельный объём ${weekly.actualSets}/${weekly.targetSets} подходов` : null
-  return `${loadText}; ${exercise.muscleGroup}: усталость ${fatigue}; ${historyText}${diversityText ? `; ${diversityText}` : ''}${volumeText ? `; ${volumeText}` : ''}${policyText ? `; ${policyText}` : ''}.`
-}
-
-
-
-function exerciseScore(
-  exercise: NormalizedLibraryExercise,
-  coachState: CoachState | null,
-  history: WorkoutHistoryEntry[],
-  lowReadiness: boolean,
-  preferences: NormalizedPreferences = emptyPreferences(),
-  weeklyContext: WeeklyContext = emptyWeeklyContext(),
-  coachMemory: CoachMemoryForGenerator | null = null,
-  coachDecision: CoachDecisionForGenerator | null = null,
-): number {
-  let score = 0
-  if (isBannedExercise(exercise, preferences)) return -10000
-  if (isCoachDecisionRestricted(exercise, coachDecision)) return -9800
-  if (isCoachMemoryRestricted(exercise.muscleKey, coachMemory)) return -9500
-  const fatigue = coachState?.muscleGroups?.[exercise.muscleKey as keyof typeof coachState.muscleGroups]?.fatigue ?? 'low'
-  if (fatigue === 'low') score += 30
-  if (fatigue === 'medium') score += lowReadiness ? 0 : 12
-  if (fatigue === 'high') score -= 100
-  // Issue #293: мягкий штраф по под-мышцам ног — сигнал внутри уже разрешённой
-  // группы, а не блокировка (числа сознательно меньше хард-фильтра группы,
-  // минус 100 при fatigue high). У кандидата с двумя утомлёнными под-мышцами
-  // штраф суммируется, у свежего — ноль (фолбэк low, если поля нет).
-  for (const subKey of exercise.subMuscleKeys) {
-    const subFatigue = coachState?.subMuscleGroups?.[subKey as keyof typeof coachState.subMuscleGroups]?.fatigue ?? 'low'
-    if (subFatigue === 'high') score -= 60
-    else if (subFatigue === 'medium') score -= 20
-  }
-  if (latestExerciseHistory(history, exercise.id)) score += 8
-  if (coachState?.exercises?.[exercise.id]?.status === 'progress_possible') score += 8
-  if (coachState?.exercises?.[exercise.id]?.status === 'pain') score -= 80
-  // Issue #223: тот же фиксированный список жил и в скоринге — он тянул руки и
-  // плечи обратно в разгрузочный день через филлеры, даже когда паттерн уже
-  // выбрал свежие группы. Слот получает не «лёгкая группа из списка», а та,
-  // которую давно не трогали.
-  if (lowReadiness && (weeklyContext.recentMuscleCounts?.get(exercise.muscleKey) ?? 0) > 0) score -= 12
-  if (!lowReadiness && ['legs', 'back', 'chest'].includes(exercise.muscleKey)) score += 5
-  if (preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score += 14
-  if (coachDecision?.priorityMuscleGroups?.includes(exercise.muscleKey)) score += 18
-  if (coachDecision?.exercisePolicies?.[exercise.id] === 'progress_possible') score += 8
-  if (coachDecision?.exercisePolicies?.[exercise.id] === 'consolidate') score += 4
-  const isPreferredExercise = preferences.preferredExerciseNames?.some((name) => matchesExercisePreference(exercise, name)) ?? false
-  if (isPreferredExercise) score += 20
-  if (preferences.exerciseStyle === 'machines' && isMachineLike(exercise)) score += 10
-  if (preferences.exerciseStyle === 'free_weights' && isFreeWeightLike(exercise)) score += 10
-  if (preferences.exerciseStyle === 'bodyweight' && exercise.targetWeight === 0) score += 12
-  if (isRecoveryRestricted(exercise.muscleKey, weeklyContext)) score -= 9000
-  if (weeklyContext.recentExerciseIds?.has(exercise.id)) score -= 120
-  // Issue #239: предпочтение перевешивает обычную ротацию (previousExerciseIds —
-  // окно до 7 дней, 6 дней это нормальный перерыв между тренировками группы),
-  // но не «свежий повтор» (recentExerciseIds, ≤3 дня): тренировался позавчера —
-  // предпочтение проигрывает альтернативе.
-  if (weeklyContext.previousExerciseIds?.has(exercise.id)) score -= isPreferredExercise ? 10 : 34
-  const previousMuscleCount = weeklyContext.previousMuscleCounts?.get(exercise.muscleKey) ?? 0
-  if (previousMuscleCount > 1 && !preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score -= 6
-  const recentMuscleCount = weeklyContext.recentMuscleCounts?.get(exercise.muscleKey) ?? 0
-  if (recentMuscleCount > 1 && !preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score -= 18
-  // Issue #166: сессия тратит остаток недельной цели — группа с недобором идёт
-  // вперёд, выбравшая свою цель уступает место.
-  const remainingWeeklySets = weeklyContext.weeklyVolume?.[exercise.muscleKey]?.remainingSets
-  if (Number.isFinite(remainingWeeklySets)) {
-    if (remainingWeeklySets >= 3) score += 18
-    else if (remainingWeeklySets > 0) score += 8
-    else score -= 25
-  }
-  if (exercise.targetWeight > 0) score += 1
-  return score
 }
 
 function buildWeeklyContext(
@@ -1315,154 +743,6 @@ function buildCompletedWorkoutContext(
     }))
 }
 
-function isRecoveryRestricted(muscleKey: string, weeklyContext: WeeklyContext = emptyWeeklyContext()): boolean {
-  return weeklyContext.recoveryRestrictedMuscleKeys?.has(muscleKey) ?? false
-}
-
-function isCoachMemoryRestricted(muscleKey: string, coachMemory: CoachMemoryForGenerator | null = null): boolean {
-  return coachMemory?.muscleGroupProfiles?.[muscleKey]?.status === 'avoid'
-}
-
-function isCoachDecisionRestricted(exercise: NormalizedLibraryExercise, coachDecision: CoachDecisionForGenerator | null = null): boolean {
-  if (!coachDecision) return false
-  if (coachDecision.avoidMuscleGroups?.includes(exercise.muscleKey)) return true
-  return coachDecision.exercisePolicies?.[exercise.id] === 'avoid_today'
-}
-
-/**
- * Issue #170: перерыв, после которого доперерывный вес назначать нельзя.
- * Нижняя граница из задачи — 2–4 недели; берём 2 недели: цена лишнего
- * осторожного веса близка к нулю, цена пропущенного перерыва — травма.
- */
-const LONG_BREAK_DAYS = 14
-
-/**
- * Issue #170: перерыв меряем до ДАТЫ планируемой сессии, поэтому одного
- * daysSinceLastWorkout мало — он же вырастет, если тренировка запланирована
- * далеко вперёд при регулярных занятиях. Если в календаре перед этой датой
- * есть тренировка (своя или уже выполненная), перерыва нет.
- */
-function isLongBreakBeforeSession(coachState: CoachState | null, weeklyContext: WeeklyContext = emptyWeeklyContext()): boolean {
-  const daysSinceLastWorkout = Number(coachState?.daysSinceLastWorkout ?? NaN)
-  if (!Number.isFinite(daysSinceLastWorkout) || daysSinceLastWorkout <= LONG_BREAK_DAYS) return false
-  return weeklyContext.daysSincePreviousWorkout === null || weeklyContext.daysSincePreviousWorkout === undefined
-}
-
-/**
- * Issue #170: отметка боли в этом движении. Обе памяти помечают болью
- * последнюю сессию с упражнением — пока пользователь не сделает его без боли,
- * вес не обязан возвращаться к рабочему.
- */
-function hasActivePainFlag(exerciseId: string, coachState: CoachState | null, coachMemory: CoachMemoryForGenerator | null): boolean {
-  return coachMemory?.exerciseProfiles?.[exerciseId]?.pain === true
-    || coachState?.exercises?.[exerciseId]?.status === 'pain'
-}
-
-function isReturningAfterBreak(profile: ProfileForGenerator = {}): boolean {
-  const level = normalizeText(profile?.level)
-  return level.includes('перерыв') || level.includes('возвращ') || level.includes('return') || level.includes('beginner') || level.includes('нович')
-}
-
-function daysBetweenDates(fromDate: unknown, toDate: unknown): number {
-  if (!fromDate || !toDate) return Number.NaN
-  const from = new Date(`${String(fromDate).slice(0, 10)}T00:00:00.000Z`)
-  const to = new Date(`${String(toDate).slice(0, 10)}T00:00:00.000Z`)
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return Number.NaN
-  return Math.round((to.getTime() - from.getTime()) / 86_400_000)
-}
-
-/** Issue #219: группе, которую ещё не тренировали, даём максимальную «застоялость». */
-const UNTRAINED_RECENCY_DAYS = 999
-
-/**
- * Issue #219: порядок групп внутри одного разряда ротации — сначала те, что
- * дольше всех не тренировались. Кор остаётся ровно на своём месте: он финишер,
- * и вытеснять им базовые движения в начало дня нельзя.
- */
-function sortByStalenessKeepingCore(muscleKeys: string[], muscleRecencyDays: Map<string, number>): string[] {
-  const coreIndex = muscleKeys.indexOf('core')
-  const staleness = (muscleKey: string): number => muscleRecencyDays.get(muscleKey) ?? UNTRAINED_RECENCY_DAYS
-  const sorted = muscleKeys.filter((muscleKey) => muscleKey !== 'core').sort((a, b) => staleness(b) - staleness(a))
-  if (coreIndex >= 0) sorted.splice(coreIndex, 0, 'core')
-  return sorted
-}
-
-/**
- * Issue #219: сколько дней назад группа тренировалась последний раз — по всем
- * предыдущим сессиям окна, а не по одной последней. Группы, которых в окне нет,
- * в карте отсутствуют (считаются максимально застоявшимися).
- */
-function buildMuscleRecencyDays(
-  previousGeneratedWorkouts: PreviousGeneratedWorkout[],
-  scheduledDate: string,
-): Map<string, number> {
-  const recencyDays = new Map<string, number>()
-  for (const workout of previousGeneratedWorkouts ?? []) {
-    const daysSinceWorkout = daysBetweenDates(workout?.scheduledDate, scheduledDate)
-    if (!Number.isFinite(daysSinceWorkout) || daysSinceWorkout <= 0) continue
-    for (const exercise of workout?.exercises ?? []) {
-      const key = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')
-      if (key === 'other') continue
-      const current = recencyDays.get(key)
-      if (current === undefined || daysSinceWorkout < current) recencyDays.set(key, daysSinceWorkout)
-    }
-  }
-  return recencyDays
-}
-
-/**
- * Issue #75: Extract muscle group keys from the most recent previous workout
- * (by scheduledDate < current). Used to rotate the target pattern so
- * consecutive workouts don't repeat the same muscle groups.
- */
-function extractRecentMuscleKeys(
-  previousGeneratedWorkouts: PreviousGeneratedWorkout[],
-  scheduledDate: string,
-): string[] {
-  const prev = [...(previousGeneratedWorkouts ?? [])]
-    .filter((w) => w?.scheduledDate && w.scheduledDate < scheduledDate)
-    .sort((a, b) => String(b.scheduledDate).localeCompare(String(a.scheduledDate)))[0]
-  if (!prev?.exercises?.length) return []
-  const keys = new Set<string>()
-  for (const exercise of prev.exercises) {
-    const key = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.exerciseName ?? exercise.name ?? '')
-    if (key !== 'other') keys.add(key)
-  }
-  return [...keys]
-}
-
-function normalizeExerciseLibrary(exerciseLibrary: LibraryExerciseInput[]): NormalizedLibraryExercise[] {
-  return (exerciseLibrary ?? []).map((exercise) => {
-    const muscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? exercise.muscle_group ?? '', exercise.name ?? '')
-    return {
-      id: canonicalExerciseId(exercise) ?? '',
-      name: String(exercise.name ?? ''),
-      muscleGroup: exercise.muscleGroup ?? exercise.muscle_group ?? '',
-      muscleKey,
-      setsCount: Number(exercise.setsCount ?? exercise.sets_count ?? 2),
-      repMin: Number(exercise.repMin ?? exercise.rep_min ?? 8),
-      repMax: Number(exercise.repMax ?? exercise.rep_max ?? 12),
-      targetWeight: Number(exercise.targetWeight ?? exercise.target_weight ?? 0),
-      weightStep: Number(exercise.weightStep ?? exercise.weight_step ?? 2.5),
-      restSeconds: Number(exercise.restSeconds ?? exercise.rest_seconds ?? 90),
-      weightDirection: (exercise.weightDirection ?? exercise.weight_direction ?? null) as string | null,
-      // Issue #171: метаданные движения — вход для isAxialFreeWeight.
-      equipment: (exercise.equipment ?? null) as string | null,
-      exerciseType: (exercise.exerciseType ?? exercise.exercise_type ?? null) as string | null,
-      movementPattern: (exercise.movementPattern ?? exercise.movement_pattern ?? null) as string | null,
-      // Issue #293/#305: под-мышцы ног и рук — из target_muscles; паттерн тяги
-      // спины — из названия (target_muscles там анатомия, не направление).
-      subMuscleKeys: muscleKey === 'legs'
-        ? normalizeLegSubMuscles(exercise.targetMuscles ?? exercise.target_muscles ?? null)
-        : muscleKey === 'arms'
-        ? normalizeArmSubMuscles(exercise.targetMuscles ?? exercise.target_muscles ?? null)
-        : muscleKey === 'back'
-        ? normalizeBackPullPattern(exercise.name ?? '')
-        : [],
-    }
-  }).filter((exercise) => exercise.id && exercise.name)
-}
-
 function normalizePreferences(profile: ProfileForGenerator = {}): NormalizedPreferences {
   const preferences = profile.preferences ?? {}
   const focusAreas = Array.isArray(preferences.focusAreas) ? preferences.focusAreas.map(String).filter(Boolean) : []
@@ -1483,76 +763,3 @@ function normalizePreferences(profile: ProfileForGenerator = {}): NormalizedPref
   }
 }
 
-function emptyPreferences(): NormalizedPreferences {
-  return {
-    focusAreas: [],
-    focusMuscleKeys: [],
-    bannedExerciseNames: [],
-    preferredExerciseNames: [],
-    exerciseStyle: 'mixed',
-    intensityTolerance: 'normal',
-    sessionStyle: 'moderate_stable',
-    lightDays: [],
-  }
-}
-
-function emptyWeeklyContext(): WeeklyContext {
-  return {
-    previousExerciseIds: new Set(),
-    recentExerciseIds: new Set(),
-    previousMuscleCounts: new Map(),
-    recentMuscleCounts: new Map(),
-    recoveryRestrictedMuscleKeys: new Set(),
-    previousWorkoutCountLast7: 0,
-    plannedWorkoutsPerWeek: 3,
-    calendarWorkoutCountLast7: 0,
-    daysSincePreviousWorkout: null,
-    weeklyVolume: {},
-  }
-}
-
-function normalizeText(value: unknown): string {
-  return String(value ?? '').trim().toLowerCase()
-}
-
-function matchesExercisePreference(exercise: NormalizedLibraryExercise, preference: string): boolean {
-  const normalized = normalizeText(preference)
-  if (!normalized) return false
-  return normalizeText(exercise.id).includes(normalized) || normalizeText(exercise.name).includes(normalized)
-}
-
-function isBannedExercise(exercise: NormalizedLibraryExercise, preferences: NormalizedPreferences): boolean {
-  return preferences?.bannedExerciseNames?.some((name) => matchesExercisePreference(exercise, name)) ?? false
-}
-
-function isMachineLike(exercise: NormalizedLibraryExercise): boolean {
-  const text = normalizeText(`${exercise.name} ${exercise.muscleGroup}`)
-  return text.includes('тренаж') || text.includes('блок') || text.includes('машин') || text.includes('machine') || text.includes('cable')
-}
-
-function isFreeWeightLike(exercise: NormalizedLibraryExercise): boolean {
-  const text = normalizeText(`${exercise.name} ${exercise.muscleGroup}`)
-  return text.includes('штанг') || text.includes('гантел') || text.includes('barbell') || text.includes('dumbbell')
-}
-
-function latestExerciseHistory(history: WorkoutHistoryEntry[], exerciseId: string): CompletedExerciseHistoryEntry | null {
-  // Issue #370: для подтягиваний история включает подходы гравитрона с 0 кг.
-  return findLatestExerciseEntry(history, exerciseId)
-}
-
-function intensityForGoal(goal: string | undefined): string {
-  const text = String(goal ?? '').toLowerCase()
-  if (text.includes('сил')) return 'strength_quality'
-  if (text.includes('масс') || text.includes('рост')) return 'hypertrophy'
-  return 'normal'
-}
-
-function isHighFatigue(muscleKey: string, coachState: CoachState | null): boolean {
-  return coachState?.muscleGroups?.[muscleKey as keyof typeof coachState.muscleGroups]?.fatigue === 'high'
-}
-
-function clamp(value: unknown, min: number, max: number): number {
-  const number = Number(value)
-  if (!Number.isFinite(number)) return min
-  return Math.max(min, Math.min(max, Math.round(number)))
-}
