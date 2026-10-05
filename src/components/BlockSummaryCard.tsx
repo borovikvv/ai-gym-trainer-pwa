@@ -5,10 +5,10 @@
 import { useEffect, useState } from 'react'
 import type { BlockSummary } from '../../shared/types'
 import { fetchBlockSummaryFromApi, isProgramApiConfigured } from '../data/programApi'
-import { pluralRu } from '../lib/format'
+import { formatWeight, pluralRu } from '../lib/format'
 
 function formatKg(value: number) {
-  return `${Math.round(value).toLocaleString('ru-RU')} кг`
+  return `${formatWeight(value)} кг`
 }
 
 export function BlockSummaryView({ summary }: { summary: BlockSummary }) {
