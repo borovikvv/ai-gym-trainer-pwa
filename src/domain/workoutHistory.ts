@@ -53,10 +53,13 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
     ).avgDeviation
     // Issue #349: для упражнения без истории сначала пробуем калибровку
     // стартового веса по рампу. С историей — только обычная прогрессия.
+    // Review #399: отметка боли — стоп-фактор для роста веса (инвариант
+    // `calculateProgression`). Калибровка не должна его обходить, поэтому при
+    // боли пропускаем её и отдаём решение обычной прогрессии, которая вернёт `pain`.
     const hasHistory = userHistory.some((workout) =>
       workout.exercises.some((item) => getCanonicalExerciseId(item) === canonicalExerciseId),
     )
-    const calibration = hasHistory
+    const calibration = hasHistory || log.pain
       ? null
       : calibrateWorkingWeight({
           exerciseName: exercise.name,

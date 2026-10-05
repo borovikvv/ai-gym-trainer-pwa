@@ -337,5 +337,24 @@ describe('workout history', () => {
       expect(entry.exercises[0].progressionType).not.toBe('calibration')
       expect(entry.exercises[0].progressionType).toBe('increase')
     })
+
+    // Review #399: калибровка не должна обходить стоп-фактор боли — иначе на
+    // первой тренировке с отметкой боли она подняла бы вес вопреки инварианту
+    // обычной прогрессии.
+    it('без истории, но с отметкой боли калибровка не применяется — вес не повышаем', () => {
+      const entry = createWorkoutHistoryEntry({
+        ...base,
+        logs: {
+          'bench-press': {
+            ...rampLog['bench-press'],
+            pain: true,
+          },
+        },
+        completedAt: '2026-06-03T15:00:00.000Z',
+      })
+
+      expect(entry.exercises[0].progressionType).toBe('pain')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(50)
+    })
   })
 })
