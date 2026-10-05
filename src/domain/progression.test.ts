@@ -520,3 +520,59 @@ describe('Issue #343: шаг непропорционален весу', () => {
     expect(result.reason).not.toContain('вариант посложнее')
   })
 })
+
+// Issue #345: разминочные подходы помечены isWarmup и не должны влиять на
+// прогрессию — ни как недоработанный сет, ни как провал прошлой сессии.
+describe('Issue #345: разминочные подходы в прогрессию не идут', () => {
+  const benchSession = (completedAt: string, sets: WorkoutSet[]): WorkoutHistoryEntry => ({
+    id: `prev-${completedAt}`,
+    userId: 'vyacheslav',
+    workoutDayId: 'day-a',
+    workoutDayName: 'День A',
+    completedAt,
+    totalVolume: 0,
+    exercises: [{
+      exerciseId: 'bench-press',
+      exerciseName: 'Жим лёжа',
+      canonicalExerciseId: 'bench-press',
+      pain: false,
+      sets,
+      volume: 0,
+      nextRecommendedWeight: 60,
+      progressionType: 'hold',
+      progressionReason: '',
+    }],
+  })
+
+  it('разминочный подход не мешает росту, как будто это недоработанный сет', () => {
+    const result = calculateProgression({
+      exerciseName: 'Жим лёжа',
+      currentWeight: 60,
+      repMin: 8,
+      repMax: 10,
+      weightStep: 2.5,
+      sets: [
+        { weight: 40, reps: 5, rpe: 6, completed: true, isWarmup: true },
+        { weight: 60, reps: 10, rpe: 7, completed: true },
+        { weight: 60, reps: 10, rpe: 8, completed: true },
+      ],
+      pain: false,
+    })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(62.5)
+  })
+
+  it('разминочные подходы не считаются провалами прошлой сессии', () => {
+    const previousFailureCount = countPreviousFailures(
+      [benchSession('2026-08-01T15:00:00.000Z', [
+        { weight: 40, reps: 5, rpe: 6, completed: true, isWarmup: true },
+        { weight: 40, reps: 4, rpe: 6, completed: true, isWarmup: true },
+        { weight: 60, reps: 9, rpe: 8, completed: true },
+      ])],
+      { canonicalExerciseId: 'bench-press', repMin: 8 },
+    )
+
+    expect(previousFailureCount).toBe(0)
+  })
+})

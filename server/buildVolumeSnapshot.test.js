@@ -75,6 +75,18 @@ describe('buildMuscleVolumeSnapshot', () => {
     expect(snap.weeklySets).toBe(1)
   })
 
+  it('Issue #345: разминочные подходы в объём не попадают', () => {
+    const history = [
+      sessionDaysAgo(2, [chestExercise([
+        { weight: 40, reps: 8, rpe: 5, completed: true, isWarmup: true },
+        completedSet(),
+        completedSet(),
+      ])]),
+    ]
+    const snap = buildMuscleVolumeSnapshot('chest', history, [], 'adult', NOW, null)
+    expect(snap.weeklySets).toBe(2)
+  })
+
   it('counts weeksAtOrAboveMrv when 4 consecutive weeks at MRV', () => {
     // chest adult MRV = 16. 4 weeks at 17 sets each.
     const history = []

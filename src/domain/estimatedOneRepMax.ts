@@ -80,7 +80,7 @@ export type E1RMDataPoint = {
  * "Best" = highest estimated 1RM among completed sets.
  */
 export function bestE1RMFromExercise(
-  exercise: { exerciseName?: string; sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean }> },
+  exercise: { exerciseName?: string; sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean; isWarmup?: boolean }> },
   options?: E1RMOptions,
 ): E1RMDataPoint | null {
   // Issue #173: для упражнений с помощью (гравитрон) «вес» — это противовес.
@@ -91,6 +91,8 @@ export function bestE1RMFromExercise(
   const minReps = Math.max(1, Number(options?.minReps) || 1)
   let best: E1RMDataPoint | null = null
   for (const set of exercise.sets ?? []) {
+    // Issue #345: разминочные подходы не идут в оценку силы.
+    if (set.isWarmup) continue
     if (!set.completed && set.reps <= 0) continue
     if (set.reps <= 0) continue
     if (set.reps < minReps) continue
@@ -151,7 +153,7 @@ export function buildExerciseE1RMHistory(
       exerciseId: string
       exerciseName: string
       muscleGroup?: string
-      sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean }>
+      sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean; isWarmup?: boolean }>
     }>
   }>,
   options?: E1RMOptions,
@@ -193,7 +195,7 @@ export function buildAllExerciseE1RMHistories(
       exerciseId: string
       exerciseName: string
       muscleGroup?: string
-      sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean }>
+      sets: Array<{ weight: number; reps: number; rpe?: number; completed?: boolean; isWarmup?: boolean }>
     }>
   }>,
   options?: E1RMOptions,

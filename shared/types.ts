@@ -68,6 +68,9 @@ export interface WorkoutSet {
   // Issue #268: client-side timestamp when the set started — distinguishes
   // net rest from the completion-to-completion interval (#165)
   startedAt?: string
+  // Issue #345: разминочный подход. Не учитывается в объёме, прогрессии,
+  // e1RM и ожидании повторов — в местах, отмеченных фильтром isWarmup.
+  isWarmup?: boolean
 }
 
 // Issue #98 PR3: WorkoutDebrief moved from src/domain/workoutDebrief.ts
