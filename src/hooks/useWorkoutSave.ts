@@ -16,7 +16,6 @@ import { saveWorkoutEntryToSupabase } from '../data/workoutRepository'
 import { createInitialLogs } from './useWorkoutSession'
 import { loadPlannedWorkoutsFromApi, type PlannedWorkout } from '../data/programApi'
 import { apiAuthHeaders } from '../data/apiAuth'
-import { enqueueRequest } from '../lib/offlineQueue'
 
 type UseWorkoutSaveOptions = {
   activeUserId: string
@@ -100,6 +99,7 @@ export function useWorkoutSave({
                   // queued POST will be replayed automatically.
                   const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
                   if (apiBase) {
+                    const { enqueueRequest } = await import('../lib/offlineQueue')
                     await enqueueRequest(
                       `${apiBase}/api/workout-history`,
                       'POST',

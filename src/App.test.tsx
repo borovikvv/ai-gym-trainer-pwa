@@ -42,7 +42,7 @@ describe('Coach Timeline workout flow', () => {
     expect(screen.getByRole('button', { name: 'План' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /открыть библиотеку упражнений/i }))
-    expect(screen.getByRole('searchbox', { name: /поиск упражнения/i })).toBeInTheDocument()
+    expect(await screen.findByRole('searchbox', { name: /поиск упражнения/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Все' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Тренер' }))
@@ -50,7 +50,7 @@ describe('Coach Timeline workout flow', () => {
     // questionnaire (the old direct "Профиль" button is gone).
     await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
-    expect(screen.getByRole('heading', { name: 'Анкета пользователя' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Анкета пользователя' })).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toBeInTheDocument()
   })
 
@@ -340,7 +340,7 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
-    const workoutsInput = screen.getByLabelText('Тренировок в неделю')
+    const workoutsInput = await screen.findByLabelText('Тренировок в неделю')
     await user.clear(workoutsInput)
     await user.type(workoutsInput, '2')
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))
@@ -520,7 +520,7 @@ describe('Coach Timeline workout flow', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: 'Прогресс' }))
 
-    expect(screen.getByText('Панель динамики')).toBeInTheDocument()
+    expect(await screen.findByText('Панель динамики')).toBeInTheDocument()
     expect(screen.getAllByText('Следующий фокус').length).toBeGreaterThan(0)
     // Issue #43: "Лучшие движения" is now inside <details>, not a heading
     expect(screen.getByText('Лучшие движения')).toBeInTheDocument()
@@ -577,7 +577,7 @@ describe('Coach Timeline workout flow', () => {
     // questionnaire (was a direct "Профиль" button).
     await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
-    expect(screen.getByRole('heading', { name: 'Анкета пользователя' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Анкета пользователя' })).toBeInTheDocument()
     expect(screen.getByLabelText('Тренировок в неделю')).toHaveValue('3')
 
     await user.click(screen.getByRole('button', { name: '4×/нед' }))
@@ -601,7 +601,7 @@ describe('Coach Timeline workout flow', () => {
     await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
     await user.click(screen.getByRole('button', { name: /профиль олег/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Олег/ }))
-    expect(screen.getByLabelText('Тренировок в неделю')).toHaveValue('3')
+    expect(await screen.findByLabelText('Тренировок в неделю')).toHaveValue('3')
   })
 
   it('automatically limits the visible program days when workouts per week is lowered', async () => {
@@ -610,13 +610,14 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
+    await screen.findByRole('heading', { name: 'Анкета пользователя' })
     await user.click(screen.getByRole('button', { name: '2×/нед' }))
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))
 
     expect(screen.getByText(/Программа обновлена: 2 тренировки\/нед/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'План' }))
-    expect(screen.getAllByText('День A').length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('День A')).length).toBeGreaterThan(0)
     expect(screen.getAllByText('День B').length).toBeGreaterThan(0)
     expect(screen.queryByText('День C')).not.toBeInTheDocument()
 
@@ -633,12 +634,13 @@ describe('Coach Timeline workout flow', () => {
 
     await user.click(screen.getByRole('button', { name: /профиль вячеслав/i }))
     await user.click(screen.getByRole('menuitemradio', { name: /Вячеслав/ }))
+    await screen.findByRole('heading', { name: 'Анкета пользователя' })
     await user.click(screen.getByRole('button', { name: 'Четверг' }))
     await user.click(screen.getByRole('button', { name: 'Воскресенье' }))
     await user.click(screen.getByRole('button', { name: /сохранить анкету/i }))
 
     await user.click(screen.getByRole('button', { name: 'План' }))
-    expect(screen.getByRole('heading', { name: /^План$/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /^План$/ })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Дни недели для тренировок' })).toBeInTheDocument()
     expect(screen.getAllByText(/3 тренировки\/нед/i).length).toBeGreaterThan(0)
     // #120: week strip — plan two rest days to populate the calendar. Pick the
@@ -670,7 +672,8 @@ describe('Coach Timeline workout flow', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: 'План' }))
-    await user.click(screen.getByRole('button', { name: /редактировать жим лёжа/i }))
+    const editBenchPress = await screen.findByRole('button', { name: /редактировать жим лёжа/i })
+    await user.click(editBenchPress)
 
     const setsInput = screen.getByLabelText('Подходы')
     await user.clear(setsInput)
