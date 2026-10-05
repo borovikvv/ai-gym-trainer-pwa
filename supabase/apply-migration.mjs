@@ -28,9 +28,13 @@ if (sqlFile) {
   process.exit(1)
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://ai_gym_trainer:***@127.0.0.1:5432/ai_gym_trainer',
-})
+const databaseUrl = process.env.DATABASE_URL
+if (!databaseUrl) {
+  console.error('DATABASE_URL не задан: укажите строку подключения к БД')
+  process.exit(1)
+}
+
+const pool = new Pool({ connectionString: databaseUrl })
 
 try {
   await pool.query(sql)

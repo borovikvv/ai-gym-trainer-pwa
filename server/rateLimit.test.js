@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 // Mock all dependencies so the coach routes module loads without side effects
 // (same mocks as coachRoutes.test.js).
-vi.mock('../db.js', () => ({
+vi.mock('./db.js', () => ({
   pool: { query: vi.fn().mockResolvedValue({ rows: [] }), connect: vi.fn() },
 }))
 vi.mock('../coachBrain.js', () => ({
