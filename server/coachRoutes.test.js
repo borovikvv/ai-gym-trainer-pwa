@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // We extract it from the route module by importing and inspecting the router stack.
 
 // Mock all dependencies so the module loads without side effects.
-vi.mock('../db.js', () => ({
+vi.mock('./db.js', () => ({
   pool: { query: vi.fn().mockResolvedValue({ rows: [] }), connect: vi.fn() },
 }))
 vi.mock('../coachBrain.js', () => ({
