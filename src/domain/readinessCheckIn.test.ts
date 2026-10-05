@@ -31,11 +31,11 @@ describe('readiness check-in', () => {
     })).toBe('light')
   })
 
-  it('switches to very light when pain is reported', () => {
+  it('keeps the global mode unaffected by pain areas alone', () => {
     expect(resolveReadinessMode({
       ...defaultReadinessCheckIn,
       painAreas: ['Плечо'],
-    })).toBe('very_light')
+    })).toBe('normal')
   })
 
   it('summarizes the check-in as a trainer note', () => {
@@ -50,10 +50,17 @@ describe('readiness check-in', () => {
     })).toBe('Мало спал, мало энергии, высокий стресс, забиты мышцы: Грудь, Плечи, времени 35 мин. Снизим объём и оставим главное.')
   })
 
-  it('turns pain areas into a stronger safety decision', () => {
+  it('does not turn pain areas into a global safety decision', () => {
     expect(summarizeReadinessCheckIn({
       ...defaultReadinessCheckIn,
       painAreas: ['Спина'],
-    })).toBe('Есть боль: Спина. Уберём рискованные движения и оставим безопасную работу.')
+    })).toBe('Есть боль: Спина. Работаем по плану.')
+  })
+
+  it('warns when the pain area is not linked to specific exercises', () => {
+    expect(summarizeReadinessCheckIn({
+      ...defaultReadinessCheckIn,
+      painAreas: ['Другое'],
+    })).toContain('зона «Другое» не привязана к конкретным упражнениям')
   })
 })

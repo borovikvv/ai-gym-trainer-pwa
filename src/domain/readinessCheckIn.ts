@@ -18,7 +18,7 @@ export const defaultReadinessCheckIn: ReadinessCheckIn = {
 }
 
 export function resolveReadinessMode(checkIn: ReadinessCheckIn): ReadinessMode {
-  if (checkIn.painAreas.length > 0 || checkIn.soreness === 'high') {
+  if (checkIn.soreness === 'high') {
     return 'very_light'
   }
 
@@ -63,6 +63,10 @@ export function summarizeReadinessCheckIn(checkIn: ReadinessCheckIn): string {
 
   if (checkIn.painAreas.length > 0) {
     parts.push(`Есть боль: ${checkIn.painAreas.join(', ')}`)
+  }
+
+  if (checkIn.painAreas.includes('Другое')) {
+    parts.push('зона «Другое» не привязана к конкретным упражнениям — отметь зону точнее, если можешь')
   }
 
   if (checkIn.availableMinutes > 0 && checkIn.availableMinutes < 45) {
