@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultReadinessCheckIn, resolveReadinessMode, summarizeReadinessCheckIn } from './readinessCheckIn'
+import { defaultReadinessCheckIn, resolveReadinessMode, summarizeReadinessCheckIn, timeBudgetMinutes } from './readinessCheckIn'
 
 describe('readiness check-in', () => {
   it('keeps a normal plan for balanced inputs', () => {
@@ -62,5 +62,11 @@ describe('readiness check-in', () => {
       ...defaultReadinessCheckIn,
       painAreas: ['Другое'],
     })).toContain('зона «Другое» не привязана к конкретным упражнениям')
+  })
+
+  it('включает бюджет времени только при сокращённом времени (issue #346)', () => {
+    expect(timeBudgetMinutes({ ...defaultReadinessCheckIn, availableMinutes: 60 })).toBe(0)
+    expect(timeBudgetMinutes({ ...defaultReadinessCheckIn, availableMinutes: 90 })).toBe(0)
+    expect(timeBudgetMinutes({ ...defaultReadinessCheckIn, availableMinutes: 35 })).toBe(35)
   })
 })

@@ -208,11 +208,11 @@ describe('fitWorkoutDayToAvailableMinutes', () => {
   })
 
   it('cuts volume down to the time budget without touching targetWeight', () => {
-    expect(estimateWorkoutMinutes(tightDay)).toBeGreaterThan(30)
+    expect(estimateWorkoutMinutes(tightDay)).toBeGreaterThan(36)
 
-    const result = fitWorkoutDayToAvailableMinutes(tightDay, 30)
+    const result = fitWorkoutDayToAvailableMinutes(tightDay, 36)
 
-    expect(estimateWorkoutMinutes(result)).toBeLessThanOrEqual(30)
+    expect(estimateWorkoutMinutes(result)).toBeLessThanOrEqual(36)
     for (const remaining of result.exercises) {
       const original = tightDay.exercises.find((item) => item.id === remaining.id)
       expect(remaining.targetWeight).toBe(original?.targetWeight)
@@ -220,7 +220,7 @@ describe('fitWorkoutDayToAvailableMinutes', () => {
   })
 
   it('rebuilds the prescription when a set is removed', () => {
-    const result = fitWorkoutDayToAvailableMinutes(tightDay, 30)
+    const result = fitWorkoutDayToAvailableMinutes(tightDay, 36)
     const pulldown = result.exercises.find((item) => item.id === 'lat-pulldown')
     expect(pulldown?.setsCount).toBe(2)
     expect(pulldown?.prescription).toBe('2×8–10 · рекомендовано 40 кг · отдых 180 сек')
@@ -231,15 +231,54 @@ describe('fitWorkoutDayToAvailableMinutes', () => {
       exercise({ id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', targetWeight: 60, setsCount: 5 }),
       exercise({ id: 'biceps-curl', name: 'Подъём гантелей на бицепс', muscleGroup: 'Руки', targetWeight: 10, restSeconds: 90 }),
     ])
-    expect(estimateWorkoutMinutes(baseAndIsolation)).toBeGreaterThan(30)
+    expect(estimateWorkoutMinutes(baseAndIsolation)).toBeGreaterThan(34)
 
-    const result = fitWorkoutDayToAvailableMinutes(baseAndIsolation, 30)
+    const result = fitWorkoutDayToAvailableMinutes(baseAndIsolation, 34)
 
-    expect(estimateWorkoutMinutes(result)).toBeLessThanOrEqual(30)
+    expect(estimateWorkoutMinutes(result)).toBeLessThanOrEqual(34)
     const base = result.exercises.find((item) => item.id === 'bench-press')
     expect(base?.setsCount).toBe(5)
     expect(base?.targetWeight).toBe(60)
     expect(result.exercises.some((item) => item.id === 'biceps-curl')).toBe(false)
+  })
+})
+
+describe('estimateWorkoutMinutes', () => {
+  const exercise = (overrides: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name' | 'muscleGroup' | 'targetWeight'>): ExercisePlan => ({
+    instruction: '',
+    commonMistakes: [],
+    alternatives: [],
+    setsCount: 3,
+    repMin: 8,
+    repMax: 10,
+    weightStep: 2.5,
+    restSeconds: 180,
+    prescription: '',
+    previous: '',
+    todayGoal: '',
+    coachFocus: 'контроль техники',
+    ...overrides,
+  })
+
+  const dayWithExercises = (id: string, exercises: ExercisePlan[]): WorkoutDay => ({
+    id,
+    name: 'День',
+    label: 'label',
+    description: 'base',
+    exercises,
+  })
+
+  it('включает общую разминку и переход между упражнениями (issue #346)', () => {
+    const solo = dayWithExercises('day-solo', [
+      exercise({ id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', targetWeight: 60, setsCount: 3, restSeconds: 120 }),
+    ])
+    const pair = dayWithExercises('day-pair', [
+      ...solo.exercises,
+      exercise({ id: 'row', name: 'Тяга штанги в наклоне', muscleGroup: 'Спина', targetWeight: 40, setsCount: 3, restSeconds: 120 }),
+    ])
+
+    expect(estimateWorkoutMinutes(solo)).toBe(21)
+    expect(estimateWorkoutMinutes(pair)).toBe(35)
   })
 })
 
