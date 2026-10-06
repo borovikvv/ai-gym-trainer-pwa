@@ -171,10 +171,12 @@ export async function replayQueuedRequests(): Promise<number> {
         await removeQueuedRequest(req.id)
         successCount++
       } else if (response.status === 401) {
-        // 401 means the request is invalid (e.g. missing/expired API token).
-        // Retrying the same body/token will keep failing — drop it so it
-        // does not poison the queue with endless futile attempts.
-        await removeQueuedRequest(req.id)
+        // Issue #404: с входом по cookie 401 означает «сессии нет или она
+        // истекла» — состояние восстановимое: пользователь войдёт заново, и
+        // запрос должен доехать. Раньше запрос удалялся, и записанные офлайн
+        // подходы терялись молча. Держим его в очереди; от бесконечных попыток
+        // защищает лимит retryCount выше.
+        await incrementRetry(req.id)
       } else {
         await incrementRetry(req.id)
       }
