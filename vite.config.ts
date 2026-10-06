@@ -9,47 +9,20 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Манифест за авторизацией (Caddy basic auth / cookie): без этого браузер
-      // запрашивает его без учётных данных — второй запрос пароля (#401).
+      // Манифест за авторизацией (Caddy forward_auth): без этого браузер
+      // запрашивает его без учётных данных — редирект на вход вместо манифеста
+      // (#401).
       useCredentials: true,
-      workbox: {
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
-        // Issue #404: вход по cookie живёт на том же origin по пути /auth/.
-        // Без denylist NavigationRoute отдаёт на ЛЮБУЮ навигацию кэшированную
-        // оболочку приложения — страница входа на устройстве с установленной
-        // PWA не покажется вообще.
-        navigateFallbackDenylist: [/^\/auth\//],
-        // Issue #39: cache static assets (exercise images, fonts) for offline use.
-        // API requests are handled separately via IndexedDB offline queue
-        // (src/lib/offlineQueue.ts) because the API is on a different origin.
-        runtimeCaching: [
-          {
-            // Exercise guide images — large, rarely change, needed offline.
-            urlPattern: /^https?:\/\/.*\/exercise-guides\/.*\.(png|svg|jpg)$/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'exercise-guides-v2',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
-              },
-            },
-          },
-          {
-            // Lucide icons and other static assets from same origin.
-            urlPattern: /^https?:\/\/.*\/assets\/.*\.(js|css|woff2?)$/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'app-assets',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
-              },
-            },
-          },
-        ],
+      // Issue #406: собственный service worker. Прежний generateSW регистрировал
+      // NavigationRoute, который отдавал на любую навигацию кэшированную
+      // оболочку: без сессии браузер не видел редирект на портал входа, а
+      // чанки оболочки собирались в несовместимый набор — пустой экран.
+      // Логика навигации «сеть → откат в кэш» — в src/sw.ts.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html}'],
       },
       manifest: {
         name: 'AI Gym Trainer',

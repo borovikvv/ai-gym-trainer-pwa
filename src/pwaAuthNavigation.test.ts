@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// Issue #404: вход по cookie (Authelia) живёт на том же origin по пути /auth/.
-// Service worker перехватывает навигации и отдаёт кэшированную оболочку
-// приложения — без denylist страница входа на устройстве с установленной PWA
-// не показывается вообще, и войти невозможно.
-describe('PWA navigation fallback', () => {
-  it('не перехватывает страницу входа /auth', async () => {
+// Issue #406: приложение закрыто входом по cookie (Authelia, портал на /auth/
+// того же origin). Раньше SW регистрировал NavigationRoute и отдавал на любую
+// навигацию кэшированную оболочку: без сессии браузер не видел редирект на
+// портал, а чанки оболочки собирались в несовместимый набор — пустой экран.
+describe('service worker: навигации за входом', () => {
+  it('не подменяет навигации оболочкой из прекеша и обходит портал входа', async () => {
     const outDir = mkdtempSync(join(tmpdir(), 'pwa-sw-'))
     try {
       await build({
@@ -19,14 +19,27 @@ describe('PWA navigation fallback', () => {
         build: { outDir, emptyOutDir: true },
       })
       const sw = readFileSync(join(outDir, 'sw.js'), 'utf8')
-      // NavigationRoute — единственное место, где SW подменяет навигацию
-      // оболочкой; denylist должен содержать /auth.
-      const navigationRoute = sw.match(/NavigationRoute\([^;]{0,200}/)
-      expect(navigationRoute, 'NavigationRoute отсутствует в sw.js').not.toBeNull()
-      expect(navigationRoute?.[0]).toMatch(/denylist/)
-      expect(navigationRoute?.[0]).toMatch(/auth/)
+
+      // Прекеш-фолбэк навигации убран — иначе редирект на вход не доходит до
+      // браузера.
+      expect(sw, 'NavigationRoute всё ещё регистрируется').not.toMatch(/NavigationRoute/)
+
+      // Навигации обслуживает собственный обработчик: сеть, редирект насквозь.
+      expect(sw).toMatch(/mode===`navigate`|mode==='navigate'/)
+      expect(sw).toMatch(/redirect:`manual`|redirect:'manual'/)
+
+      // Портал входа не подменяется оболочкой приложения.
+      expect(sw).toMatch(/\/auth\//)
+
+      // Обновление SW встаёт в строй сразу: без этого исправление навигации
+      // доедет до установленной PWA только после перезапуска приложения.
+      expect(sw).toMatch(/skipWaiting/)
+      expect(sw).toMatch(/clientsClaim|clients\.claim/)
+
+      // Офлайн-режим сохранён: оболочка в прекеше.
+      expect(sw).toMatch(/"url":"index\.html"/)
     } finally {
       rmSync(outDir, { recursive: true, force: true })
     }
-  }, 60_000)
+  }, 120_000)
 })
