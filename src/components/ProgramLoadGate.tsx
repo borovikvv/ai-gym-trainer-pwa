@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import type { ProgramLoadState } from '../hooks/useProgramData'
+import { redirectToAuthPortal } from '../data/authRedirect'
 import { AppShell } from './ui'
 
 type ProgramLoadGateProps = {
@@ -8,6 +10,13 @@ type ProgramLoadGateProps = {
 
 // Issue #368: вместо мок-программы (День A/B) — честное состояние загрузки.
 export function ProgramLoadGate({ state, onRetry }: ProgramLoadGateProps) {
+  const unauthorized = state.status === 'error' && state.httpStatus === 401
+  // Issue #404: 401 = нет или истекла cookie-сессия. Это восстановимо —
+  // уводим пользователя на портал входа (тот же origin, /auth/).
+  useEffect(() => {
+    if (unauthorized) redirectToAuthPortal()
+  }, [unauthorized])
+
   if (state.status === 'loading') {
     return (
       <AppShell>
@@ -25,9 +34,9 @@ export function ProgramLoadGate({ state, onRetry }: ProgramLoadGateProps) {
         <p className="muted">
           Показывать пресеты вместо вашей программы не будем: подходы записались бы не в ту тренировку.
         </p>
-        {state.httpStatus === 401 && (
+        {unauthorized && (
           <p className="muted" data-testid="program-load-auth-hint">
-            Сервер не пустил без входа. Откройте сайт в браузере, введите логин и пароль, затем перезапустите приложение.
+            Вход не выполнен или сессия истекла — открываем страницу входа.
           </p>
         )}
         {state.httpStatus !== null && (

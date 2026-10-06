@@ -49,7 +49,10 @@ describe('offlineQueue replay', () => {
     expect(await getQueuedRequests()).toEqual([])
   })
 
-  it('removes a request that fails with 401 instead of retrying it forever', async () => {
+  it('keeps a request that fails with 401 so it can be replayed after a new login', async () => {
+    // Issue #404: с входом по cookie 401 = «сессии нет или она истекла».
+    // Это восстановимо: пользователь входит заново, и записанные офлайн
+    // подходы должны доехать. Раньше запрос удалялся и терялся молча.
     configureToken(TOKEN)
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401 })
     vi.stubGlobal('fetch', fetchMock)
@@ -60,6 +63,8 @@ describe('offlineQueue replay', () => {
     await replayQueuedRequests()
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(await getQueuedRequests()).toEqual([])
+    const queued = await getQueuedRequests()
+    expect(queued).toHaveLength(1)
+    expect(queued[0].retryCount).toBe(1)
   })
 })

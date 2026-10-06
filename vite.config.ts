@@ -16,6 +16,11 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        // Issue #404: вход по cookie живёт на том же origin по пути /auth/.
+        // Без denylist NavigationRoute отдаёт на ЛЮБУЮ навигацию кэшированную
+        // оболочку приложения — страница входа на устройстве с установленной
+        // PWA не покажется вообще.
+        navigateFallbackDenylist: [/^\/auth\//],
         // Issue #39: cache static assets (exercise images, fonts) for offline use.
         // API requests are handled separately via IndexedDB offline queue
         // (src/lib/offlineQueue.ts) because the API is on a different origin.
