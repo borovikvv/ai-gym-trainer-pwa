@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { deleteWorkoutDraft, loadWorkoutHistory, sanitizeWorkoutHistoryEntry, saveWorkoutHistoryEntry } from './services/workoutService.js'
+import { deleteWorkoutDraft, loadWorkoutHistory, sanitizeWorkoutHistoryEntry, saveWorkoutHistoryEntry, runPostWorkoutCoachChain } from './services/workoutService.js'
 import { cascadeRegenerateFutureWorkouts } from './services/plannedWorkoutService.js'
+
+// Issue #408: тяжёлая цепочка тренера вынесена из saveWorkoutHistoryEntry в
+// отдельную runPostWorkoutCoachChain. Тесты, проверяющие её эффекты (каскад,
+// обучающая запись, инвалидация кэша), запускают обе функции вместе — как это
+// делает роут после коммита.
+async function saveAndRunCoachChain(client, entry) {
+  const { sanitizedEntry, painLog } = await saveWorkoutHistoryEntry(client, entry)
+  return runPostWorkoutCoachChain(client, sanitizedEntry, painLog)
+}
 
 // Mock the dependencies that saveWorkoutHistoryEntry calls — we only care
 // about verifying the cache-invalidation DELETE is issued (#94).
@@ -217,7 +226,7 @@ describe('saveWorkoutHistoryEntry — issue #94 cache invalidation', () => {
       }),
     }
 
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-cache-1',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -261,7 +270,7 @@ describe('saveWorkoutHistoryEntry — issue #94 cache invalidation', () => {
     }
 
     // Should not throw — cache invalidation is non-fatal
-    const result = await saveWorkoutHistoryEntry(client, {
+    const result = await saveAndRunCoachChain(client, {
       id: 'session-cache-2',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -301,7 +310,7 @@ describe('Issue #91: training record fills 12 previously-empty fields', () => {
       query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
     }
 
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-91',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -393,7 +402,7 @@ describe('Issue #91: training record fills 12 previously-empty fields', () => {
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
 
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-low',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -427,7 +436,7 @@ describe('Issue #91: training record fills 12 previously-empty fields', () => {
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
 
-    const result = await saveWorkoutHistoryEntry(client, {
+    const result = await saveAndRunCoachChain(client, {
       id: 'session-fail',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -475,7 +484,7 @@ describe('Issue #108: training record captures analysis → decision → outcome
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
 
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-108',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -544,7 +553,7 @@ describe('Issue #108: training record captures analysis → decision → outcome
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
 
     // Current workout: bench-press at 52.5kg (weight increase)
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-108b',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -602,7 +611,7 @@ describe('Issue #108: training record captures analysis → decision → outcome
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
 
     // Current workout has lat-pulldown (new exercise, not in previous)
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-108c',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -875,7 +884,7 @@ describe('Issue #167: training record captures rep deviation', () => {
     ])
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-167',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -912,7 +921,7 @@ describe('Issue #268: training record captures net rest', () => {
     vi.mocked(saveTrainingRecord).mockClear()
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-268',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -971,7 +980,7 @@ describe('Issue #267: training record captures weight deviation', () => {
       }),
     }
 
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-267',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -1006,7 +1015,7 @@ describe('Issue #267: training record captures weight deviation', () => {
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
 
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-267b',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -1041,7 +1050,7 @@ describe('saveWorkoutHistoryEntry — сужение каскада до бли�
     cascade.mockClear()
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
 
-    await saveWorkoutHistoryEntry(client, {
+    await saveAndRunCoachChain(client, {
       id: 'session-cascade-1',
       userId: 'vyacheslav',
       workoutDayId: 'planned-day',
@@ -1063,6 +1072,48 @@ describe('saveWorkoutHistoryEntry — сужение каскада до бли�
 
     expect(cascade).toHaveBeenCalledTimes(1)
     expect(cascade).toHaveBeenCalledWith(client, { userId: 'vyacheslav', limit: 1 })
+  })
+})
+
+// Issue #408: сама запись тренировки не запускает тяжёлую LLM-цепочку — иначе
+// повтор POST из офлайн-очереди гонял бы тренера заново. Тест упадёт, если
+// откатить разрезание saveWorkoutHistoryEntry / runPostWorkoutCoachChain.
+describe('Issue #408: saveWorkoutHistoryEntry не запускает LLM-цепочку тренера', () => {
+  it('без runPostWorkoutCoachChain каскад, обучающая запись и инвалидация кэша не выполняются', async () => {
+    const { saveTrainingRecord } = await import('./coachTrainingRecord.js')
+    const cascade = vi.mocked(cascadeRegenerateFutureWorkouts)
+    cascade.mockClear()
+    vi.mocked(saveTrainingRecord).mockClear()
+
+    const queries = []
+    const client = {
+      query: vi.fn().mockImplementation(async (text, params) => {
+        queries.push({ text, params })
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await saveWorkoutHistoryEntry(client, {
+      id: 'session-408',
+      userId: 'vyacheslav',
+      workoutDayId: 'planned-day',
+      workoutDayName: 'День A',
+      completedAt: '2026-10-06T18:00:00.000Z',
+      totalVolume: 1000,
+      exercises: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        pain: false,
+        nextRecommendedWeight: 42.5,
+        progressionType: 'increase',
+        progressionReason: 'ok',
+        sets: [{ weight: 40, reps: 8, rpe: 7, completed: true }],
+      }],
+    })
+
+    expect(cascade).not.toHaveBeenCalled()
+    expect(saveTrainingRecord).not.toHaveBeenCalled()
+    expect(queries.some((q) => q.text.includes('delete from public.recommendations'))).toBe(false)
   })
 })
 
