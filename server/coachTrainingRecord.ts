@@ -111,7 +111,7 @@ export interface TrainingRecord {
 
 /**
  * Save a training record after workout completion.
- * Called from saveWorkoutHistoryEntry (non-fatal — collection is best-effort).
+ * Called from runPostWorkoutCoachChain (после того как сама тренировка уже сохранена) (non-fatal — collection is best-effort).
  */
 export async function saveTrainingRecord(
   client: DbClient,

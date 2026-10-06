@@ -9,6 +9,7 @@ vi.mock('./services/workoutService.js', () => ({
   loadWorkoutHistory: vi.fn(),
   saveWorkoutDraft: vi.fn(),
   saveWorkoutHistoryEntry: vi.fn(),
+  runPostWorkoutCoachChain: vi.fn(),
 }))
 vi.mock('./services/memoryReflectionService.js', () => ({
   runMemoryReflection: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock('./activityLog.js', () => ({
 
 const { workoutRoutes } = await import('./routes/workoutRoutes.js')
 const { pool } = await import('./db.js')
-const { deleteWorkoutDraft, loadWorkoutHistory, saveWorkoutDraft, saveWorkoutHistoryEntry } = await import('./services/workoutService.js')
+const { deleteWorkoutDraft, loadWorkoutHistory, saveWorkoutDraft, saveWorkoutHistoryEntry, runPostWorkoutCoachChain } = await import('./services/workoutService.js')
 const { runMemoryReflection } = await import('./services/memoryReflectionService.js')
 const { getAllowedUserIds } = await import('./privateUsers.js')
 
@@ -134,13 +135,81 @@ describe('POST /workout-history — валидация тела (#326)', () => {
   it('сохраняет валидное тело и отвечает 201', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] })
     vi.mocked(pool.connect).mockResolvedValue({ query, release: vi.fn() })
-    vi.mocked(saveWorkoutHistoryEntry).mockResolvedValue({})
+    vi.mocked(saveWorkoutHistoryEntry).mockResolvedValue({ debrief: null, sanitizedEntry: {}, painLog: null })
     vi.mocked(runMemoryReflection).mockResolvedValue(undefined)
 
     const req = { body: { userId: 'vyacheslav', workoutDayId: 'day-1', exercises: [] } }
     const res = await invokeHandler(routeHandler(), req)
 
     expect(saveWorkoutHistoryEntry).toHaveBeenCalledTimes(1)
+    expect(res.statusCode).toBe(201)
+  })
+})
+
+// Issue #408: ответ отдаётся сразу после записи в БД, а LLM-цепочка тренера
+// уходит в фон. Условный claim по coach_chain_claimed_at гарантирует, что
+// повтор POST с тем же id (офлайн-очередь, обрыв соединения) не пересчитывает
+// цепочку второй раз.
+describe('POST /workout-history — фоновая цепочка тренера и идемпотентность (#408)', () => {
+  beforeEach(() => {
+    vi.stubEnv('ALLOWED_USER_IDS', '')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.clearAllMocks()
+  })
+
+  function routeHandler() {
+    return findRoute('post', '/workout-history').middlewares[0]
+  }
+
+  function clientWithClaim(rowCount) {
+    const query = vi.fn().mockImplementation(async (text) => {
+      if (typeof text === 'string' && text.includes('coach_chain_claimed_at')) {
+        return { rows: rowCount > 0 ? [{ id: 'session-1' }] : [], rowCount }
+      }
+      return { rows: [], rowCount: 0 }
+    })
+    return { query, release: vi.fn() }
+  }
+
+  function validRequest() {
+    return { body: { id: 'session-1', userId: 'vyacheslav', workoutDayId: 'day-1', exercises: [] } }
+  }
+
+  it('запускает runPostWorkoutCoachChain, когда claim выигран', async () => {
+    vi.mocked(pool.connect).mockResolvedValue(clientWithClaim(1))
+    const sanitizedEntry = { id: 'session-1' }
+    vi.mocked(saveWorkoutHistoryEntry).mockResolvedValue({ debrief: null, sanitizedEntry, painLog: null })
+    vi.mocked(runPostWorkoutCoachChain).mockResolvedValue(null)
+    vi.mocked(runMemoryReflection).mockResolvedValue(undefined)
+
+    const res = await invokeHandler(routeHandler(), validRequest())
+
+    expect(res.statusCode).toBe(201)
+    expect(runPostWorkoutCoachChain).toHaveBeenCalledTimes(1)
+    expect(runPostWorkoutCoachChain).toHaveBeenCalledWith(pool, sanitizedEntry, null)
+  })
+
+  it('не запускает цепочку повторно, когда claim уже занят (тот же id)', async () => {
+    vi.mocked(pool.connect).mockResolvedValue(clientWithClaim(0))
+    vi.mocked(saveWorkoutHistoryEntry).mockResolvedValue({ debrief: null, sanitizedEntry: { id: 'session-1' }, painLog: null })
+    vi.mocked(runMemoryReflection).mockResolvedValue(undefined)
+
+    const res = await invokeHandler(routeHandler(), validRequest())
+
+    expect(res.statusCode).toBe(201)
+    expect(runPostWorkoutCoachChain).not.toHaveBeenCalled()
+  })
+
+  it('отвечает 201, не дожидаясь завершения цепочки', async () => {
+    vi.mocked(pool.connect).mockResolvedValue(clientWithClaim(1))
+    vi.mocked(saveWorkoutHistoryEntry).mockResolvedValue({ debrief: null, sanitizedEntry: { id: 'session-1' }, painLog: null })
+    vi.mocked(runPostWorkoutCoachChain).mockImplementation(() => new Promise(() => {}))
+    vi.mocked(runMemoryReflection).mockResolvedValue(undefined)
+
+    const res = await invokeHandler(routeHandler(), validRequest())
+
     expect(res.statusCode).toBe(201)
   })
 })

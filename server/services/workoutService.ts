@@ -151,7 +151,7 @@ export async function loadWorkoutHistory(client: DbClient, allowedUserIds: strin
   })) as unknown as WorkoutHistoryEntry[]
 }
 
-export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHistoryEntryInput): Promise<{ coachPlan: SafeCoachPlan | null; debrief: ReturnType<typeof buildWorkoutDebrief> }> {
+export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHistoryEntryInput): Promise<{ debrief: ReturnType<typeof buildWorkoutDebrief>; sanitizedEntry: SanitizedEntry; painLog: PainLog | null }> {
   const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry) as SanitizedEntry
   // Issue #163: build pain_log from exercises with pain details
   const painLog = buildPainLog(entry.exercises ?? [])
@@ -220,6 +220,9 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
 
   const debrief = (sanitizedEntry.debrief ?? buildWorkoutDebrief(sanitizedEntry as unknown as Parameters<typeof buildWorkoutDebrief>[0])) as ReturnType<typeof buildWorkoutDebrief>
   sanitizedEntry.qualityScore = debrief.qualityScore
+  // Issue #408: передаём готовый дебриф в фоновую цепочку тренера через
+  // sanitizedEntry — отдельного аргумента в runPostWorkoutCoachChain нет.
+  sanitizedEntry.debrief = debrief
   // Дебриф считается ПОСЛЕ insert выше — без этого UPDATE колонка
   // quality_score оставалась NULL у всех сессий (история и readiness по
   // качеству прошлой тренировки не работали).
@@ -231,6 +234,18 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   }
   await saveWorkoutDebriefRecommendation(client, sanitizedEntry as unknown as Parameters<typeof saveWorkoutDebriefRecommendation>[1], debrief)
   await markPlannedWorkoutCompleted(client, sanitizedEntry)
+
+  return { debrief, sanitizedEntry, painLog }
+}
+
+// Issue #408: тяжёлая цепочка тренера (планирование, каскад, обучающая запись,
+// инвалидация кэша) вынесена из saveWorkoutHistoryEntry. Раньше она выполнялась
+// внутри открытой транзакции до ответа и держала клиента ~1.5–2 минуты, из-за
+// чего мобильный запрос обрывался, а повтор из офлайн-очереди гонял LLM заново.
+// Теперь запускается fire-and-forget после коммита; каждый шаг и так обёрнут в
+// non-fatal try/catch и не кидает наружу.
+export async function runPostWorkoutCoachChain(client: DbClient, sanitizedEntry: SanitizedEntry, painLog: PainLog | null): Promise<SafeCoachPlan | null> {
+  const debrief = sanitizedEntry.debrief
   // Issue #92: planAndApplyNextWorkout does DB writes + LLM call. If any of
   // them throw (CHECK constraint, connection blip, LLM timeout), the workout
   // itself is already saved above — we must NOT roll it back. Treat planner
@@ -458,7 +473,7 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   // user for the duration of a workout — a saved workout changes both.
   invalidateLiveCoachCache(sanitizedEntry.userId)
 
-  return { coachPlan, debrief }
+  return coachPlan
 }
 
 export function sanitizeWorkoutHistoryEntry(entry: WorkoutHistoryEntryInput): WorkoutHistoryEntryInput {
