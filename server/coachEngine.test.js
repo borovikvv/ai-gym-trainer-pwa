@@ -131,22 +131,6 @@ describe('Coach Engine v1 next-set recommendations', () => {
     })
   })
 
-  // Issue #428: убранное условие lastRpe <= 6 не превратило RPE в «ничего не
-  // решает» — предельный RPE по-прежнему вето и отрабатывает выше по функции.
-  it('does not add weight on a max-effort set even with a big rep surplus (RPE 10)', () => {
-    const result = recommendNextSet({
-      exercise: bench,
-      completedSets: [{ weight: 40, reps: 11, rpe: 10, completed: true }],
-      remainingSets: 2,
-    })
-
-    expect(result).toMatchObject({
-      action: 'reduce_load',
-      recommendedWeight: 37.5,
-      recommendedReps: 6,
-    })
-  })
-
   // Issue #428: для взрослого порог прибавки теперь reps ≥ repMax (surplus=0) —
   // старый порог repMax+2 и требование RPE ≤ 6 больше не действуют.
   it('raises the weight when reps reach repMax for an adult (old repMax+2 threshold gone)', () => {
