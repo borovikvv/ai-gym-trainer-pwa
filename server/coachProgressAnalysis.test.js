@@ -294,7 +294,7 @@ describe('Issue #105: globalFlags in rule-based analysis', () => {
 })
 
 describe('Issue #105: LLM response includes structured fields with fallback', () => {
-  it('fills exerciseFlags and globalFlags if LLM omits them', async () => {
+  it('takes exerciseFlags and globalFlags from rules if LLM omits them', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
 
@@ -330,7 +330,7 @@ describe('Issue #105: LLM response includes structured fields with fallback', ()
     expect(result.globalFlags).toEqual({ overtraining: false, recommendedDeload: false })
   })
 
-  it('preserves exerciseFlags and globalFlags from LLM response', async () => {
+  it('ignores exerciseFlags and globalFlags from LLM response (they come from rules)', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
 
@@ -374,8 +374,92 @@ describe('Issue #105: LLM response includes structured fields with fallback', ()
       now,
     })
 
-    expect(result.exerciseFlags).toEqual(llmFlags)
-    expect(result.globalFlags).toEqual(llmGlobal)
+    // Empty inputs -> rules produce empty flags; the LLM values are ignored.
+    expect(result.exerciseFlags).toEqual([])
+    expect(result.globalFlags).toEqual({ overtraining: false, recommendedDeload: false })
+    expect(result.exerciseFlags).not.toEqual(llmFlags)
+    expect(result.globalFlags).not.toEqual(llmGlobal)
+  })
+})
+
+describe('Issue #416: structured flags always come from rules', () => {
+  const highRpeHistory = [{
+    id: 's1',
+    userId: 'vyacheslav',
+    workoutDayId: 'day-1',
+    workoutDayName: 'День A',
+    completedAt: '2026-07-08T18:00:00Z',
+    totalVolume: 5000,
+    exercises: [{
+      exerciseId: 'bench-press',
+      exerciseName: 'Жим лёжа',
+      muscleGroup: 'Грудь',
+      pain: false,
+      nextRecommendedWeight: 55,
+      progressionType: 'hold',
+      progressionReason: '',
+      sets: [
+        { weight: 55, reps: 8, rpe: 9, completed: true },
+        { weight: 55, reps: 8, rpe: 10, completed: true },
+      ],
+    }],
+  }]
+
+  it('ignores contradicting flags from the LLM and equals rule-based output', async () => {
+    const input = {
+      userId: 'vyacheslav',
+      history: highRpeHistory,
+      e1rmHistories: [makeE1RM({ trendDirection: 'flat', dataPointCount: 4 })],
+      coachState: loadingCoachState,
+      coachMemory: null,
+      now,
+    }
+
+    // Reference: LLM disabled -> rule-based branch.
+    vi.stubEnv('OPENAI_API_KEY', '')
+    vi.stubEnv('LLM_API_KEY', '')
+    const expected = await analyzeProgress(input)
+
+    // LLM answers, but with flags contradicting the rules.
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              summary: 'Всё отлично, можно повышать',
+              plateaus: [],
+              improvements: [],
+              warnings: [],
+              suggestions: [],
+              exerciseFlags: [{
+                exerciseId: 'bench-press',
+                exerciseName: 'Жим лёжа',
+                status: 'trending_up',
+                recommendation: 'increase_weight',
+                reason: 'LLM thinks it is growing',
+              }],
+              globalFlags: { overtraining: false, recommendedDeload: false },
+            }),
+          },
+        }],
+      }),
+    }))
+
+    const result = await analyzeProgress(input)
+
+    // Rules: plateau+swap for flat e1RM, overtraining+deload for high RPE.
+    expect(expected.exerciseFlags[0]).toMatchObject({
+      status: 'plateau',
+      recommendation: 'swap_exercise',
+    })
+    expect(expected.globalFlags).toMatchObject({ overtraining: true, recommendedDeload: true })
+
+    // Result flags equal the rule-based output, not the LLM's contradicting ones.
+    expect(result.exerciseFlags).toEqual(expected.exerciseFlags)
+    expect(result.globalFlags).toEqual(expected.globalFlags)
   })
 })
 
