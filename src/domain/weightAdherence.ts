@@ -38,7 +38,14 @@ export interface SetWeightDeviation {
   assignedWeight: number | null
   /** Факт минус назначение; null — назначения нет. */
   deviation: number | null
+  /** Фактические повторы подхода (issue #413). */
+  reps: number
+  /** Исход по повторам относительно плана; null — диапазон в плане не задан. */
+  repOutcome: RepOutcome
 }
+
+/** Исход рабочего подхода по повторам относительно диапазона плана (issue #413). */
+export type RepOutcome = 'in_range' | 'at_ceiling' | 'below_min' | null
 
 export interface ExerciseWeightDeviation {
   exerciseId: string
@@ -47,6 +54,8 @@ export interface ExerciseWeightDeviation {
   avgDeviation: number | null
   setsWithAssignment: number
   setsWithoutAssignment: number
+  /** Issue #413: причины облегчения из плана (planned_workout_exercises.easing_reasons). */
+  easingReasons: string[]
 }
 
 export interface SessionWeightDeviation {
@@ -67,6 +76,10 @@ interface ExerciseLike {
   exerciseName?: string
   /** Проставляется attachPlannedPrescriptions из planned_workout_exercises. */
   assignedWeight?: number | null
+  /** Диапазон повторов из плана — для исхода по повторам (issue #413). */
+  planned?: { repMin?: number; repMax?: number } | null
+  /** Issue #413: причины облегчения из плана. */
+  assignedEasingReasons?: string[] | null
   sets: SetLike[]
 }
 
@@ -88,12 +101,15 @@ export function computeSessionWeightDeviation(entry: SessionLike): SessionWeight
       actualWeight: set.weight,
       assignedWeight,
       deviation: assignedWeight === null ? null : round1(set.weight - assignedWeight),
+      reps: set.reps,
+      repOutcome: repOutcomeFor(set.reps, exercise.planned),
     }))
     if (sets.length === 0) continue
     exercises.push({
       exerciseId: exercise.exerciseId,
       exerciseName: exercise.exerciseName ?? exercise.exerciseId,
       sets,
+      easingReasons: exercise.assignedEasingReasons ?? [],
       ...summarize(sets),
     })
   }
@@ -123,6 +139,22 @@ function summarize(sets: SetWeightDeviation[]): { avgDeviation: number | null; s
  */
 function workingSets(exercise: ExerciseLike): SetLike[] {
   return (exercise?.sets ?? []).filter((set) => set?.completed !== false && Number(set?.reps) > 0 && Number(set?.weight) > 0)
+}
+
+/**
+ * Исход подхода по повторам относительно диапазона плана (issue #413).
+ * Считается независимо от наличия веса: у bodyweight-упражнений веса в плане
+ * нет, а диапазон повторов есть. Диапазон не задан — null, а не «в норме».
+ */
+function repOutcomeFor(reps: number, planned?: { repMin?: number; repMax?: number } | null): RepOutcome {
+  const repMin = Number(planned?.repMin)
+  const repMax = Number(planned?.repMax)
+  const minValid = Number.isFinite(repMin) && repMin > 0
+  const maxValid = Number.isFinite(repMax) && repMax > 0
+  if (!minValid && !maxValid) return null
+  if (minValid && reps < repMin) return 'below_min'
+  if (maxValid && reps >= repMax) return 'at_ceiling'
+  return 'in_range'
 }
 
 function round1(value: number): number {

@@ -108,6 +108,8 @@ interface GeneratedWorkoutShape {
     intensityTarget: string
     coachFocus: string
     reason: string
+    /** Issue #413: причины облегчения; накатывается в planned_workout_exercises.easing_reasons. */
+    easingReasons?: string[]
   }>
 }
 
@@ -404,8 +406,8 @@ async function insertGeneratedPlannedExercises(client: DbClient, plannedWorkoutI
   for (const [index, exercise] of (exercises ?? []).entries()) {
     await client.query(
       `insert into public.planned_workout_exercises
-       (id, planned_workout_id, exercise_id, sort_order, sets_count, rep_min, rep_max, target_weight, weight_step, rest_seconds, intensity_target, coach_focus, reason)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+       (id, planned_workout_id, exercise_id, sort_order, sets_count, rep_min, rep_max, target_weight, weight_step, rest_seconds, intensity_target, coach_focus, reason, easing_reasons)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         `${plannedWorkoutId}-${index + 1}-${exercise.exerciseId}`,
         plannedWorkoutId,
@@ -420,6 +422,7 @@ async function insertGeneratedPlannedExercises(client: DbClient, plannedWorkoutI
         exercise.intensityTarget,
         exercise.coachFocus,
         exercise.reason,
+        exercise.easingReasons ?? [],
       ],
     )
   }

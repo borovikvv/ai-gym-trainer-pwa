@@ -92,11 +92,26 @@ export interface TrainingRecord {
     // Issue #267: расхождение «назначено vs выполнено» по весу. Копится, чтобы
     // понять, есть ли в нём сигнал о качестве рекомендаций; на решения тренера
     // пока не влияет.
+    // Issue #413: пер-сетовые данные и причины облегчения — для разреза
+    // недельного самоаудита по подходам и причинам.
     weightDeviation?: {
       avgDeviation: number | null
       setsWithAssignment: number
       setsWithoutAssignment: number
-      exercises: Array<{ exerciseId: string; avgDeviation: number | null; setsWithAssignment: number }>
+      exercises: Array<{
+        exerciseId: string
+        avgDeviation: number | null
+        setsWithAssignment: number
+        easingReasons: string[]
+        sets: Array<{
+          setIndex: number
+          actualWeight: number
+          assignedWeight: number | null
+          deviation: number | null
+          reps: number
+          repOutcome: 'in_range' | 'at_ceiling' | 'below_min' | null
+        }>
+      }>
     } | null
     // Issue #268: чистый отдых между подходами («начало текущего − конец
     // предыдущего»). Агрегат на сессию; null — данных нет вовсе. На решения
@@ -237,6 +252,8 @@ export async function saveTrainingRecord(
         }
         : null,
       // Issue #267: те же агрегаты для расхождения по весу.
+      // Issue #413: плюс подходы с исходом по повторам и причины облегчения —
+      // без них разрез самоаудита по подходам и причинам был бы пуст.
       weightDeviation: entry.weightDeviation
         ? {
           avgDeviation: entry.weightDeviation.avgDeviation,
@@ -246,6 +263,15 @@ export async function saveTrainingRecord(
             exerciseId: exercise.exerciseId,
             avgDeviation: exercise.avgDeviation,
             setsWithAssignment: exercise.setsWithAssignment,
+            easingReasons: exercise.easingReasons,
+            sets: exercise.sets.map((set) => ({
+              setIndex: set.setIndex,
+              actualWeight: set.actualWeight,
+              assignedWeight: set.assignedWeight,
+              deviation: set.deviation,
+              reps: set.reps,
+              repOutcome: set.repOutcome,
+            })),
           })),
         }
         : null,

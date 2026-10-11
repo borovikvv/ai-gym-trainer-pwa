@@ -10,9 +10,11 @@ import {
   normalizeE1rmTrendValue,
   readAvgRepDeviation,
   readClamped,
+  tallyWeightAdherence,
   totalObservations,
   unobservedBranches,
   VOLUME_ACTIONS,
+  weightBucket,
 } from './coach-self-audit.ts'
 
 /** Выборка длины n из повторяющихся значений — чтобы пройти порог DEGENERATE_MIN_SAMPLE. */
@@ -233,5 +235,92 @@ describe('e1rmTrend вне лога решений (issue #273)', () => {
 
     expect(values.has('e1rmTrend')).toBe(false)
     expect(queries.some((sql) => sql.includes('coach_decision_log'))).toBe(false)
+  })
+})
+
+describe('weightBucket (issue #413)', () => {
+  it('знак отклонения → бакет', () => {
+    expect(weightBucket(2.5)).toBe('heavier')
+    expect(weightBucket(-2.5)).toBe('lighter')
+    expect(weightBucket(0)).toBe('as_planned')
+  })
+
+  it('нет отклонения → null, а не «как в плане»', () => {
+    expect(weightBucket(null)).toBeNull()
+    expect(weightBucket(undefined)).toBeNull()
+    expect(weightBucket(Number.NaN)).toBeNull()
+  })
+})
+
+describe('tallyWeightAdherence (issue #413)', () => {
+  function record(userId, exercises) {
+    return { userId, body: JSON.stringify({ outcome: { weightDeviation: { exercises } } }) }
+  }
+
+  it('раскладывает по бакетам, пользователям и причинам', () => {
+    const records = [
+      record('u1', [{
+        easingReasons: ['deload'],
+        sets: [
+          { deviation: 2, repOutcome: 'at_ceiling' },
+          { deviation: -1, repOutcome: 'in_range' },
+        ],
+      }]),
+      record('u2', [{
+        easingReasons: [],
+        sets: [{ deviation: 0, repOutcome: 'below_min' }],
+      }]),
+    ]
+
+    const tally = tallyWeightAdherence(records)
+
+    expect(tally.buckets.get('heavier')).toBe(1)
+    expect(tally.buckets.get('lighter')).toBe(1)
+    expect(tally.buckets.get('as_planned')).toBe(1)
+    expect(tally.repOutcomes.get('at_ceiling')).toBe(1)
+    expect(tally.repOutcomes.get('in_range')).toBe(1)
+    expect(tally.repOutcomes.get('below_min')).toBe(1)
+    expect(tally.byUser.get('u1').get('heavier')).toBe(1)
+    expect(tally.byUser.get('u2').get('as_planned')).toBe(1)
+    expect(tally.byReason.get('deload').get('heavier')).toBe(1)
+    expect(tally.byReason.get('__none__').get('as_planned')).toBe(1)
+    expect(tally.reasonTotals.get('deload')).toBe(2)
+    expect(tally.reasonTotals.has('__none__')).toBe(false)
+  })
+
+  it('упражнение с двумя причинами попадает в обе ветки', () => {
+    const records = [record('u1', [{
+      easingReasons: ['deload', 'low_readiness'],
+      sets: [{ deviation: 3, repOutcome: null }],
+    }])]
+
+    const tally = tallyWeightAdherence(records)
+
+    expect(tally.byReason.get('deload').get('heavier')).toBe(1)
+    expect(tally.byReason.get('low_readiness').get('heavier')).toBe(1)
+    expect(tally.reasonTotals.get('deload')).toBe(1)
+    expect(tally.reasonTotals.get('low_readiness')).toBe(1)
+  })
+
+  it('битый JSON пропускается, не кидает', () => {
+    const records = [
+      { userId: 'u1', body: 'не json' },
+      { userId: 'u1', body: null },
+      record('u1', [{ easingReasons: [], sets: [{ deviation: 1, repOutcome: 'in_range' }] }]),
+    ]
+
+    expect(() => tallyWeightAdherence(records)).not.toThrow()
+    expect(tallyWeightAdherence(records).buckets.get('heavier')).toBe(1)
+  })
+
+  it('repOutcome null не считается, а пустые записи не создают ключей', () => {
+    const tally = tallyWeightAdherence([])
+    expect(tally.buckets.size).toBe(0)
+    expect(tally.repOutcomes.size).toBe(0)
+    expect(tally.byReason.size).toBe(0)
+
+    const withNull = tallyWeightAdherence([record('u1', [{ easingReasons: [], sets: [{ deviation: null, repOutcome: null }] }])])
+    expect(withNull.buckets.size).toBe(0)
+    expect(withNull.repOutcomes.size).toBe(0)
   })
 })

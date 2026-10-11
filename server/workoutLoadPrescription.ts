@@ -168,6 +168,14 @@ export function applyPrescription({ exercise, profile, coachState, coachMemory =
       : preferences.intensityTolerance === 'aggressive'
         ? 'max_effort_allowed'
         : intensityForGoal(profile?.goal)
+  // Issue #413: структурная причина облегчения рядом с меткой intensity_target.
+  // consolidate — один код для обоих триггеров (политика и флаг анализа): это
+  // одно и то же решение тренера с разным источником. Предписание не меняем.
+  const easingReasons: string[] = []
+  if (lowReadiness) easingReasons.push('low_readiness')
+  if (shouldConsolidate || flagConsolidate) easingReasons.push('consolidate')
+  if (noFailurePolicy) easingReasons.push('teen_no_failure')
+  if (preferences.intensityTolerance === 'avoid_max') easingReasons.push('avoid_max')
   let focusText = noFailurePolicy
     ? 'контролируемая работа без отказа, техника важнее веса'
     : lowReadiness
@@ -214,6 +222,7 @@ export function applyPrescription({ exercise, profile, coachState, coachMemory =
     repMin = deload.repMin
     repMax = deload.repMax
     intensityTarget = deload.intensityTarget // 'easy'
+    easingReasons.push('deload')
     deloadNote = deload.deloadNote
     focusText = 'разгрузочная неделя мезоцикла — снижаем объём и интенсивность'
   }
@@ -230,6 +239,11 @@ export function applyPrescription({ exercise, profile, coachState, coachMemory =
     repMin = Math.max(TEEN_MIN_REPS, repMin)
     repMax = Math.max(repMin, repMax)
   }
+
+  // Issue #413: периодизация теоретически может переписать intensityTarget
+  // после того, как причины собраны. Причина облегчения имеет смысл, только
+  // если метка действительно 'easy'.
+  if (intensityTarget !== 'easy') easingReasons.length = 0
 
   return {
     exerciseId: exercise.id,
@@ -249,6 +263,7 @@ export function applyPrescription({ exercise, profile, coachState, coachMemory =
     // читается как недоверие (см. #171, правило 5).
     coachFocus: `${exercise.name}: ${shouldConsolidate && !deloadNote ? 'закрепляем текущий вес, без повышения и без отказа' : focusText}${deloadNote ? `. ${deloadNote}` : ''}.${teenNotes.length ? ` ${teenNotes.join('; ')}.` : ''}`,
     reason: reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext, policy }),
+    easingReasons,
   }
 }
 
