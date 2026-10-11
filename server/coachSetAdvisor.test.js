@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { buildNextSetDecision } from './coachSetAdvisor.ts'
-import { clampNextSetDecision, getUserTrainingPolicy } from './userTrainingPolicies.ts'
+import { clampNextSetDecision } from './userTrainingPolicies.ts'
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -128,14 +128,12 @@ describe('buildNextSetDecision', () => {
     expect(prompt).toBeNull()
   })
 
-  it('happy path: LLM refines the next set within clamp bounds', async () => {
+  it('happy path: LLM присылает только текст — числа и действие берутся из rulesDecision', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      nextSet: { weight: 62.5, reps: 8, restSeconds: 150, targetRpe: 8 },
-      strategyAction: { type: 'hold', exerciseId: null },
-      reason: 'Подход шёл уверенно — добавляем один шаг.',
-      detail: 'RPE 7 при растущем e1RM: есть запас на +2.5 кг без риска для техники.',
+      reason: 'Подход шёл уверенно — держим вес.',
+      detail: 'RPE 7 при растущем e1RM: запас есть, но правила решили не повышать.',
     })))
-    const { decision, prompt, clamped } = await buildNextSetDecision({
+    const { decision, prompt } = await buildNextSetDecision({
       client: fakeClient,
       userId: 'vyacheslav',
       exercise: EXERCISE,
@@ -145,18 +143,41 @@ describe('buildNextSetDecision', () => {
       rulesDecision: RULES_DECISION,
     })
     expect(decision.source).toBe('llm')
-    expect(decision.recommendedWeight).toBe(62.5)
-    expect(decision.recommendedReps).toBe(8)
-    expect(decision.recommendedRestSeconds).toBe(150)
-    expect(decision.targetRpe).toBe(8)
-    expect(decision.reason).toContain('уверенно')
-    expect(decision.detail).toContain('запас')
-    expect(decision.remainingSetUpdates).toHaveLength(2)
-    expect(clamped).not.toBeNull()
+    expect(decision.action).toBe(RULES_DECISION.action)
+    expect(decision.recommendedWeight).toBe(RULES_DECISION.recommendedWeight)
+    expect(decision.recommendedReps).toBe(RULES_DECISION.recommendedReps)
+    expect(decision.recommendedRestSeconds).toBe(RULES_DECISION.recommendedRestSeconds)
+    expect(decision.reason).toBe('Подход шёл уверенно — держим вес.')
+    expect(decision.detail).toBe('RPE 7 при растущем e1RM: запас есть, но правила решили не повышать.')
     // Prompt contains the load-bearing context blocks
     expect(prompt).toContain('АТЛЕТ')
     expect(prompt).toContain('БАЗОВАЯ РЕКОМЕНДАЦИЯ ПО ПРАВИЛАМ')
     expect(prompt).toContain('e1RM 72.5')
+  })
+
+  it('враждебный ответ LLM: другой вес и действие игнорируются — числа и действие берутся из rulesDecision, текст — из LLM', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      nextSet: { weight: 200, reps: 1, restSeconds: 5, targetRpe: 10 },
+      strategyAction: { type: 'stop_exercise' },
+      reason: 'Остановись и смени упражнение.',
+      detail: 'Судя по RPE, пора закончить это движение.',
+    })))
+    const { decision } = await buildNextSetDecision({
+      client: fakeClient,
+      userId: 'vyacheslav',
+      exercise: EXERCISE,
+      completedSets: COMPLETED_SETS,
+      remainingSets: 2,
+      pain: false,
+      rulesDecision: RULES_DECISION,
+    })
+    expect(decision.source).toBe('llm')
+    expect(decision.action).toBe(RULES_DECISION.action)
+    expect(decision.recommendedWeight).toBe(RULES_DECISION.recommendedWeight)
+    expect(decision.recommendedReps).toBe(RULES_DECISION.recommendedReps)
+    expect(decision.recommendedRestSeconds).toBe(RULES_DECISION.recommendedRestSeconds)
+    expect(decision.reason).toBe('Остановись и смени упражнение.')
+    expect(decision.detail).toBe('Судя по RPE, пора закончить это движение.')
   })
 
   it('falls back to rules on LLM timeout/error', async () => {
@@ -192,55 +213,10 @@ describe('buildNextSetDecision', () => {
     expect(decision.source).toBe('rules')
   })
 
-  it('adversarial LLM: wild weight jump is clamped to policy bounds', async () => {
+  it('pain forces suggest_replacement regardless of LLM text', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      nextSet: { weight: 200, reps: 50, restSeconds: 1, targetRpe: 10 },
-      strategyAction: { type: 'hold' },
-      reason: 'Давай рекорд!',
-    })))
-    const { decision } = await buildNextSetDecision({
-      client: fakeClient,
-      userId: 'vyacheslav',
-      // Issue #171: политика приходит из роута и выведена из возраста профиля.
-      policy: getUserTrainingPolicy({ userId: 'vyacheslav', age: 43 }),
-      exercise: EXERCISE,
-      completedSets: COMPLETED_SETS,
-      remainingSets: 1,
-      pain: false,
-      rulesDecision: RULES_DECISION,
-    })
-    expect(decision.source).toBe('llm')
-    // взрослый профиль: max 2 шага вверх от последнего подхода 60 → 65
-    expect(decision.recommendedWeight).toBe(65)
-    expect(decision.recommendedReps).toBe(20)
-    expect(decision.recommendedRestSeconds).toBe(30)
-    expect(decision.targetRpe).toBeLessThanOrEqual(9)
-  })
-
-  it('adversarial LLM: unknown strategy action degrades to hold', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      nextSet: { weight: 60, reps: 8, restSeconds: 120, targetRpe: 7 },
-      strategyAction: { type: 'do_a_backflip' },
-      reason: 'ok',
-    })))
-    const { decision } = await buildNextSetDecision({
-      client: fakeClient,
-      userId: 'vyacheslav',
-      exercise: EXERCISE,
-      completedSets: COMPLETED_SETS,
-      remainingSets: 1,
-      pain: false,
-      rulesDecision: RULES_DECISION,
-    })
-    expect(['continue', 'hold_load']).toContain(decision.action)
-    expect(decision.recommendedWeight).toBe(60)
-  })
-
-  it('pain forces suggest_replacement regardless of LLM answer', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      nextSet: { weight: 62.5, reps: 8, restSeconds: 120, targetRpe: 8 },
-      strategyAction: { type: 'hold' },
       reason: 'Продолжаем как шло.',
+      detail: 'Боль — не повод геройствовать.',
     })))
     const { decision } = await buildNextSetDecision({
       client: fakeClient,
@@ -253,27 +229,7 @@ describe('buildNextSetDecision', () => {
     })
     expect(decision.action).toBe('suggest_replacement')
     expect(decision.recommendedWeight).toBe(0)
-  })
-
-  it('strategy action reuses rules suggested exercise when LLM gives no valid id', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      nextSet: null,
-      strategyAction: { type: 'replace_next_exercise', exerciseId: 'nonexistent-id' },
-      reason: 'Следующее упражнение грузит ту же группу.',
-    })))
-    const rulesSuggested = { id: 'incline-press', name: 'Жим на наклонной', muscleGroup: 'Грудь' }
-    const { decision } = await buildNextSetDecision({
-      client: fakeClient,
-      userId: 'vyacheslav',
-      exercise: EXERCISE,
-      completedSets: COMPLETED_SETS,
-      remainingSets: 0,
-      pain: false,
-      session: { exerciseLibrary: [{ id: 'lat-pulldown', name: 'Тяга верхнего блока', muscleGroup: 'Спина' }] },
-      rulesDecision: { ...RULES_DECISION, suggestedExercise: rulesSuggested, suggestedExercises: [rulesSuggested] },
-    })
-    expect(decision.action).toBe('replace_next_exercise')
-    expect(decision.suggestedExercise).toEqual(rulesSuggested)
+    expect(decision.reason).toBe('Продолжаем как шло.')
   })
 
   it('prompt stays within the token budget (~2.5k tokens ≈ 9000 chars)', async () => {
@@ -321,48 +277,6 @@ describe('timed exercises (планка): секунды ≠ килограмм�
     targetWeight: 0,
   }
 
-  it('LLM предложил «вес 60» для планки — кламп обнуляет вес и ограничивает секунды', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      // Классическая путаница: LLM принял 60 секунд за 60 кг
-      nextSet: { weight: 60, reps: 16, restSeconds: 60, targetRpe: 7 },
-      strategyAction: { type: 'hold' },
-      reason: 'Продолжаем в том же темпе.',
-    })))
-    const { decision } = await buildNextSetDecision({
-      client: fakeClient,
-      userId: 'vyacheslav',
-      exercise: PLANK,
-      completedSets: [{ weight: 0, reps: 60, rpe: 7, completed: true }],
-      remainingSets: 1,
-      pain: false,
-      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 60, recommendedRestSeconds: 60 },
-    })
-    expect(decision.source).toBe('llm')
-    expect(decision.recommendedWeight).toBe(0)
-    // 16 «повторов» — минимум 10 сек соблюдён, но вес обнулён
-    expect(decision.recommendedReps).toBeGreaterThanOrEqual(10)
-    expect(decision.recommendedReps).toBeLessThanOrEqual(300)
-  })
-
-  it('секунды не могут прыгнуть больше чем на +30 от прошлого удержания', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      nextSet: { weight: 0, reps: 240, restSeconds: 60, targetRpe: 7 },
-      strategyAction: { type: 'hold' },
-      reason: 'Держи дольше!',
-    })))
-    const { decision } = await buildNextSetDecision({
-      client: fakeClient,
-      userId: 'oleg',
-      exercise: PLANK,
-      completedSets: [{ weight: 0, reps: 60, rpe: 7, completed: true }],
-      remainingSets: 1,
-      pain: false,
-      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 60, recommendedRestSeconds: 60 },
-    })
-    expect(decision.recommendedWeight).toBe(0)
-    expect(decision.recommendedReps).toBe(90)
-  })
-
   it('промпт для планки описывает секунды, а не «0×60»', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
       nextSet: { weight: 0, reps: 60, restSeconds: 60, targetRpe: 7 },
@@ -406,27 +320,6 @@ describe('Issue #296: bodyweight exercises (турник/брусья) — ве�
     targetWeight: 0,
     equipment: 'bodyweight',
   }
-
-  it('LLM предложил 60 кг для брусьев (собственный вес) — кламп обнуляет вес', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      // Воспроизводит баг из issue #296: LLM домыслил нагрузку от чисел жима
-      nextSet: { weight: 60, reps: 12, restSeconds: 90, targetRpe: 7 },
-      strategyAction: { type: 'hold' },
-      reason: 'Продолжаем в том же темпе.',
-    })))
-    const { decision } = await buildNextSetDecision({
-      client: fakeClient,
-      userId: 'vyacheslav',
-      exercise: BAR_DIPS,
-      completedSets: [{ weight: 0, reps: 12, rpe: 7, completed: true }],
-      remainingSets: 1,
-      pain: false,
-      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 12, recommendedRestSeconds: 90 },
-    })
-    expect(decision.source).toBe('llm')
-    expect(decision.recommendedWeight).toBe(0)
-    expect(decision.recommendedReps).toBe(12)
-  })
 
   it('промпт для bodyweight не показывает шаг веса и явно говорит про собственный вес', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
@@ -589,47 +482,3 @@ describe('Issue #173: clampNextSetDecision for assisted exercises', () => {
   })
 })
 
-describe('Issue #369: гравитрон после подхода без помощи', () => {
-  beforeEach(() => {
-    vi.stubEnv('OPENAI_API_KEY', 'test-key')
-  })
-
-  afterEach(() => {
-    vi.unstubAllEnvs()
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
-
-  // Как в проде: направление веса определяется по названию, поля из справочника нет.
-  const GRAVITRON = {
-    id: 'assisted-pull-up',
-    name: 'Подтягивания в гравитроне',
-    muscleGroup: 'Спина',
-    repMin: 6,
-    repMax: 10,
-    weightStep: 5,
-    restSeconds: 90,
-    targetWeight: 60,
-    equipment: 'machine',
-  }
-
-  it('LLM предложил 60 кг после подхода с 0 кг — следующий вес не выше двух шагов помощи', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
-      nextSet: { weight: 60, reps: 6, restSeconds: 90, targetRpe: 7 },
-      strategyAction: { type: 'hold' },
-      reason: 'Возвращаемся к плановому весу.',
-    })))
-    const { decision } = await buildNextSetDecision({
-      client: fakeClient,
-      userId: 'vyacheslav',
-      exercise: GRAVITRON,
-      completedSets: [{ weight: 0, reps: 6, rpe: 7, completed: true }],
-      remainingSets: 2,
-      pain: false,
-      rulesDecision: { ...RULES_DECISION, recommendedWeight: 0, recommendedReps: 6, recommendedRestSeconds: 90 },
-    })
-    expect(decision.source).toBe('llm')
-    expect(decision.recommendedWeight).toBeLessThanOrEqual(10)
-    expect(decision.remainingSetUpdates.every((update) => update.recommendedWeight <= 10)).toBe(true)
-  })
-})
