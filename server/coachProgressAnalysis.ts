@@ -12,7 +12,8 @@
 
 import type { WorkoutHistoryEntry } from '../shared/types.js'
 import type { CoachState, CoachMemory } from '../shared/types.js'
-import { requestLlmJson } from './lib/llmClient.js'
+import { requestLlmJsonDetailed } from './lib/llmClient.js'
+import { logActivity } from './activityLog.js'
 
 interface E1RMSummary {
   exerciseId: string
@@ -70,26 +71,48 @@ export interface ProgressAnalysis {
   // Issue #105: structured flags for the planner (#106) and training records (#108)
   exerciseFlags: ExerciseAnalysisFlag[]
   globalFlags: GlobalAnalysisFlags
+  // Issue #410: response was cut off by the token budget (`finish_reason:
+  // 'length'`); treat the analysis as lower-confidence.
+  degraded?: boolean
 }
 
 /**
  * Analyze workout progress using LLM (if available) or rules (fallback).
  */
 export async function analyzeProgress(input: ProgressAnalysisInput): Promise<ProgressAnalysis> {
-  const parsed = await requestLlmJson<Partial<ProgressAnalysis>>({
+  const { data: parsed, truncated } = await requestLlmJsonDetailed<Partial<ProgressAnalysis>>({
     tier: 'smart',
     caller: 'coachProgressAnalysis',
     temperature: 0.3,
-    maxTokens: 2500,
+    maxTokens: 6000,
     system:
       'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""],"exerciseFlags":[{"exerciseId":"","exerciseName":"","status":"plateau|trending_up|trending_down|stable|insufficient_data","weeksStagnant":0,"slopePerWeek":0,"recommendation":"swap_exercise|increase_weight|hold_weight|decrease_weight|consolidate|monitor","reason":""}],"globalFlags":{"overtraining":false,"overtrainingReason":"","muscleImbalance":[{"muscleGroup":"","status":"overworked|underworked"}],"recommendedDeload":false}}. Пиши на русском. exerciseFlags — по каждому упражнению из e1RM данных. globalFlags.overtraining=true только если НЕ deload-неделя и e1RM падает при высоком RPE.',
     prompt: buildLlmPrompt(input),
   })
-  if (!parsed) return ruleBasedAnalysis(input)
+  if (!parsed) {
+    const fallback = ruleBasedAnalysis(input)
+    if (truncated) {
+      fallback.degraded = true
+      logActivity('coachProgressAnalysis.degraded', {
+        caller: 'coachProgressAnalysis',
+        reason: 'truncated_fallback_to_rules',
+      })
+    }
+    return fallback
+  }
   parsed.date = input.now.toISOString()
   // Issue #105: ensure structured fields exist even if LLM omitted them
   if (!parsed.exerciseFlags) parsed.exerciseFlags = []
   if (!parsed.globalFlags) parsed.globalFlags = { overtraining: false, recommendedDeload: false }
+  // Issue #410: a truncated response may still repair to valid JSON, but tail
+  // fields can be missing — mark it degraded rather than trusting it fully.
+  if (truncated) {
+    parsed.degraded = true
+    logActivity('coachProgressAnalysis.degraded', {
+      caller: 'coachProgressAnalysis',
+      reason: 'truncated_partial_json',
+    })
+  }
   return parsed as ProgressAnalysis
 }
 

@@ -1,10 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { requestLlmJson, requestLlmText, resolveLlmModel, isLlmConfigured } from './llmClient.ts'
+import { requestLlmJson, requestLlmJsonDetailed, requestLlmText, resolveLlmModel, isLlmConfigured } from './llmClient.ts'
 
 function okResponse(content, usage = { prompt_tokens: 100, completion_tokens: 20 }) {
   return {
     ok: true,
     json: async () => ({ choices: [{ message: { content } }], usage }),
+  }
+}
+
+function responseWithFinish(content, finishReason) {
+  return {
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content }, finish_reason: finishReason }],
+      usage: { prompt_tokens: 100, completion_tokens: 20 },
+    }),
   }
 }
 
@@ -105,6 +115,40 @@ describe('llmClient', () => {
       expect(body.model).toBe('smart-model')
       expect(body.temperature).toBe(0.3)
       expect(body.max_tokens).toBe(500)
+    })
+  })
+
+  describe('requestLlmJsonDetailed', () => {
+    it('reports truncated=true when finish_reason is length', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(responseWithFinish('{"a":1}', 'length')))
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: { a: 1 }, truncated: true })
+    })
+
+    it('reports truncated=false when finish_reason is stop', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(responseWithFinish('{"a":1}', 'stop')))
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: { a: 1 }, truncated: false })
+    })
+
+    it('reports truncated=false when finish_reason is absent', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('{"a":1}')))
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: { a: 1 }, truncated: false })
+    })
+
+    it('logs truncated and maxTokens in the llm.call activity event', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(responseWithFinish('{"a":1}', 'length')))
+      await requestLlmJsonDetailed({ tier: 'smart', system: 's', prompt: 'p', caller: 'test', maxTokens: 6000 })
+      const event = logSpy.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.startsWith('TRAINER_EVENT '))
+        .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+        .find((body) => body.event === 'llm.call')
+      expect(event).toBeDefined()
+      expect(event.truncated).toBe(true)
+      expect(event.maxTokens).toBe(6000)
     })
   })
 
