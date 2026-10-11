@@ -23,10 +23,11 @@ OPENAI_MODEL=gpt-4o-mini       # base model for all tiers unless overridden belo
 # LLM_MODEL_FAST=...           # per-set advisor, narrator (latency-sensitive)
 # LLM_MODEL_MID=...            # post-workout planning, memory reflection
 # LLM_MODEL_SMART=...          # weekly program review, progress analysis
+# LLM_TIMEOUT_SMART=120000     # ms; prod default is lower (20000) in /etc/ai-gym-trainer-api.env — bump manually, see issue #410
 ```
 
 Every LLM call is logged to stdout as an `llm.call` activity event with
-`{ caller, tier, model, promptTokens, completionTokens, latencyMs, ok }` —
+`{ caller, tier, model, promptTokens, completionTokens, maxTokens, truncated, latencyMs, ok }` —
 use it to track real cost per tier.
 
 ## Deploy Steps

@@ -378,3 +378,68 @@ describe('Issue #105: LLM response includes structured fields with fallback', ()
     expect(result.globalFlags).toEqual(llmGlobal)
   })
 })
+
+describe('Issue #410: degraded flag on truncated LLM response', () => {
+  function truncatedResponse(content) {
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content }, finish_reason: 'length' }],
+        usage: { prompt_tokens: 100, completion_tokens: 20 },
+      }),
+    }
+  }
+
+  it('Scenario A: falls back to rules but marks the result degraded', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      truncatedResponse('Извините, не могу продолжить анализ'),
+    ))
+
+    const result = await analyzeProgress({
+      userId: 'vyacheslav',
+      history: [],
+      e1rmHistories: [makeE1RM({ trendDirection: 'flat', dataPointCount: 4 })],
+      coachState: loadingCoachState,
+      coachMemory: null,
+      now,
+    })
+
+    expect(result.degraded).toBe(true)
+    expect(result.exerciseFlags).toHaveLength(1)
+    expect(result.exerciseFlags[0]).toMatchObject({
+      exerciseId: 'bench-press',
+      status: 'plateau',
+    })
+    expect(result.globalFlags).toMatchObject({ overtraining: false, recommendedDeload: false })
+  })
+
+  it('Scenario B: keeps valid LLM data but marks the result degraded', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(truncatedResponse(
+      JSON.stringify({
+        summary: 'ok',
+        plateaus: [],
+        improvements: [],
+        warnings: [],
+        suggestions: [],
+        exerciseFlags: [],
+        globalFlags: { overtraining: false, recommendedDeload: false },
+      }),
+    )))
+
+    const result = await analyzeProgress({
+      userId: 'vyacheslav',
+      history: [],
+      e1rmHistories: [],
+      coachState: loadingCoachState,
+      coachMemory: null,
+      now,
+    })
+
+    expect(result.degraded).toBe(true)
+    expect(result.summary).toBe('ok')
+  })
+})

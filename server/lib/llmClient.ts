@@ -24,7 +24,7 @@ export interface LlmRequestOptions {
 }
 
 interface LlmResponseBody {
-  choices?: Array<{ message?: { content?: string } }>
+  choices?: Array<{ message?: { content?: string }; finish_reason?: string }>
   usage?: { prompt_tokens?: number; completion_tokens?: number }
 }
 
@@ -59,7 +59,7 @@ export function isLlmConfigured(): boolean {
  * their rules fallback.
  */
 export async function requestLlmText(options: LlmRequestOptions): Promise<string | null> {
-  const content = await requestLlmContent(options, false)
+  const { content } = await requestLlmContent(options, false)
   const trimmed = content?.trim() ?? ''
   return trimmed.length > 0 ? trimmed : null
 }
@@ -174,24 +174,39 @@ function extractJson(text: string): string | null {
 }
 
 export async function requestLlmJson<T = unknown>(options: LlmRequestOptions): Promise<T | null> {
-  const content = await requestLlmContent(options, true)
-  if (!content) return null
+  return (await requestLlmJsonDetailed<T>(options)).data
+}
+
+/**
+ * Like `requestLlmJson`, but also reports whether the model response was cut
+ * off by the token budget (`finish_reason: 'length'`). Callers that care about
+ * degraded output can surface the flag; everyone else keeps using
+ * `requestLlmJson`.
+ */
+export async function requestLlmJsonDetailed<T = unknown>(
+  options: LlmRequestOptions,
+): Promise<{ data: T | null; truncated: boolean }> {
+  const { content, truncated } = await requestLlmContent(options, true)
+  if (!content) return { data: null, truncated }
   const extracted = extractJson(content)
   if (!extracted) {
     logActivity('llm.call', { caller: options.caller, tier: options.tier, ok: false, error: 'invalid_json' })
-    return null
+    return { data: null, truncated }
   }
   try {
-    return JSON.parse(extracted) as T
+    return { data: JSON.parse(extracted) as T, truncated }
   } catch {
     logActivity('llm.call', { caller: options.caller, tier: options.tier, ok: false, error: 'invalid_json' })
-    return null
+    return { data: null, truncated }
   }
 }
 
-async function requestLlmContent(options: LlmRequestOptions, json: boolean): Promise<string | null> {
+async function requestLlmContent(
+  options: LlmRequestOptions,
+  json: boolean,
+): Promise<{ content: string | null; truncated: boolean }> {
   const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
-  if (!apiKey) return null
+  if (!apiKey) return { content: null, truncated: false }
   const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = resolveLlmModel(options.tier)
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS[options.tier]
@@ -218,17 +233,21 @@ async function requestLlmContent(options: LlmRequestOptions, json: boolean): Pro
     clearTimeout(timeout)
     if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
     const body = (await response.json()) as LlmResponseBody
-    const content = body?.choices?.[0]?.message?.content
+    const choice = body?.choices?.[0]
+    const content = choice?.message?.content
+    const truncated = choice?.finish_reason === 'length'
     logActivity('llm.call', {
       caller: options.caller,
       tier: options.tier,
       model,
       promptTokens: body?.usage?.prompt_tokens ?? null,
       completionTokens: body?.usage?.completion_tokens ?? null,
+      maxTokens: options.maxTokens ?? null,
+      truncated,
       latencyMs: Date.now() - startedAt,
       ok: Boolean(content),
     })
-    return content ?? null
+    return { content: content ?? null, truncated }
   } catch (error) {
     clearTimeout(timeout)
     logActivity('llm.call', {
@@ -240,6 +259,6 @@ async function requestLlmContent(options: LlmRequestOptions, json: boolean): Pro
       error: error instanceof Error ? error.message : String(error),
     })
     console.warn(`${options.caller} LLM failed:`, error instanceof Error ? error.message : error)
-    return null
+    return { content: null, truncated: false }
   }
 }
