@@ -1075,6 +1075,74 @@ describe('saveWorkoutHistoryEntry — сужение каскада до бли�
   })
 })
 
+// Issue #421: id сессии строится от даты тренировки, поэтому повторное
+// сохранение той же тренировки (пусть и с новым completed_at) апсертит одну
+// строку и чистит те же подходы, а не копит второй комплект.
+describe('saveWorkoutHistoryEntry - повторное сохранение с тем же id не дублирует подходы (issue 421)', () => {
+  it('второй вызов с новым completed_at апсертит тот же id и чистит те же подходы', async () => {
+    const { createWorkoutHistoryEntry } = await import('../src/domain/workoutHistory.js')
+
+    const base = {
+      userId: 'oleg',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      exercises: [{
+        id: 'bench-press',
+        name: 'Жим лёжа',
+        muscleGroup: 'Грудь',
+        prescription: '3×8–10 · рекомендовано 60 кг · отдых 120 сек',
+        setsCount: 3,
+        repMin: 8,
+        repMax: 10,
+        targetWeight: 60,
+        weightStep: 2.5,
+        restSeconds: 120,
+        previous: '60×10/9/8',
+        todayGoal: '60×10/9/9',
+        coachFocus: 'контроль',
+        alternatives: [],
+        instruction: 'инструкция',
+        commonMistakes: [],
+      }],
+      logs: {
+        'bench-press': {
+          exerciseId: 'bench-press',
+          pain: false,
+          sets: [
+            { weight: 60, reps: 10, rpe: 7, completed: true },
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+            { weight: 60, reps: 10, rpe: 8, completed: true },
+          ],
+        },
+      },
+    }
+
+    // Разница completed_at — 85 секунд в пределах суток (пример из issue).
+    const entryA = createWorkoutHistoryEntry({ ...base, completedAt: '2026-07-30T17:58:18.941Z' })
+    const entryB = createWorkoutHistoryEntry({ ...base, completedAt: '2026-07-30T17:59:43.941Z' })
+
+    const queries = []
+    const client = {
+      query: vi.fn().mockImplementation(async (text, params) => {
+        queries.push({ text, params })
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await saveWorkoutHistoryEntry(client, entryA)
+    await saveWorkoutHistoryEntry(client, entryB)
+
+    const sessionInserts = queries.filter((q) => q.text.includes('insert into public.workout_sessions'))
+    expect(sessionInserts).toHaveLength(2)
+    expect(sessionInserts[0].params[0]).toBe(sessionInserts[1].params[0])
+
+    const setsDeletes = queries.filter((q) => q.text.includes('delete from public.workout_sets where session_id'))
+    expect(setsDeletes).toHaveLength(2)
+    expect(setsDeletes[0].params[0]).toBe(setsDeletes[1].params[0])
+    expect(setsDeletes[0].params[0]).toBe(sessionInserts[0].params[0])
+  })
+})
+
 // Issue #408: сама запись тренировки не запускает тяжёлую LLM-цепочку — иначе
 // повтор POST из офлайн-очереди гонял бы тренера заново. Тест упадёт, если
 // откатить разрезание saveWorkoutHistoryEntry / runPostWorkoutCoachChain.

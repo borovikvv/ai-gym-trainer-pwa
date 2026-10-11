@@ -357,4 +357,42 @@ describe('workout history', () => {
       expect(entry.exercises[0].nextRecommendedWeight).toBe(50)
     })
   })
+
+  // Issue #421: id сессии не должен зависеть от момента сохранения — иначе
+  // повторная отправка (двойной тап, реплей из офлайн-очереди) даёт новый
+  // completedAt → новый id → сервер вставляет вторую сессию.
+  describe('Issue 421: id сессии не зависит от момента сохранения', () => {
+    const log = {
+      'bench-press': {
+        exerciseId: 'bench-press',
+        pain: false,
+        sets: [
+          { weight: 60, reps: 10, rpe: 7, completed: true },
+          { weight: 60, reps: 10, rpe: 8, completed: true },
+          { weight: 60, reps: 10, rpe: 8, completed: true },
+        ],
+      },
+    }
+    const base = {
+      userId: 'oleg',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      exercises: [bench],
+      logs: log,
+    }
+
+    it('повторное сохранение в тех же сутках даёт тот же id', () => {
+      const entryA = createWorkoutHistoryEntry({ ...base, completedAt: '2026-07-30T17:58:18.941Z' })
+      const entryB = createWorkoutHistoryEntry({ ...base, completedAt: '2026-07-30T17:58:50.994Z' })
+
+      expect(entryA.id).toBe(entryB.id)
+    })
+
+    it('сохранения в разные календарные дни дают разные id', () => {
+      const entryA = createWorkoutHistoryEntry({ ...base, completedAt: '2026-07-30T17:58:18.941Z' })
+      const entryB = createWorkoutHistoryEntry({ ...base, completedAt: '2026-07-31T17:58:18.941Z' })
+
+      expect(entryA.id).not.toBe(entryB.id)
+    })
+  })
 })

@@ -104,7 +104,9 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
   })
 
   const entryWithoutDebrief = {
-    id: `${input.userId}-${input.workoutDayId}-${completedAt}`,
+    // Issue #421: id привязан к дате тренировки, а не к моменту попытки
+    // сохранения — повторная отправка той же тренировки не создаёт дубль.
+    id: `${input.userId}-${input.workoutDayId}-${completedAt.slice(0, 10)}`,
     userId: input.userId,
     workoutDayId: input.workoutDayId,
     workoutDayName: input.workoutDayName,
