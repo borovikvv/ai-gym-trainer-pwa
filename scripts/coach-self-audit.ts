@@ -22,6 +22,8 @@ import type { DbClient } from '../server/dbClient.js'
 import { buildAllMuscleVolumeSnapshots } from '../server/buildVolumeSnapshot.js'
 import { loadRecentHistory, loadUserProfile } from '../server/services/programService.js'
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../src/domain/estimatedOneRepMax.js'
+import { estimateRepsLostPerWeightStep } from '../src/domain/repsLostPerWeightStep.js'
+import { getCanonicalExerciseId } from '../src/domain/exerciseIdentity.js'
 import { CANONICAL_MUSCLE_KEYS } from '../shared/muscleGroups.js'
 
 // --- Окна отчёта -------------------------------------------------------------
@@ -370,6 +372,37 @@ async function loadCurrentE1rmTrendSnapshot(pool: DbClient): Promise<Array<strin
   return values
 }
 
+/**
+ * Текущий срез личной модели «потеря повторов на шаг веса» (#418, часть #415) —
+ * без окна, как e1rmTrend: параметр не хранится в БД, считается заново из
+ * истории при каждом вызове. Сигнал категориальный: basis = 'personal' или
+ * 'fallback_general_norm'. Высокая доля отката к общей норме — это и есть
+ * «откат виден в самоаудите» из требований issue.
+ *
+ * Собственных SQL-запросов не заводим: история читается теми же
+ * loadRecentHistory/loadUserProfile, что и для e1rmTrend.
+ */
+async function loadCurrentRepsLostSnapshot(pool: DbClient): Promise<Array<string | null>> {
+  const { rows } = await pool.query('select distinct user_id from public.workout_sessions')
+  const values: Array<string | null> = []
+  for (const row of rows as Array<{ user_id: string }>) {
+    const userId = String(row.user_id)
+    const history = await loadRecentHistory(pool, userId)
+    const exerciseIds = new Set<string>()
+    for (const session of history) {
+      for (const exercise of session.exercises ?? []) {
+        exerciseIds.add(getCanonicalExerciseId({ exerciseId: exercise.exerciseId }))
+      }
+    }
+    for (const exerciseId of exerciseIds) {
+      for (const setIndex of [1, 2, 3]) {
+        values.push(estimateRepsLostPerWeightStep(history, { exerciseId, setIndex }).basis)
+      }
+    }
+  }
+  return values
+}
+
 // --- Отчёт -------------------------------------------------------------------
 
 function statsLine(label: string, stats: SignalStats): string[] {
@@ -426,6 +459,28 @@ async function main(): Promise<void> {
     lines.push('Величина не хранит историю и не привязана к числу обращений к')
     lines.push('коучу; о вырожденности по ней не судим (issue #273).')
     lines.push(...statsLine('e1rmTrend', analyzeSignal(e1rmTrend)))
+    lines.push('')
+
+    // Личная потеря повторов на шаг веса (#418) — тоже не оконная величина:
+    // параметра в базе нет, срез пересчитывается из истории при каждом вызове.
+    // Категориальный basis: personal vs откат к общей норме.
+    const repsLostBasis = await loadCurrentRepsLostSnapshot(pool)
+    lines.push('## repsLostPerWeightStep — текущий срез, без окна')
+    lines.push('Личная потеря повторов на шаг веса (#418): не хранится, считается')
+    lines.push('заново из истории. basis — категориальный сигнал; высокая доля')
+    lines.push('fallback_general_norm означает откат к общей норме (в решение не идёт).')
+    const repsLostStats = analyzeSignal(repsLostBasis)
+    lines.push(...statsLine('repsLostPerWeightStep', repsLostStats))
+    if (isUndersampled(repsLostStats)) {
+      lines.push(`  мало данных: ${repsLostStats.filled} < ${DEGENERATE_MIN_SAMPLE}, о вырожденности не судим`)
+    } else if (repsLostStats.mode === 'fallback_general_norm' && repsLostStats.modeShare >= DEGENERATE_MAX_MODAL_SHARE) {
+      lines.push(
+        `  !!! ОТКАТ К ОБЩЕЙ НОРМЕ: fallback_general_norm ${fmtShare(repsLostStats.modeShare)} ≥ ${fmtShare(DEGENERATE_MAX_MODAL_SHARE)}`,
+      )
+    } else {
+      const personalShare = repsLostStats.mode === 'personal' ? repsLostStats.modeShare : 1 - repsLostStats.modeShare
+      lines.push(`  личная модель доступна: personal ${fmtShare(personalShare)}`)
+    }
     lines.push('')
 
     for (const weeks of WINDOWS_WEEKS) {
