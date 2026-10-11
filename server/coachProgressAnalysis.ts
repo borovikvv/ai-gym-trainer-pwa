@@ -76,47 +76,53 @@ export interface ProgressAnalysis {
   degraded?: boolean
 }
 
+type LlmProgressAnalysisResponse = Omit<Partial<ProgressAnalysis>, 'exerciseFlags' | 'globalFlags'>
+
 /**
  * Analyze workout progress using LLM (if available) or rules (fallback).
  */
 export async function analyzeProgress(input: ProgressAnalysisInput): Promise<ProgressAnalysis> {
-  const { data: parsed, truncated } = await requestLlmJsonDetailed<Partial<ProgressAnalysis>>({
+  // Issue #416: structured flags are decisions, not text — always derive them
+  // from rules. The LLM only writes the text fields and sees the rule decisions
+  // as input so its text cannot contradict them.
+  const rules = ruleBasedAnalysis(input)
+  const { data: parsed, truncated } = await requestLlmJsonDetailed<LlmProgressAnalysisResponse>({
     tier: 'smart',
     caller: 'coachProgressAnalysis',
     temperature: 0.3,
     maxTokens: 6000,
     system:
-      'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""],"exerciseFlags":[{"exerciseId":"","exerciseName":"","status":"plateau|trending_up|trending_down|stable|insufficient_data","weeksStagnant":0,"slopePerWeek":0,"recommendation":"swap_exercise|increase_weight|hold_weight|decrease_weight|consolidate|monitor","reason":""}],"globalFlags":{"overtraining":false,"overtrainingReason":"","muscleImbalance":[{"muscleGroup":"","status":"overworked|underworked"}],"recommendedDeload":false}}. Пиши на русском. exerciseFlags — по каждому упражнению из e1RM данных. globalFlags.overtraining=true только если НЕ deload-неделя и e1RM падает при высоком RPE.',
-    prompt: buildLlmPrompt(input),
+      'Ты спортивный аналитик. Проанализируй прогресс атлета. Верни строго JSON: {"summary":"коротко 2-3 предложения","plateaus":[{"exerciseName":"","weeksStagnant":0,"recommendation":""}],"improvements":[{"exerciseName":"","e1rmChangePercent":0,"note":""}],"warnings":[""],"suggestions":[""]}. Пиши на русском. Решения по статусам, рекомендациям по каждому упражнению и глобальным флагам (перетренированность, разгрузка) уже приняты правилами и переданы во входных данных. Не меняй эти решения — только опиши их словами в текстовых полях.',
+    prompt: buildLlmPrompt(input, rules),
   })
   if (!parsed) {
-    const fallback = ruleBasedAnalysis(input)
     if (truncated) {
-      fallback.degraded = true
+      rules.degraded = true
       logActivity('coachProgressAnalysis.degraded', {
         caller: 'coachProgressAnalysis',
         reason: 'truncated_fallback_to_rules',
       })
     }
-    return fallback
+    return rules
   }
   parsed.date = input.now.toISOString()
-  // Issue #105: ensure structured fields exist even if LLM omitted them
-  if (!parsed.exerciseFlags) parsed.exerciseFlags = []
-  if (!parsed.globalFlags) parsed.globalFlags = { overtraining: false, recommendedDeload: false }
+  // Issue #416: structured flags always come from rules, never from the LLM.
+  const analysis = parsed as ProgressAnalysis
+  analysis.exerciseFlags = rules.exerciseFlags
+  analysis.globalFlags = rules.globalFlags
   // Issue #410: a truncated response may still repair to valid JSON, but tail
   // fields can be missing — mark it degraded rather than trusting it fully.
   if (truncated) {
-    parsed.degraded = true
+    analysis.degraded = true
     logActivity('coachProgressAnalysis.degraded', {
       caller: 'coachProgressAnalysis',
       reason: 'truncated_partial_json',
     })
   }
-  return parsed as ProgressAnalysis
+  return analysis
 }
 
-function buildLlmPrompt(input: ProgressAnalysisInput): string {
+function buildLlmPrompt(input: ProgressAnalysisInput, rules: ProgressAnalysis): string {
   const cs = input.coachState
   const now = input.now
   const fourWeeksAgo = new Date(now.getTime() - 28 * 86_400_000)
@@ -173,6 +179,13 @@ function buildLlmPrompt(input: ProgressAnalysisInput): string {
   // Фаза 2: долгосрочная память (травмы, реакции на нагрузку, цели)
   const memoryBlock = input.longTermMemory ? `\n${input.longTermMemory}\n` : ''
 
+  // Issue #416: pass the rule-based decisions to the LLM as input so its text
+  // does not contradict the flags that will be returned in the result.
+  const flagsText = rules.exerciseFlags
+    .map((f) => `${f.exerciseName}: статус=${f.status}, рекомендация=${f.recommendation}, причина=${f.reason}`)
+    .join('\n')
+  const globalFlagsText = `Глобально: overtraining=${rules.globalFlags.overtraining}${rules.globalFlags.overtrainingReason ? ` (${rules.globalFlags.overtrainingReason})` : ''}, recommendedDeload=${rules.globalFlags.recommendedDeload}`
+
   return `Дата анализа: ${now.toISOString().slice(0, 10)}
 ${memoryBlock}
 Тренировок за 4 недели: ${workoutsCount}
@@ -190,6 +203,10 @@ ${volumeText || 'нет данных'}
 Восстановление: ${cs?.recoveryStatus ?? 'unknown'}
 Усталость: ${cs?.muscleGroups ? Object.entries(cs.muscleGroups).filter(([, g]) => g?.fatigue === 'high').map(([k]) => k).join(', ') || 'нет' : 'нет данных'}
 ${deloadHint}
+
+Флаги по правилам (не меняй решения, только опиши их словами):
+${flagsText || 'нет данных'}
+${globalFlagsText}
 
 Найди:
 1. Плато (e1RM не растёт 3+ недели или trend=flat/down при dataPointCount>=3, и это НЕ deload-неделя)
