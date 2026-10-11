@@ -43,6 +43,16 @@ export const STAGNATION_PICTURES = [
 export const VOLUME_ACTIONS = ['add', 'hold', 'cut'] as const
 
 /**
+ * Issue #413: причины облегчения (planned_workout_exercises.easing_reasons).
+ * Здесь — полный список известных веток для branchAlarms: причина, не
+ * сработавшая ни разу за 12 недель, помечается как мёртвая ветка.
+ */
+export const EASING_REASONS = ['deload', 'low_readiness', 'consolidate', 'teen_no_failure', 'avoid_max'] as const
+
+/** Наблюдение без причины облегчения — не «причина не сработала», а «причины нет». */
+export const NO_EASING_REASON = '__none__'
+
+/**
  * Порог тревоги вырожденности сигнала. Любое из трёх — сигнал вырожден:
  *  - мода занимает ≥ 80 % значений;
  *  - различных значений ≤ 2;
@@ -243,6 +253,25 @@ async function loadDecisionLogCounts(pool: PoolLike, weeks: number): Promise<Map
 }
 
 /**
+ * Записи training_record за окно. Источник разреза по весу (issue #413) —
+ * outcome.weightDeviation, который пишется в body (server/coachTrainingRecord.ts).
+ * Один SQL-запрос на окно, не на каждую причину отдельно.
+ */
+export async function loadWeightAdherenceRecords(pool: PoolLike, weeks: number): Promise<WeightAdherenceRecord[]> {
+  const { rows } = await pool.query(
+    `select user_id, body
+       from public.recommendations
+      where recommendation_type = 'training_record'
+        and created_at >= now() - ($1 || ' weeks')::interval`,
+    [weeks],
+  )
+  return (rows as Array<{ user_id: string; body: string | null }>).map((row) => ({
+    userId: String(row.user_id),
+    body: row.body,
+  }))
+}
+
+/**
  * Кламп из payload решения. Отсутствие признака — не «клампа не было», а
  * «не записано»: третье состояние, и в ключ оно попадает отдельной пометкой.
  * Ровно та ошибка, ради которой заведён #266, — не схлопывать «нет данных» в
@@ -341,6 +370,101 @@ export function readAvgRepDeviation(bodyJson: string | null): number | null {
   } catch {
     return null
   }
+}
+
+// --- Назначено и выполнено по весу (issue #413) -----------------------------
+
+export type WeightBucket = 'heavier' | 'as_planned' | 'lighter'
+
+/**
+ * Бакет отклонения фактического рабочего веса от назначенного планом.
+ * deviation = факт − назначение; null — числового назначения не было.
+ */
+export function weightBucket(deviation: number | null | undefined): WeightBucket | null {
+  if (deviation === null || deviation === undefined) return null
+  if (!Number.isFinite(deviation)) return null
+  if (deviation > 0) return 'heavier'
+  if (deviation < 0) return 'lighter'
+  return 'as_planned'
+}
+
+export interface WeightAdherenceRecord {
+  userId: string
+  body: string | null
+}
+
+export interface WeightAdherenceTally {
+  buckets: Map<string, number>
+  repOutcomes: Map<string, number>
+  byUser: Map<string, Map<string, number>>
+  byReason: Map<string, Map<string, number>>
+  reasonTotals: Map<string, number>
+}
+
+interface WeightDeviationBody {
+  outcome?: {
+    weightDeviation?: {
+      exercises?: Array<{
+        easingReasons?: string[]
+        sets?: Array<{ deviation?: number | null; repOutcome?: string | null }>
+      }>
+    } | null
+  } | null
+}
+
+/**
+ * Свернуть записи training_record в разрезы «назначено и выполнено по весу».
+ * Чистая функция: тестируется синтетическими body, без БД. Битый JSON
+ * пропускается, а не роняет отчёт (как readClamped).
+ */
+export function tallyWeightAdherence(records: WeightAdherenceRecord[]): WeightAdherenceTally {
+  const buckets = new Map<string, number>()
+  const repOutcomes = new Map<string, number>()
+  const byUser = new Map<string, Map<string, number>>()
+  const byReason = new Map<string, Map<string, number>>()
+  const reasonTotals = new Map<string, number>()
+
+  for (const record of records) {
+    let body: WeightDeviationBody
+    try {
+      body = JSON.parse(record.body ?? '') as WeightDeviationBody
+    } catch {
+      continue
+    }
+    const exercises = body?.outcome?.weightDeviation?.exercises ?? []
+    for (const exercise of exercises) {
+      const reasons = Array.isArray(exercise?.easingReasons) && exercise.easingReasons.length > 0
+        ? exercise.easingReasons
+        : [NO_EASING_REASON]
+      for (const set of exercise?.sets ?? []) {
+        const bucket = weightBucket(set?.deviation)
+        if (bucket) {
+          bump(buckets, bucket)
+          bump(nested(byUser, record.userId), bucket)
+          for (const code of reasons) bump(nested(byReason, code), bucket)
+        }
+        if (set?.repOutcome) bump(repOutcomes, set.repOutcome)
+        // Знаменатель для branchAlarms: наблюдения на причину без '__none__'.
+        for (const code of reasons) {
+          if (code !== NO_EASING_REASON) bump(reasonTotals, code)
+        }
+      }
+    }
+  }
+
+  return { buckets, repOutcomes, byUser, byReason, reasonTotals }
+}
+
+function bump(counts: Map<string, number>, key: string): void {
+  counts.set(key, (counts.get(key) ?? 0) + 1)
+}
+
+function nested(map: Map<string, Map<string, number>>, key: string): Map<string, number> {
+  const bucket = map.get(key)
+  if (bucket) return bucket
+  const created = new Map<string, number>()
+  map.set(key, created)
+  return created
 }
 
 /**
@@ -472,6 +596,36 @@ async function main(): Promise<void> {
           lines.push(`  !!! СИГНАЛ ВЫРОЖДЕН: ${degeneracyReasons(stats).join('; ')}`)
         }
       }
+      lines.push('')
+
+      // 3. Назначено и выполнено по весу (issue #413)
+      lines.push('## 3. Назначено и выполнено по весу')
+      lines.push('Источник: outcome.weightDeviation записи training_record (issue #267).')
+      lines.push('Отклонение = факт − назначение; разрез идёт по рабочим подходам.')
+      lines.push('')
+
+      const weightTally = tallyWeightAdherence(await loadWeightAdherenceRecords(pool, weeks))
+      lines.push('### 3.1. Вес относительно плана')
+      lines.push(`  ${fmtCounts(weightTally.buckets)}`)
+      lines.push('### 3.1. Исход по повторам при рабочем весе')
+      lines.push(`  ${fmtCounts(weightTally.repOutcomes)}`)
+      lines.push('')
+
+      lines.push('### 3.2. Разрез по пользователю')
+      if (weightTally.byUser.size === 0) {
+        lines.push('  (пусто)')
+      } else {
+        for (const [userId, counts] of weightTally.byUser) lines.push(`  ${userId}: ${fmtCounts(counts)}`)
+      }
+      lines.push('')
+
+      lines.push('### 3.3. Разрез по причине облегчения')
+      if (weightTally.byReason.size === 0) {
+        lines.push('  (пусто)')
+      } else {
+        for (const [reason, counts] of weightTally.byReason) lines.push(`  ${reason}: ${fmtCounts(counts)}`)
+      }
+      if (weeks === 12) lines.push(...branchAlarms(EASING_REASONS, weightTally.reasonTotals, 'easing_reason'))
       lines.push('')
     }
 

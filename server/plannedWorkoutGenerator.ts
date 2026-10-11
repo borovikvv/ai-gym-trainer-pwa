@@ -218,6 +218,10 @@ export interface GeneratedExercise {
   reason: string
   /** Issue #171: применены подростковые ограничения (см. teenLimitsApply). */
   teenLimited?: boolean
+  /** Issue #413: причины облегчения (intensityTarget === 'easy'):
+   * deload, low_readiness, consolidate, teen_no_failure, avoid_max.
+   * Наблюдаемость решения; на предписание не влияет. */
+  easingReasons?: string[]
   /** Issue #170: инвариант «не ниже рабочего веса» приостановлен (перерыв,
    * боль или разгрузка) — LLM-кламп тоже не должен держать вес снизу. */
   workingFloorSuspended?: boolean

@@ -55,6 +55,9 @@ interface ExerciseEntryInput {
   // Issue #267: назначенный вес из плана (planned_workout_exercises.target_weight).
   // Проставляется в attachPlannedPrescriptions; null — числового назначения нет.
   assignedWeight?: number | null
+  // Issue #413: причины облегчения из плана (planned_workout_exercises.easing_reasons).
+  // Проставляется рядом с assignedWeight; входит в training_record для самоаудита.
+  assignedEasingReasons?: string[] | null
 }
 
 interface WorkoutHistoryEntryInput {
@@ -596,7 +599,7 @@ async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntr
 
   try {
     const result = await client.query(
-      `select pwe.exercise_id, pwe.sets_count, pwe.rep_min, pwe.rep_max, pwe.target_weight
+      `select pwe.exercise_id, pwe.sets_count, pwe.rep_min, pwe.rep_max, pwe.target_weight, pwe.easing_reasons
        from public.planned_workout_exercises pwe
        join public.planned_workouts pw on pw.id = pwe.planned_workout_id
        where pw.user_id = $1
@@ -608,7 +611,9 @@ async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntr
     // Issue #267: targetWeight хранится здесь же (не в QualityPrescription —
     // тип shared/workoutQuality.ts не расширяем), чтобы расхождение весов
     // считалось из того же плана, что и предписания качества.
-    const byCanonicalId = new Map<string, QualityPrescription & { targetWeight: number | null }>()
+    // Issue #413: easing_reasons едут рядом с предписанием, чтобы попасть в
+    // training_record для самоаудита (QualityPrescription не расширяем).
+    const byCanonicalId = new Map<string, QualityPrescription & { targetWeight: number | null; easingReasons: string[] }>()
     for (const row of rows) {
       const key = canonicalExerciseId(String(row.exercise_id ?? ''))
       if (!key || byCanonicalId.has(key)) continue
@@ -617,6 +622,7 @@ async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntr
         repMin: Number(row.rep_min),
         repMax: Number(row.rep_max),
         targetWeight: Number(row.target_weight) > 0 ? Number(row.target_weight) : null,
+        easingReasons: Array.isArray(row.easing_reasons) ? row.easing_reasons.map(String) : [],
       })
     }
     for (const exercise of exercises) {
@@ -624,6 +630,7 @@ async function attachPlannedPrescriptions(client: DbClient, entry: SanitizedEntr
       if (planned) {
         exercise.planned = planned
         exercise.assignedWeight = planned.targetWeight
+        exercise.assignedEasingReasons = planned.easingReasons
       }
     }
   } catch (err) {

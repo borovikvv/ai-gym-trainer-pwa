@@ -97,6 +97,8 @@ describe('planned workout generator', () => {
     expect(plan.exercises.length).toBeGreaterThanOrEqual(5)
     expect(plan.exercises.some((exercise) => exercise.setsCount >= 3)).toBe(true)
     expect(plan.exercises.every((exercise) => exercise.intensityTarget === 'easy')).toBe(true)
+    // Issue #413: метка easy объяснена структурной причиной.
+    expect(plan.exercises.every((exercise) => exercise.easingReasons.includes('low_readiness'))).toBe(true)
     const pulldown = plan.exercises.find((exercise) => exercise.exerciseId === 'lat-pulldown')
     expect(pulldown?.targetWeight).toBe(42.5)
     expect(plan.exercises.map((exercise) => exercise.exerciseId)).not.toContain('barbell-squat')
@@ -758,6 +760,8 @@ describe('planned workout generator', () => {
     expect(bodyweightPlan.exercises.map((exercise) => exercise.exerciseId)).toContain('bodyweight-squat')
     expect(bodyweightPlan.exercises.some((exercise) => exercise.setsCount >= 3)).toBe(true)
     expect(bodyweightPlan.exercises.every((exercise) => exercise.intensityTarget === 'easy')).toBe(true)
+    // Issue #413: avoid_max — отдельная причина облегчения.
+    expect(bodyweightPlan.exercises.every((exercise) => exercise.easingReasons.includes('avoid_max'))).toBe(true)
   })
 
   it('applies Oleg policy as conservative even when preferences ask for aggressive work', async () => {
@@ -798,6 +802,9 @@ describe('planned workout generator', () => {
     expect(plan.readinessSnapshot.userTrainingPolicy).toMatchObject({ userId: 'oleg', allowFailureSets: false })
     expect(plan.exercises.every((exercise) => exercise.intensityTarget !== 'max_effort_allowed')).toBe(true)
     expect(plan.exercises.every((exercise) => exercise.coachFocus.includes('без отказа'))).toBe(true)
+    // Issue #413: подростковый режим без отказа — причина teen_no_failure.
+    expect(plan.exercises.every((exercise) => exercise.intensityTarget === 'easy')).toBe(true)
+    expect(plan.exercises.every((exercise) => exercise.easingReasons.includes('teen_no_failure'))).toBe(true)
   })
 
   it('keeps compound chest work before arm isolation when Oleg focuses arms and chest', async () => {
@@ -1040,6 +1047,8 @@ describe('planned workout generator', () => {
     expect(plan.exercises.length).toBeGreaterThan(0)
     for (const exercise of plan.exercises) {
       expect(exercise.intensityTarget).toBe('easy')
+      // Issue #413: разгрузка — отдельная причина deload.
+      expect(exercise.easingReasons).toContain('deload')
       // setsCount should be reduced (max 2 for deload per applyDeloadReduction)
       expect(exercise.setsCount).toBeLessThanOrEqual(2)
       // coachFocus should mention deload
@@ -1160,6 +1169,7 @@ describe('buildGeneratedPlannedWorkout — intra-cycle periodization', () => {
     expect(ex.setsCount).toBeLessThanOrEqual(2)
     expect(ex.targetWeight).toBeLessThan(60)
     expect(ex.intensityTarget).toBe('easy')
+    expect(ex.easingReasons).toContain('deload')
     expect(ex.coachFocus).toContain('разгруз')
   })
 
@@ -2963,5 +2973,91 @@ describe('Issue #370: переход с гравитрона на обычные
       gravitronSession('2026-10-06T18:00:00Z', [15, 15]),
     ])
     expect(ids).toContain('assisted-pull-up')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #413: причины облегчения (easingReasons) у предписания
+// ---------------------------------------------------------------------------
+describe('planned workout generator — причины облегчения (issue #413)', () => {
+  const benchOnly = [
+    { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 50, weightStep: 2.5, restSeconds: 150 },
+  ]
+  const readyState = {
+    recoveryStatus: 'ready',
+    readinessScore: 80,
+    weeklyLoadStatus: 'on_plan',
+    muscleGroups: {
+      chest: { fatigue: 'low' },
+      back: { fatigue: 'low' },
+      legs: { fatigue: 'low' },
+      shoulders: { fatigue: 'low' },
+      arms: { fatigue: 'low' },
+      core: { fatigue: 'low' },
+    },
+    exercises: {},
+  }
+  const chestDecision = { priorityMuscleGroups: ['chest'], avoidMuscleGroups: [], exercisePolicies: {} }
+  const build = (overrides = {}) => buildGeneratedPlannedWorkout({
+    profile,
+    scheduledDate: '2026-10-12',
+    coachState: readyState,
+    coachDecision: chestDecision,
+    exerciseLibrary: benchOnly,
+    history: [],
+    ...overrides,
+  })
+
+  it('политика consolidate ставит easy и причину consolidate', async () => {
+    const plan = await build({ coachDecision: { ...chestDecision, exercisePolicies: { 'bench-press': 'consolidate' } } })
+    const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+    expect(bench).toBeDefined()
+    expect(bench.intensityTarget).toBe('easy')
+    expect(bench.easingReasons).toContain('consolidate')
+  })
+
+  it('флаг анализа consolidate даёт ту же причину через flagConsolidate', async () => {
+    const analysisResult = {
+      date: '2026-10-11T00:00:00Z',
+      summary: '',
+      plateaus: [],
+      improvements: [],
+      warnings: [],
+      suggestions: [],
+      exerciseFlags: [{
+        exerciseId: 'bench-press',
+        exerciseName: 'Жим лёжа',
+        status: 'plateau',
+        recommendation: 'consolidate',
+        reason: 'плато',
+      }],
+      globalFlags: { overtraining: false, recommendedDeload: false },
+    }
+    const plan = await build({ analysisResult })
+    const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+    expect(bench).toBeDefined()
+    expect(bench.intensityTarget).toBe('easy')
+    expect(bench.easingReasons).toContain('consolidate')
+  })
+
+  it('низкая готовность и consolidate вместе → обе причины без дублей', async () => {
+    const plan = await build({
+      coachState: { ...readyState, readinessScore: 40, recoveryStatus: 'low' },
+      coachDecision: { ...chestDecision, exercisePolicies: { 'bench-press': 'consolidate' } },
+    })
+    const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+    expect(bench).toBeDefined()
+    expect(bench.intensityTarget).toBe('easy')
+    expect(bench.easingReasons).toContain('low_readiness')
+    expect(bench.easingReasons).toContain('consolidate')
+    expect(new Set(bench.easingReasons).size).toBe(bench.easingReasons.length)
+  })
+
+  it('обычный день без причин облегчения → пустой список', async () => {
+    const plan = await build()
+    const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+    expect(bench).toBeDefined()
+    expect(bench.intensityTarget).not.toBe('easy')
+    expect(bench.easingReasons).toEqual([])
   })
 })
