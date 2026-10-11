@@ -75,26 +75,42 @@ describe('#171 правило 1: назначения подростку не в
   })
 
   it('прибавляет вес раньше взрослого порога и называет причину (правило 4)', () => {
-    // Запас всего +1 повтор сверх верха диапазона: взрослому это ещё не повод
-    // прибавлять, подростку — уже повод, но ровно на один шаг.
-    const light = [{ weight: 40, reps: 9, rpe: 6, completed: true }]
-
+    // Запас +1 повтор сверх верха диапазона: подростку это повод прибавить
+    // ровно на один шаг. Сравнение со взрослым на этом же входе убрано в #428 —
+    // после фикса взрослый тоже прибавляет, сравнение потеряло смысл.
     const teen = recommendNextSet({
       userTrainingPolicy: getUserTrainingPolicy(TEEN),
       exercise,
-      completedSets: light,
+      completedSets: [{ weight: 40, reps: 9, rpe: 6, completed: true }],
       remainingSets: 2,
     })
     expect(teen.recommendedWeight).toBe(42.5)
     expect(teen.reason).toContain('мелкими шагами')
+  })
+
+  // Issue #428: голый потолок диапазона (reps === repMax). Взрослый теперь
+  // прибавляет (порог surplus=0), подросток — ещё нет: его порог repMax+1 не
+  // менялся (решение владельца от 11.10.2026), поведение на этом входе то же,
+  // что и до фикса — держит вес и закрепляет верх.
+  it('на голом потолке диапазона взрослый прибавляет (surplus=0), подросток — нет (#428)', () => {
+    const topSet = [{ weight: 40, reps: 8, rpe: 6, completed: true }]
 
     const adult = recommendNextSet({
       userTrainingPolicy: getUserTrainingPolicy(ADULT),
       exercise,
-      completedSets: light,
+      completedSets: topSet,
       remainingSets: 2,
     })
-    expect(adult.recommendedWeight).toBe(40)
+    expect(adult.recommendedWeight).toBe(42.5)
+
+    const teen = recommendNextSet({
+      userTrainingPolicy: getUserTrainingPolicy(TEEN),
+      exercise,
+      completedSets: topSet,
+      remainingSets: 2,
+    })
+    expect(teen.recommendedWeight).toBe(40)
+    expect(teen.recommendedReps).toBe(8)
   })
 
   it('взрослому на том же подходе вес не режет — это подростковое ограничение', () => {
