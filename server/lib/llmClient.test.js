@@ -18,6 +18,22 @@ function responseWithFinish(content, finishReason) {
   }
 }
 
+// Issue #412: headers resolve immediately but the body arrives after delayMs;
+// an abort before that rejects json() — mirroring fetch (undici) in Node.
+function slowBodyFetch(delayMs, content = '{"a":1}') {
+  return vi.fn(async (_url, init) => ({
+    ok: true,
+    json: () =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(() => resolve({ choices: [{ message: { content } }] }), delayMs)
+        init.signal.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(new DOMException('This operation was aborted', 'AbortError'))
+        })
+      }),
+  }))
+}
+
 describe('llmClient', () => {
   beforeEach(() => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
@@ -104,6 +120,29 @@ describe('llmClient', () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {})
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('aborted')))
       expect(await requestLlmJson({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })).toBeNull()
+    })
+
+    // Issue #412: the timeout must cover reading the body, not just headers.
+    it('aborts reading the body on timeout, not just the headers', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.stubGlobal('fetch', slowBodyFetch(200))
+      const result = await requestLlmJson({ tier: 'fast', system: 's', prompt: 'p', caller: 'test', timeoutMs: 50 })
+      expect(result).toBeNull()
+      const event = logSpy.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.startsWith('TRAINER_EVENT '))
+        .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+        .find((body) => body.event === 'llm.call')
+      expect(event).toBeDefined()
+      expect(event.ok).toBe(false)
+      expect(event.error).toMatch(/abort/i)
+    })
+
+    it('reads a fast body within the timeout', async () => {
+      vi.stubGlobal('fetch', slowBodyFetch(10))
+      const result = await requestLlmJson({ tier: 'fast', system: 's', prompt: 'p', caller: 'test', timeoutMs: 500 })
+      expect(result).toEqual({ a: 1 })
     })
 
     it('sends tier-resolved model, temperature and max_tokens', async () => {

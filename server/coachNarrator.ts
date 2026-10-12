@@ -48,7 +48,7 @@ interface NarrationInput {
   longTermMemory?: string
 }
 
-const LLM_TIMEOUT_MS = 3000
+const LLM_TIMEOUT_MS = 6000
 
 /**
  * Generate a human-readable coach narration using LLM.
