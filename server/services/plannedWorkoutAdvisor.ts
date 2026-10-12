@@ -43,6 +43,12 @@ export interface PlannedExercisePrescription {
    * советник вернёт вес обратно вверх ровно там, где его снизили намеренно.
    */
   workingFloorSuspended?: boolean
+  /**
+   * Issue #414 — нижняя граница веса для LLM = baseline (взрослый профиль,
+   * день без облегчения). Детерминированный baseline уже содержит прибавку
+   * прогрессии, поэтому LLM не должен откатывать её к рабочему весу.
+   */
+  progressionFloor?: boolean
   /** Issue #173: 'load' | 'assistance' из справочника; без него — по имени. */
   weightDirection?: string | null
   /**
@@ -204,10 +210,14 @@ export function clampRefinedPlannedExercises(
       // В разгрузку допускаем облегчение до 2 шагов.
       // Issue #170: там же, где генератор приостановил инвариант (перерыв,
       // боль), нижнюю границу не держим — послабление такое же, как в разгрузку.
+      // Issue #414: в обычный день взрослого профиля нижняя граница = baseline,
+      // а не рабочий вес, — иначе LLM откатывает прибавку прогрессии.
       const direction = resolveWeightDirection({ name: base.exerciseName, weightDirection: base.weightDirection })
       const easiestAllowed = options.isDeload || base.workingFloorSuspended === true
         ? easierWeight(base.targetWeight, 2 * step, direction)
-        : easierOf(base.targetWeight, workingFloor, direction)
+        : base.progressionFloor === true
+          ? base.targetWeight
+          : easierOf(base.targetWeight, workingFloor, direction)
       const hardestAllowed = harderWeight(base.targetWeight, maxJumpSteps * step, direction)
       const lower = Math.min(easiestAllowed, hardestAllowed)
       const upper = Math.max(easiestAllowed, hardestAllowed)

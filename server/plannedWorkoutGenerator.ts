@@ -517,6 +517,9 @@ async function refineBaselinePrescriptions({
     weightDirection: exercise.weightDirection ?? null,
     teenLimited: exercise.teenLimited === true,
     workingFloorSuspended: exercise.workingFloorSuspended === true,
+    // Issue #414: взрослый профиль в обычный день — LLM не опускает вес ниже
+    // детерминированного baseline (в нём уже сидит прибавка прогрессии).
+    progressionFloor: userTrainingPolicy?.allowFailureSets === true && exercise.intensityTarget !== 'easy',
   }))
   const alternativesById = new Map(allowedAlternatives.map((exercise) => [exercise.id, exercise]))
 

@@ -83,6 +83,49 @@ describe('clampRefinedPlannedExercises', () => {
     expect(exercises[0].targetWeight).toBe(55) // 60 - 2*2.5, clamped
   })
 
+  // Issue #414: детерминированный baseline уже содержит прибавку прогрессии.
+  // Для взрослого профиля в обычный день LLM не должен откатывать её к
+  // рабочему весу — нижняя граница веса = baseline, а не рабочий вес.
+  it('#414: LLM не опускает вес ниже baseline, когда задан progressionFloor', () => {
+    const baseline = { ...bench, targetWeight: 62.5, currentWorkingWeight: 60, progressionFloor: true }
+    const { exercises } = clampRefinedPlannedExercises(
+      [baseline],
+      [{ exerciseId: 'bench-press', targetWeight: 60 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    expect(exercises[0].targetWeight).toBe(62.5)
+  })
+
+  it('#414: без progressionFloor нижняя граница прежняя — рабочий вес', () => {
+    const baseline = { ...bench, targetWeight: 62.5, currentWorkingWeight: 60 }
+    const { exercises } = clampRefinedPlannedExercises(
+      [baseline],
+      [{ exerciseId: 'bench-press', targetWeight: 60 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    expect(exercises[0].targetWeight).toBe(60)
+  })
+
+  it('#414: progressionFloor не отменяет разгрузку', () => {
+    const baseline = { ...bench, targetWeight: 62.5, currentWorkingWeight: 60, progressionFloor: true }
+    const { exercises } = clampRefinedPlannedExercises(
+      [baseline],
+      [{ exerciseId: 'bench-press', targetWeight: 45 }],
+      { isDeload: true, maxWeightJumpSteps: 2 },
+    )
+    expect(exercises[0].targetWeight).toBe(57.5) // 62.5 - 2*2.5
+  })
+
+  it('#414: progressionFloor не отменяет приостановленный инвариант (#170)', () => {
+    const baseline = { ...bench, targetWeight: 62.5, currentWorkingWeight: 60, progressionFloor: true, workingFloorSuspended: true }
+    const { exercises } = clampRefinedPlannedExercises(
+      [baseline],
+      [{ exerciseId: 'bench-press', targetWeight: 45 }],
+      { isDeload: false, maxWeightJumpSteps: 2 },
+    )
+    expect(exercises[0].targetWeight).toBe(57.5) // 62.5 - 2*2.5
+  })
+
   it('rounds the weight onto the exercise step grid', () => {
     const { exercises } = clampRefinedPlannedExercises(
       [bench],
