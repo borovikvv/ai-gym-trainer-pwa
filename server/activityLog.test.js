@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildCoachNextSetEvent, buildWorkoutSavedEvent, logActivity } from './activityLog.js'
+import { buildCoachNextSetEvent, buildWorkoutSavedEvent, logActivity, logLlmOutcome } from './activityLog.js'
 
 describe('activity log', () => {
   it('summarizes next-set coach decisions without dumping full request bodies', () => {
@@ -76,6 +76,31 @@ describe('activity log', () => {
       event: 'test.event',
       userId: 'oleg',
     })
+    spy.mockRestore()
+  })
+
+  it('Issue #426: logLlmOutcome writes a llm.outcome event with caller/outcome/reason', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    logLlmOutcome('coachNarrator', 'fallback', 'not_configured')
+
+    const body = JSON.parse(spy.mock.calls[0][0].replace('TRAINER_EVENT ', ''))
+    expect(body).toMatchObject({
+      event: 'llm.outcome',
+      caller: 'coachNarrator',
+      outcome: 'fallback',
+      reason: 'not_configured',
+    })
+    spy.mockRestore()
+  })
+
+  it('Issue #426: logLlmOutcome defaults reason to null', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    logLlmOutcome('coachBrain', 'ok')
+
+    const body = JSON.parse(spy.mock.calls[0][0].replace('TRAINER_EVENT ', ''))
+    expect(body.reason).toBeNull()
     spy.mockRestore()
   })
 })

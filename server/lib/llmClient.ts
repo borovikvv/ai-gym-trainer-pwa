@@ -12,6 +12,19 @@ import { logActivity } from '../activityLog.js'
 
 export type LlmTier = 'fast' | 'mid' | 'smart'
 
+/**
+ * Issue #426: closed set of transport-level reasons an LLM call produced no
+ * usable output. Callers map these into `llm.outcome` events so that silent
+ * degradation becomes visible in logs and in the weekly self-audit.
+ */
+export type LlmFailureReason =
+  | 'not_configured'
+  | 'timeout'
+  | 'http_error'
+  | 'invalid_json'
+  | 'truncated'
+  | 'empty'
+
 export interface LlmRequestOptions {
   tier: LlmTier
   system: string
@@ -62,6 +75,20 @@ export async function requestLlmText(options: LlmRequestOptions): Promise<string
   const { content } = await requestLlmContent(options, false)
   const trimmed = content?.trim() ?? ''
   return trimmed.length > 0 ? trimmed : null
+}
+
+/**
+ * Like `requestLlmText`, but also reports why a call produced no usable text
+ * (issue #426). Callers use `reason` for their `llm.outcome` event; the simple
+ * `requestLlmText` stays for callers that do not care.
+ */
+export async function requestLlmTextDetailed(
+  options: LlmRequestOptions,
+): Promise<{ content: string | null; reason: LlmFailureReason | null }> {
+  const { content, reason } = await requestLlmContent(options, false)
+  const trimmed = content?.trim() ?? ''
+  if (trimmed.length === 0) return { content: null, reason: reason ?? 'empty' }
+  return { content: trimmed, reason: null }
 }
 
 /**
@@ -185,28 +212,28 @@ export async function requestLlmJson<T = unknown>(options: LlmRequestOptions): P
  */
 export async function requestLlmJsonDetailed<T = unknown>(
   options: LlmRequestOptions,
-): Promise<{ data: T | null; truncated: boolean }> {
-  const { content, truncated } = await requestLlmContent(options, true)
-  if (!content) return { data: null, truncated }
+): Promise<{ data: T | null; truncated: boolean; reason: LlmFailureReason | null }> {
+  const { content, truncated, reason } = await requestLlmContent(options, true)
+  if (!content) return { data: null, truncated, reason }
   const extracted = extractJson(content)
   if (!extracted) {
     logActivity('llm.call', { caller: options.caller, tier: options.tier, ok: false, error: 'invalid_json' })
-    return { data: null, truncated }
+    return { data: null, truncated, reason: 'invalid_json' }
   }
   try {
-    return { data: JSON.parse(extracted) as T, truncated }
+    return { data: JSON.parse(extracted) as T, truncated, reason: truncated ? 'truncated' : null }
   } catch {
     logActivity('llm.call', { caller: options.caller, tier: options.tier, ok: false, error: 'invalid_json' })
-    return { data: null, truncated }
+    return { data: null, truncated, reason: 'invalid_json' }
   }
 }
 
 async function requestLlmContent(
   options: LlmRequestOptions,
   json: boolean,
-): Promise<{ content: string | null; truncated: boolean }> {
+): Promise<{ content: string | null; truncated: boolean; reason: LlmFailureReason | null }> {
   const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY
-  if (!apiKey) return { content: null, truncated: false }
+  if (!apiKey) return { content: null, truncated: false, reason: 'not_configured' }
   const baseUrl = (process.env.OPENAI_BASE_URL || process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = resolveLlmModel(options.tier)
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS[options.tier]
@@ -247,9 +274,10 @@ async function requestLlmContent(
       latencyMs: Date.now() - startedAt,
       ok: Boolean(content),
     })
-    return { content: content ?? null, truncated }
+    return { content: content ?? null, truncated, reason: content ? null : 'empty' }
   } catch (error) {
     clearTimeout(timeout)
+    const reason: LlmFailureReason = error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'http_error'
     logActivity('llm.call', {
       caller: options.caller,
       tier: options.tier,
@@ -259,6 +287,6 @@ async function requestLlmContent(
       error: error instanceof Error ? error.message : String(error),
     })
     console.warn(`${options.caller} LLM failed:`, error instanceof Error ? error.message : error)
-    return { content: null, truncated: false }
+    return { content: null, truncated: false, reason }
   }
 }

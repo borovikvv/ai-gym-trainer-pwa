@@ -10,7 +10,8 @@ import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkou
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import type { ProgressAnalysis } from '../coachProgressAnalysis.js'
-import { requestLlmJson } from '../lib/llmClient.js'
+import { requestLlmJsonDetailed } from '../lib/llmClient.js'
+import { logLlmOutcome } from '../activityLog.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
 
 interface CompletedEntry {
@@ -154,9 +155,11 @@ export async function planAndApplyNextWorkout(client: DbClient, completedEntry: 
         if (!safeReplacement || change.exerciseId) return change
         return { ...change, ...safeReplacement, coachFocus: `${safeReplacement.coachFocus} ${change.coachFocus ?? ''}`.slice(0, 500) }
       })
+      logLlmOutcome('coachPlanningService', 'ok', null)
       return applyPlanAndLog(client, completedEntry, safePlan, nextWorkoutDay, coachState)
     }
     // LLM plan was fully rejected by clamp → fall through to rules
+    logLlmOutcome('coachPlanningService', 'fallback', 'rejected_by_clamp')
   }
 
   // Fallback: no LLM (no API key, timeout, or all changes rejected)
@@ -218,7 +221,7 @@ async function applyPlanAndLog(
 async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary, analysisResult = null, longTermMemory = '' }: RequestLlmCoachPlanParams): Promise<LlmPlan | null> {
   const basePrompt = buildCoachPrompt({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["workoutDays"], completedWorkout, history, nextWorkoutDay, coachState, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof buildCoachPrompt>[0]>["exerciseLibrary"], analysisResult })
   const prompt = longTermMemory ? `${longTermMemory}\n\n${basePrompt}` : basePrompt
-  const parsed = await requestLlmJson<Partial<LlmPlan>>({
+  const { data: parsed, reason } = await requestLlmJsonDetailed<Partial<LlmPlan>>({
     tier: 'mid',
     caller: 'coachPlanningService',
     timeoutMs: LLM_TIMEOUT_MS,
@@ -226,7 +229,10 @@ async function requestLlmCoachPlan({ profile, workoutDays, completedWorkout, his
     system: `${COACH_PERSONA} Возвращай только валидный JSON.`,
     prompt,
   })
-  if (!parsed) return null
+  if (!parsed) {
+    logLlmOutcome('coachPlanningService', 'fallback', reason)
+    return null
+  }
   return { ...parsed, source: 'llm', nextWorkoutDayId: nextWorkoutDay?.id }
 }
 

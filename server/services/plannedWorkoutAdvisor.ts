@@ -14,7 +14,8 @@
 // скачок по политике). На любой ошибке LLM возвращаем baseline без изменений
 // (graceful degradation). Применение свапа (пере-предписание нового
 // упражнения) делает генератор — он владеет applyPrescription/периодизацией.
-import { isLlmConfigured, requestLlmJson } from '../lib/llmClient.js'
+import { isLlmConfigured, requestLlmJsonDetailed } from '../lib/llmClient.js'
+import { logLlmOutcome } from '../activityLog.js'
 import { roundWeight } from '../../shared/format.js'
 import { resolveWeightDirection, harderWeight, easierWeight, easierOf } from '../../shared/weightDirection.js'
 import { TEEN_MIN_REPS } from '../../shared/teenLimits.js'
@@ -262,9 +263,14 @@ export function clampRefinedPlannedExercises(
 export async function refinePlannedWorkoutPrescriptions(input: RefinePlannedWorkoutInput): Promise<RefinePlannedWorkoutResult> {
   const baseline = input.baseline ?? []
   const empty: RefinePlannedWorkoutResult = { exercises: baseline, swaps: new Map(), source: 'rules' }
-  if (baseline.length === 0 || !isLlmConfigured()) return empty
+  // Empty baseline — there is no decision to make, so no outcome is logged.
+  if (baseline.length === 0) return empty
+  if (!isLlmConfigured()) {
+    logLlmOutcome('plannedWorkoutAdvisor', 'fallback', 'not_configured')
+    return empty
+  }
 
-  const proposal = await requestLlmJson<{ exercises?: LlmPrescriptionProposal[] }>({
+  const { data: proposal, reason } = await requestLlmJsonDetailed<{ exercises?: LlmPrescriptionProposal[] }>({
     tier: 'mid',
     caller: 'plannedWorkoutAdvisor',
     timeoutMs: LLM_TIMEOUT_MS,
@@ -273,10 +279,17 @@ export async function refinePlannedWorkoutPrescriptions(input: RefinePlannedWork
     system: SYSTEM_PROMPT,
     prompt: buildPrompt(input),
   })
-  if (!proposal || !Array.isArray(proposal.exercises)) return empty
+  if (!proposal || !Array.isArray(proposal.exercises)) {
+    logLlmOutcome('plannedWorkoutAdvisor', 'fallback', reason)
+    return empty
+  }
 
   const swaps = resolvePlannedSwaps(baseline, proposal.exercises, input.allowedAlternatives)
   const { exercises, changed } = clampRefinedPlannedExercises(baseline, proposal.exercises, input.options, swaps)
+  // Числовой кламп здесь штатный (границы веса/повторов), а не отказ от решения
+  // LLM, поэтому degraded/rejected_by_clamp у этого вызывающего нет — только
+  // ok и fallback (issue #426).
+  logLlmOutcome('plannedWorkoutAdvisor', 'ok', null)
   return { exercises, swaps, source: swaps.size > 0 || changed ? 'llm' : 'rules' }
 }
 

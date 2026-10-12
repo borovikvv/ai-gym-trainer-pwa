@@ -4,7 +4,16 @@ import { buildLiveStrategyDecision, clampLiveStrategyDecision, requestLlmLiveStr
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
+
+function llmOutcomes(logSpy) {
+  return logSpy.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.startsWith('TRAINER_EVENT '))
+    .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+    .filter((body) => body.event === 'llm.outcome')
+}
 
 describe('coach brain', () => {
   it('falls back to rules when no LLM client is available', async () => {
@@ -56,6 +65,7 @@ describe('coach brain', () => {
   })
 
   it('builds an LLM live strategy and clamps it for Oleg', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const decision = await buildLiveStrategyDecision({
       userId: 'oleg',
       exercise: { id: 'bench', name: 'Жим лёжа', muscleGroup: 'Грудь' },
@@ -75,6 +85,32 @@ describe('coach brain', () => {
     expect(decision.constraints.allowFailure).toBe(false)
     expect(decision.constraints.maxRpe).toBe(8)
     expect(decision.constraints.maxAdditionalExercises).toBe(1)
+    // Issue #426: a clamp that overrode the LLM is a degraded outcome.
+    expect(llmOutcomes(logSpy)).toEqual([
+      expect.objectContaining({ caller: 'coachBrain', outcome: 'degraded', reason: 'rejected_by_clamp' }),
+    ])
+  })
+
+  it('Issue #426: logs ok/null when the LLM strategy passes the clamp', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await buildLiveStrategyDecision({
+      userId: 'oleg',
+      exercise: { id: 'bench', name: 'Жим лёжа', muscleGroup: 'Грудь' },
+      completedSets: [{ weight: 40, reps: 8, rpe: 9, completed: true }],
+      coachState: { readinessScore: 70, recoveryStatus: 'ready' },
+      session: {},
+      requestLlm: async () => ({
+        source: 'llm',
+        summary: 'Держим стратегию.',
+        actions: [{ type: 'hold_strategy', reason: 'Норма.' }],
+        constraints: { maxRpe: 8, allowFailure: false, maxAdditionalExercises: 1 },
+        warnings: [],
+      }),
+    })
+
+    expect(llmOutcomes(logSpy)).toEqual([
+      expect.objectContaining({ caller: 'coachBrain', outcome: 'ok', reason: null }),
+    ])
   })
 
   it('requests a JSON live strategy from an OpenAI-compatible LLM', async () => {

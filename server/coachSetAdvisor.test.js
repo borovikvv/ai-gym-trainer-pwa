@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { buildNextSetDecision } from './coachSetAdvisor.ts'
 import { clampNextSetDecision } from './userTrainingPolicies.ts'
+import { loadLiveCoachUserData } from './services/liveCoachContext.ts'
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -99,6 +100,89 @@ function llmResponse(payload) {
 }
 
 const fakeClient = { query: vi.fn() }
+
+function llmOutcomes(logSpy) {
+  return logSpy.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.startsWith('TRAINER_EVENT '))
+    .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+    .filter((body) => body.event === 'llm.outcome')
+}
+
+const BUILD_INPUT = {
+  client: fakeClient,
+  userId: 'vyacheslav',
+  exercise: EXERCISE,
+  completedSets: COMPLETED_SETS,
+  remainingSets: 2,
+  pain: false,
+  rulesDecision: RULES_DECISION,
+}
+
+describe('Issue #426: LLM outcome events', () => {
+  beforeEach(() => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('fallback/not_configured when the LLM is not configured', async () => {
+    vi.stubEnv('OPENAI_API_KEY', '')
+    vi.stubEnv('LLM_API_KEY', '')
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await buildNextSetDecision(BUILD_INPUT)
+
+    expect(llmOutcomes(logSpy)).toEqual([
+      expect.objectContaining({ caller: 'coachSetAdvisor', outcome: 'fallback', reason: 'not_configured' }),
+    ])
+  })
+
+  it('fallback/context_failed when the live context fails to load', async () => {
+    vi.mocked(loadLiveCoachUserData).mockRejectedValueOnce(new Error('boom'))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await buildNextSetDecision(BUILD_INPUT)
+
+    expect(llmOutcomes(logSpy)).toEqual([
+      expect.objectContaining({ caller: 'coachSetAdvisor', outcome: 'fallback', reason: 'context_failed' }),
+    ])
+  })
+
+  it('degraded/rejected_by_clamp when the clamp rejects the LLM proposal', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      nextSet: { weight: 60, reps: 8, restSeconds: 120, targetRpe: 7 },
+      strategyAction: { type: 'nonsense' },
+      reason: 'x',
+    })))
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await buildNextSetDecision(BUILD_INPUT)
+
+    expect(llmOutcomes(logSpy)).toEqual([
+      expect.objectContaining({ caller: 'coachSetAdvisor', outcome: 'degraded', reason: 'rejected_by_clamp' }),
+    ])
+  })
+
+  it('ok/null when the LLM proposal passes the clamp', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(llmResponse({
+      reason: 'Держим вес.',
+      detail: 'Запас есть.',
+    })))
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await buildNextSetDecision(BUILD_INPUT)
+
+    expect(llmOutcomes(logSpy)).toEqual([
+      expect.objectContaining({ caller: 'coachSetAdvisor', outcome: 'ok', reason: null }),
+    ])
+  })
+})
 
 describe('buildNextSetDecision', () => {
   beforeEach(() => {

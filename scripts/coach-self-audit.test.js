@@ -6,10 +6,15 @@ import {
   DEGENERATE_MIN_SAMPLE,
   isDegenerate,
   isUndersampled,
+  LLM_FALLBACK_SHARE_ALARM_THRESHOLD,
+  LLM_OUTCOME_MIN_SAMPLE,
+  llmOutcomeAlarms,
   loadSignalValues,
   normalizeE1rmTrendValue,
+  parseLlmOutcomeLine,
   readAvgRepDeviation,
   readClamped,
+  tallyLlmOutcomes,
   tallyWeightAdherence,
   totalObservations,
   unobservedBranches,
@@ -322,5 +327,95 @@ describe('tallyWeightAdherence (issue #413)', () => {
     const withNull = tallyWeightAdherence([record('u1', [{ easingReasons: [], sets: [{ deviation: null, repOutcome: null }] }])])
     expect(withNull.buckets.size).toBe(0)
     expect(withNull.repOutcomes.size).toBe(0)
+  })
+})
+
+describe('parseLlmOutcomeLine (issue #426)', () => {
+  it('разбирает валидную строку llm.outcome', () => {
+    const line = `TRAINER_EVENT ${JSON.stringify({
+      ts: '2026-10-12T09:00:00.000Z',
+      event: 'llm.outcome',
+      caller: 'coachNarrator',
+      outcome: 'fallback',
+      reason: 'not_configured',
+    })}`
+    expect(parseLlmOutcomeLine(line)).toEqual({
+      caller: 'coachNarrator',
+      outcome: 'fallback',
+      reason: 'not_configured',
+    })
+  })
+
+  it('отсутствующий reason читается как null', () => {
+    const line = `TRAINER_EVENT ${JSON.stringify({ event: 'llm.outcome', caller: 'x', outcome: 'ok' })}`
+    expect(parseLlmOutcomeLine(line)).toEqual({ caller: 'x', outcome: 'ok', reason: null })
+  })
+
+  it('мусорная строка → null, не бросает', () => {
+    expect(parseLlmOutcomeLine('TRAINER_EVENT {битый')).toBeNull()
+    expect(parseLlmOutcomeLine('обычная строка без маркера')).toBeNull()
+    expect(parseLlmOutcomeLine('')).toBeNull()
+    expect(parseLlmOutcomeLine(`TRAINER_EVENT ${JSON.stringify({ event: 'llm.call', caller: 'x' })}`)).toBeNull()
+    expect(parseLlmOutcomeLine(`TRAINER_EVENT ${JSON.stringify({ event: 'llm.outcome', caller: 'x', outcome: 'weird' })}`)).toBeNull()
+    expect(parseLlmOutcomeLine(`TRAINER_EVENT ${JSON.stringify({ event: 'llm.outcome', outcome: 'ok' })}`)).toBeNull()
+  })
+})
+
+describe('tallyLlmOutcomes (issue #426)', () => {
+  it('группирует по вызывающему: всего, исходы, причины', () => {
+    const tally = tallyLlmOutcomes([
+      { caller: 'a', outcome: 'ok', reason: null },
+      { caller: 'a', outcome: 'fallback', reason: 'timeout' },
+      { caller: 'a', outcome: 'fallback', reason: 'timeout' },
+      { caller: 'b', outcome: 'degraded', reason: 'truncated' },
+    ])
+
+    expect(tally.get('a').total).toBe(3)
+    expect(tally.get('a').outcomes.get('ok')).toBe(1)
+    expect(tally.get('a').outcomes.get('fallback')).toBe(2)
+    expect(tally.get('a').reasons.get('timeout')).toBe(2)
+    expect(tally.get('b').total).toBe(1)
+    expect(tally.get('b').reasons.get('truncated')).toBe(1)
+  })
+
+  it('пустой вход не падает', () => {
+    expect(tallyLlmOutcomes([]).size).toBe(0)
+  })
+})
+
+describe('llmOutcomeAlarms (issue #426)', () => {
+  function callerTally(total, outcomes, reasons = new Map()) {
+    return { total, outcomes: new Map(Object.entries(outcomes)), reasons: new Map(Object.entries(reasons)) }
+  }
+
+  it('мало данных — не судим', () => {
+    const alarms = llmOutcomeAlarms('a', callerTally(3, { ok: 3 }))
+    expect(alarms.some((line) => line.includes('мало данных'))).toBe(true)
+    expect(alarms.some((line) => line.includes('ok = 0'))).toBe(false)
+    expect(LLM_OUTCOME_MIN_SAMPLE).toBe(10)
+  })
+
+  it('ok равен нулю — тревога', () => {
+    const alarms = llmOutcomeAlarms('a', callerTally(LLM_OUTCOME_MIN_SAMPLE, { degraded: 10 }, { truncated: 10 }))
+    expect(alarms.some((line) => line.includes('ok = 0'))).toBe(true)
+  })
+
+  it('доля fallback выше порога — тревога', () => {
+    const alarms = llmOutcomeAlarms('a', callerTally(10, { ok: 4, fallback: 6 }, { timeout: 6 }))
+    expect(LLM_FALLBACK_SHARE_ALARM_THRESHOLD).toBe(0.5)
+    expect(alarms.some((line) => line.includes('ДОЛЯ FALLBACK'))).toBe(true)
+  })
+
+  it('здоровый случай — без алармов', () => {
+    expect(llmOutcomeAlarms('a', callerTally(10, { ok: 10 }))).toEqual([])
+  })
+
+  it('топ-3 причины по частоте', () => {
+    const alarms = llmOutcomeAlarms('x', callerTally(10, { degraded: 10 }, { a: 1, b: 5, c: 2, d: 4 }))
+    const topLine = alarms.find((line) => line.includes('топ причин'))
+    expect(topLine).toContain('b: 5')
+    expect(topLine).toContain('d: 4')
+    expect(topLine).toContain('c: 2')
+    expect(topLine).not.toContain('a: 1')
   })
 })

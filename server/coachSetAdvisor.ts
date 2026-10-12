@@ -10,7 +10,8 @@
 // experience degrades gracefully.
 import type { CoachSessionContext, ExerciseRef } from '../shared/types.js'
 import type { DbClient } from './dbClient.js'
-import { isLlmConfigured, requestLlmJson } from './lib/llmClient.js'
+import { isLlmConfigured, requestLlmJsonDetailed } from './lib/llmClient.js'
+import { logLlmOutcome } from './activityLog.js'
 import {
   clampNextSetDecision,
   getUserTrainingPolicy,
@@ -109,7 +110,10 @@ const SYSTEM_PROMPT = [
 
 export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Promise<BuildNextSetDecisionResult> {
   const rulesFallback: NextSetDecision = { ...input.rulesDecision, source: 'rules' }
-  if (!isLlmConfigured()) return { decision: rulesFallback, prompt: null, clamped: null }
+  if (!isLlmConfigured()) {
+    logLlmOutcome('coachSetAdvisor', 'fallback', 'not_configured')
+    return { decision: rulesFallback, prompt: null, clamped: null }
+  }
 
   let prompt: string
   try {
@@ -127,10 +131,11 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
     })
   } catch (error) {
     console.warn('liveCoachContext failed, using rules:', error instanceof Error ? error.message : error)
+    logLlmOutcome('coachSetAdvisor', 'fallback', 'context_failed')
     return { decision: rulesFallback, prompt: null, clamped: null }
   }
 
-  const proposal = await requestLlmJson<NextSetProposal>({
+  const { data: proposal, reason } = await requestLlmJsonDetailed<NextSetProposal>({
     tier: 'fast',
     caller: 'coachSetAdvisor',
     timeoutMs: LLM_TIMEOUT_MS,
@@ -139,12 +144,16 @@ export async function buildNextSetDecision(input: BuildNextSetDecisionInput): Pr
     system: SYSTEM_PROMPT,
     prompt,
   })
-  if (!proposal) return { decision: rulesFallback, prompt, clamped: null }
+  if (!proposal) {
+    logLlmOutcome('coachSetAdvisor', 'fallback', reason)
+    return { decision: rulesFallback, prompt, clamped: null }
+  }
 
   const clamped = clampNextSetDecision(proposal, {
     userId: input.userId,
     policy: input.policy ?? getUserTrainingPolicy(input.userId),
   })
+  logLlmOutcome('coachSetAdvisor', clamped.wasClamped ? 'degraded' : 'ok', clamped.wasClamped ? 'rejected_by_clamp' : null)
 
   return { decision: mapClampedToDecision(clamped, rulesFallback), prompt, clamped }
 }
