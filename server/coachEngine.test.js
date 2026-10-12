@@ -114,18 +114,36 @@ describe('Coach Engine v1 next-set recommendations', () => {
     })
   })
 
-  it('holds the weight (does not jump) when reps only just reach repMax (repMax+1)', () => {
+  // Issue #428: взрослый, подход ровно на потолке повторов (repMax) с обычным
+  // RPE 8 (мода зала) — рекомендация +1 шаг. До фикса правило требовало RPE ≤ 6
+  // и запас repMax+2, поэтому на этом входе не срабатывало.
+  it('raises the weight at the top of the range for an adult even with RPE 8 (repMax)', () => {
+    const result = recommendNextSet({
+      exercise: bench,
+      completedSets: [{ weight: 40, reps: 8, rpe: 8, completed: true }],
+      remainingSets: 2,
+    })
+
+    expect(result).toMatchObject({
+      action: 'continue',
+      recommendedWeight: 42.5, // +1 step
+      recommendedReps: 6,
+    })
+  })
+
+  // Issue #428: для взрослого порог прибавки теперь reps ≥ repMax (surplus=0) —
+  // старый порог repMax+2 и требование RPE ≤ 6 больше не действуют.
+  it('raises the weight when reps reach repMax for an adult (old repMax+2 threshold gone)', () => {
     const result = recommendNextSet({
       exercise: bench,
       completedSets: [{ weight: 40, reps: 9, rpe: 6, completed: true }],
       remainingSets: 2,
     })
 
-    // reps 9 = repMax+1 < repMax+2 threshold → old "hold at repMax" branch
     expect(result).toMatchObject({
       action: 'continue',
-      recommendedWeight: 40,
-      recommendedReps: 8,
+      recommendedWeight: 42.5,
+      recommendedReps: 6,
     })
   })
 

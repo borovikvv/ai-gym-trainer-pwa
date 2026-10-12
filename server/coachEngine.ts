@@ -257,18 +257,20 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
     }, input.remainingSets)
   }
 
-  // Issue #135: верх диапазона взят с явным запасом (reps ≥ repMax+2) и подход
-  // был лёгким (RPE ≤ 6) — пора добавить вес, а не повторять тот же. Величина
-  // скачка ограничена политикой пользователя (maxWeightJumpSteps): агрессивным
-  // (≥2) при большом запасе (reps ≥ repMax+4) разрешаем +2 шага, остальным +1.
-  // Это остаётся в пределах clampNextSetDecision (up-скачок разрешён при низком
-  // RPE), поэтому безопасно и для режима без отказа.
-  // Issue #171 (правило 4, «мельче шаг — чаще прибавки»): подростку порог
-  // запаса ниже, поэтому прибавка приходит раньше. Величина прибавки при этом
-  // остаётся одним шагом (maxWeightJumpSteps=1 в подростковой политике) — доля
-  // шага не берётся: на штанге минимальная реальная прибавка и есть weightStep.
-  const surplusForBump = teenLimited ? 1 : 2
-  if (lastReps >= repMax + surplusForBump && lastRpe <= 6 && step > 0) {
+  // Issue #428: у взрослого запас определяется только повторами — reps ≥ repMax
+  // (surplus=0). RPE в зале вырожден: кружки 6/7/8/10, мода 8 (#168), шестёрку
+  // почти не ставят, поэтому требование «легко» по RPE обесценивало правило
+  // (#135) — прибавка срабатывала 3 раза из 660. Для взрослого RPE теперь только
+  // вето, и оно уже отработало выше по функции (lastRpe ≥ 9 → hold/reduce).
+  // Величина скачка ограничена политикой (maxWeightJumpSteps): агрессивным (≥2)
+  // при большом запасе (reps ≥ repMax+4) разрешаем +2 шага, остальным +1; это
+  // остаётся в пределах clampNextSetDecision, безопасно и для режима без отказа.
+  // Issue #171 (правило 4, «мельче шаг — чаще прибавки»): подростку порог запаса
+  // ниже (surplus=1), поэтому прибавка приходит раньше, и условие RPE ≤ 6 для
+  // него сохраняется без изменений — решение владельца от 11.10.2026.
+  const surplusForBump = teenLimited ? 1 : 0
+  const rpeGateOk = teenLimited ? lastRpe <= 6 : true
+  if (lastReps >= repMax + surplusForBump && rpeGateOk && step > 0) {
     const maxSteps = Math.max(1, Math.floor(safeNumber(userTrainingPolicy?.maxWeightJumpSteps, 1)))
     const steps = lastReps >= repMax + 4 && maxSteps >= 2 ? 2 : 1
     return withRemainingSetUpdates({
@@ -276,10 +278,14 @@ export function recommendNextSet(input: RecommendNextSetInput): SetRecommendatio
       recommendedWeight: roundWeight(harderWeight(lastWeight, steps * step, direction)),
       recommendedReps: repMin,
       recommendedRestSeconds: baseRest,
-      reason: `верх диапазона взят с запасом (${lastReps} повторов, легко) — повышаем вес на ${steps * step} кг и возвращаемся к нижней границе повторов${teenLimited ? `: ${TEEN_LIMIT_REASONS.small_steps}` : ''}`,
+      reason: `верх диапазона взят с запасом (${lastReps} повторов) — повышаем вес на ${steps * step} кг и возвращаемся к нижней границе повторов${teenLimited ? `: ${TEEN_LIMIT_REASONS.small_steps}` : ''}`,
     }, input.remainingSets)
   }
 
+  // Issue #428: для взрослого со weightStep > 0 эта ветка теперь практически
+  // недостижима — прибавка выше перехватывает reps ≥ repMax раньше. Оставляем её
+  // живой: она нужна подростку (порог прибавки repMax+1, при reps === repMax ещё
+  // срабатывает) и профилю с weightStep === 0 (вес тела / нулевая помощь).
   if (lastReps >= repMax && lastRpe <= 6 && (input.remainingSets ?? 1) > 1) {
     return withRemainingSetUpdates({
       action: 'continue',
