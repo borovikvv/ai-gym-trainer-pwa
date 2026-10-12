@@ -519,6 +519,8 @@ function App() {
     setReadinessTouched,
     navigate,
     notify,
+    // Issue #414: возраст — для взрослого правила «+1 шаг при запасе».
+    profileAge: activeProfile?.age,
   })
   const reviewEntry = useMemo(() => createWorkoutHistoryEntry({
     userId: activeUserId,
@@ -528,7 +530,10 @@ function App() {
     logs,
     readinessCheckIn,
     history,
-  }), [activeUserId, activeWorkoutDay, activeExerciseIndex, logs, readinessCheckIn, history])
+    // Issue #414: тот же возраст, что и при сохранении, — иначе предпросмотр
+    // на экране обзора разошёлся бы с тем, что запишется.
+    profileAge: activeProfile?.age,
+  }), [activeUserId, activeWorkoutDay, activeExerciseIndex, logs, readinessCheckIn, history, activeProfile?.age])
   const reviewDebrief = reviewEntry.debrief
   // Issue #167: отклонение фактических повторов от ожидаемых на том же весе.
   // Считаем и показываем; на решения тренера пока не влияет.

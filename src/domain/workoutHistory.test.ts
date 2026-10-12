@@ -395,4 +395,42 @@ describe('workout history', () => {
       expect(entryA.id).not.toBe(entryB.id)
     })
   })
+
+  // Issue #414: profileAge должен доезжать из сохранения в расчёт прогрессии —
+  // взрослому профилю прибавка доступна уже при запасе в диапазоне, а без
+  // возраста поведение прежнее (вес держим).
+  describe('Issue 414: profileAge доезжает до прогрессии', () => {
+    const base = {
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      workoutDayName: 'День A',
+      exercises: [bench],
+      logs: {
+        'bench-press': {
+          exerciseId: 'bench-press',
+          pain: false,
+          sets: [
+            { weight: 60, reps: 9, rpe: 7, completed: true },
+            { weight: 60, reps: 9, rpe: 7, completed: true },
+            { weight: 60, reps: 9, rpe: 7, completed: true },
+          ],
+        },
+      },
+      completedAt: '2026-06-03T15:00:00.000Z',
+    }
+
+    it('взрослый профиль: вес растёт при запасе в диапазоне', () => {
+      const entry = createWorkoutHistoryEntry({ ...base, profileAge: 30 })
+
+      expect(entry.exercises[0].progressionType).toBe('increase')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(62.5)
+    })
+
+    it('без возраста вес держим — поведение прежнее', () => {
+      const entry = createWorkoutHistoryEntry(base)
+
+      expect(entry.exercises[0].progressionType).toBe('hold')
+      expect(entry.exercises[0].nextRecommendedWeight).toBe(60)
+    })
+  })
 })

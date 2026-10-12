@@ -521,6 +521,114 @@ describe('Issue #343: шаг непропорционален весу', () => {
   })
 })
 
+// Issue #414: взрослый профиль не обязан ждать потолка повторов на всех
+// подходах. Если прошла сессия в диапазоне с запасом (ни один подход не ниже
+// repMin + 1 и ни один не дотянулся до repMax) без высокого RPE — вес растёт
+// сразу. Для подросткового и неизвестного возраста поведение прежнее.
+// Запас считается по повторам, RPE — только вето (issue #168).
+describe('Issue #414: прибавка при запасе в диапазоне для взрослого профиля', () => {
+  const inRangeWithMargin = {
+    exerciseName: 'Жим лёжа',
+    currentWeight: 60,
+    repMin: 8,
+    repMax: 10,
+    weightStep: 2.5,
+    sets: [
+      { weight: 60, reps: 9, rpe: 7, completed: true },
+      { weight: 60, reps: 9, rpe: 7, completed: true },
+      { weight: 60, reps: 9, rpe: 7, completed: true },
+    ],
+    pain: false,
+  }
+
+  it('raises weight before hitting the rep ceiling when every set is in range with margin and RPE is controlled, for adult profiles only', () => {
+    const result = calculateProgression({ ...inRangeWithMargin, profileAge: 30 })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(62.5)
+    expect(result.reason).toContain('не ждём потолка')
+  })
+
+  it('подростковый профиль: правило не применяется — вес держим', () => {
+    const result = calculateProgression({ ...inRangeWithMargin, profileAge: 15 })
+
+    expect(result.type).toBe('hold')
+    expect(result.recommendedWeight).toBe(60)
+  })
+
+  it('возраст не передан: консервативный дефолт, поведение прежнее', () => {
+    const result = calculateProgression(inRangeWithMargin)
+
+    expect(result.type).toBe('hold')
+    expect(result.recommendedWeight).toBe(60)
+  })
+
+  it('подход без запаса (ровно repMin) правило не включает', () => {
+    const result = calculateProgression({
+      ...inRangeWithMargin,
+      profileAge: 30,
+      sets: [
+        { weight: 60, reps: 8, rpe: 7, completed: true },
+        { weight: 60, reps: 9, rpe: 7, completed: true },
+        { weight: 60, reps: 9, rpe: 7, completed: true },
+      ],
+    })
+
+    expect(result.type).toBe('hold')
+    expect(result.recommendedWeight).toBe(60)
+  })
+
+  it('высокий RPE — вето: подход с RPE 9 блокирует прибавку', () => {
+    const result = calculateProgression({
+      ...inRangeWithMargin,
+      profileAge: 30,
+      sets: [
+        { weight: 60, reps: 9, rpe: 9, completed: true },
+        { weight: 60, reps: 9, rpe: 7, completed: true },
+        { weight: 60, reps: 9, rpe: 7, completed: true },
+      ],
+    })
+
+    expect(result.type).not.toBe('increase')
+    expect(result.recommendedWeight).toBe(60)
+  })
+
+  it('пустой RPE не блокирует и не разрешает — запас считается по повторам', () => {
+    const result = calculateProgression({
+      ...inRangeWithMargin,
+      profileAge: 30,
+      sets: [
+        { weight: 60, reps: 9, rpe: null as unknown as number, completed: true },
+        { weight: 60, reps: 9, rpe: undefined as unknown as number, completed: true },
+        { weight: 60, reps: 9, rpe: 7, completed: true },
+      ],
+    })
+
+    expect(result.type).toBe('increase')
+    expect(result.recommendedWeight).toBe(62.5)
+  })
+
+  it('гравитрон (assisted) под правило не попадает — своя механика роста (issue #173)', () => {
+    const result = calculateProgression({
+      exerciseName: 'Подтягивания в гравитроне',
+      currentWeight: 30,
+      repMin: 6,
+      repMax: 10,
+      weightStep: 5,
+      profileAge: 30,
+      sets: [
+        { weight: 30, reps: 8, rpe: 7, completed: true },
+        { weight: 30, reps: 8, rpe: 7, completed: true },
+        { weight: 30, reps: 8, rpe: 7, completed: true },
+      ],
+      pain: false,
+    })
+
+    expect(result.type).toBe('hold')
+    expect(result.recommendedWeight).toBe(30)
+  })
+})
+
 // Issue #345: разминочные подходы помечены isWarmup и не должны влиять на
 // прогрессию — ни как недоработанный сет, ни как провал прошлой сессии.
 describe('Issue #345: разминочные подходы в прогрессию не идут', () => {

@@ -157,6 +157,9 @@ export function useActiveWorkoutContext({
           sets: log.sets,
           pain: log.pain,
           avgRepDeviation,
+          // Issue #414: возраст профиля — та же ветка прогрессии, что и при
+          // сохранении, иначе предпросмотр разошёлся бы с записью.
+          profileAge: activeProfile.age,
           // Issue #245: история тянет ветку deload — без счётчика снижение
           // веса между тренировками недостижимо.
           previousFailureCount: countPreviousFailures(userHistory, {
@@ -165,7 +168,7 @@ export function useActiveWorkoutContext({
           }),
         })
       }),
-    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets, userHistory, createExerciseLog],
+    [activeExerciseIndex, activeWorkoutDay, logs, nextTargets, userHistory, createExerciseLog, activeProfile.age],
   )
 
   const totalVolume = useMemo(

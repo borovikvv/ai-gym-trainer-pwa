@@ -34,6 +34,8 @@ type UseWorkoutSaveOptions = {
   setReadinessTouched: Dispatch<SetStateAction<boolean>>
   navigate: (screen: Screen, options?: { allowReviewExit?: boolean }) => void
   notify: (message: string) => void
+  // Issue #414: возраст профиля — для взрослого правила «+1 шаг при запасе».
+  profileAge?: number | null
 }
 
 export function useWorkoutSave({
@@ -53,6 +55,7 @@ export function useWorkoutSave({
   setReadinessTouched,
   navigate,
   notify,
+  profileAge,
 }: UseWorkoutSaveOptions) {
         const [isSavingWorkout, setIsSavingWorkout] = useState(false)
         const savingRef = useRef(false)
@@ -71,6 +74,8 @@ export function useWorkoutSave({
       // Issue #245/#247: история уходит в previousFailureCount и в отклонение
       // повторов; по userId её фильтрует сам createWorkoutHistoryEntry.
       history,
+      // Issue #414: возраст нужен для взрослого правила «+1 шаг при запасе».
+      profileAge,
     })
     const nextHistory = [baseEntry, ...history]
     setHistory(nextHistory)

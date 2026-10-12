@@ -1,5 +1,6 @@
 import { resolveWeightDirection, harderWeight, easierWeight, isWeightlessProgression, isDisproportionateStep, nextRepRange } from '../../shared/weightDirection'
 import { isTimedExerciseName } from '../../shared/muscleGroups'
+import { isAdultAge } from '../../shared/teenLimits'
 import { EFFORT_RISE_DEVIATION } from './repExpectation'
 // Issue #98 PR2: ProgressionType unified in shared/types.ts
 export type { ProgressionType } from '../../shared/types'
@@ -34,6 +35,10 @@ export type ProgressionInput = {
    * 'bodyweight'). Основной сигнал «безвесовой» прогрессии — у брусьев/отжиманий
    * вес 0, но шаг 2.5, и пара (0, шаг>0) раньше ошибочно включала весовую ветку. */
   equipment?: string | null
+  /** Issue #414: возраст профиля. Нужен, чтобы правило «+1 шаг при запасе в
+   * диапазоне» действовало только для известного взрослого возраста (профиль
+   * без noFailurePolicy). null/undefined — консервативный дефолт. */
+  profileAge?: number | null
 }
 
 export type ProgressionResult = {
@@ -155,6 +160,31 @@ export function calculateProgression(input: ProgressionInput): ProgressionResult
         : assisted
           ? `${input.exerciseName}: второй провал подряд ниже диапазона — увеличиваем помощь на ${input.weightStep} кг.`
           : `${input.exerciseName}: второй провал подряд ниже диапазона — снижаем вес на ${input.weightStep} кг.`,
+    }
+  }
+
+  // Issue #414: взрослому профилю не обязательно ждать потолка повторов на всех
+  // подходах. Если рабочие подходы прошли в диапазоне с запасом (каждый не ниже
+  // repMin + 1 и ни один не дотянулся до repMax) и без высокого RPE, следующий
+  // вес прибавляем сразу. Для подросткового и неизвестного возраста, а также
+  // для безвесовых (issue #192), непропорционального шага (issue #343) и
+  // гравитрона (issue #173) правило не применяется — там своя механика роста.
+  // Это НЕ заменяет ветку allAtTop: та проверяется раньше и возвращается раньше.
+  // RPE здесь — только вето (issue #168): подход с RPE >= 9 рост блокирует,
+  // пустой RPE не блокирует и не разрешает (запас определяется по повторам).
+  const marginProgressionEligible =
+    !weightless &&
+    !disproportionateStep &&
+    !assisted &&
+    isAdultAge(input.profileAge) &&
+    completedSets.every((set) => set.reps >= input.repMin + 1 && set.reps < input.repMax) &&
+    !completedSets.some((set) => set.rpe != null && set.rpe >= 9)
+
+  if (marginProgressionEligible) {
+    return {
+      recommendedWeight: harderWeight(input.currentWeight, input.weightStep, direction),
+      type: 'increase',
+      reason: `${input.exerciseName}: все рабочие подходы в диапазоне с запасом и RPE под контролем — не ждём потолка, следующий раз +${input.weightStep} кг.`,
     }
   }
 

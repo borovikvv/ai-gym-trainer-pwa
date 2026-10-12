@@ -32,6 +32,9 @@ export type CreateWorkoutHistoryEntryInput = {
   // (второй провал подряд ниже repMin → deload) и отклонение повторов.
   // Фильтруются по userId здесь, вызывающим этого делать не надо.
   history?: WorkoutHistoryEntry[]
+  // Issue #414: возраст профиля — для взрослого правило «+1 шаг при запасе в
+  // диапазоне» в calculateProgression. Неизвестный возраст — консервативный дефолт.
+  profileAge?: number | null
 }
 
 export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput): WorkoutHistoryEntry {
@@ -78,6 +81,7 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
       sets: log.sets,
       pain: log.pain,
       avgRepDeviation,
+      profileAge: input.profileAge,
       previousFailureCount: countPreviousFailures(userHistory, {
         canonicalExerciseId,
         repMin: exercise.repMin,

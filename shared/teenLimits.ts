@@ -31,6 +31,22 @@ export function isTeenAge(age: number | null | undefined): boolean {
   return Number.isFinite(value) && value > 0 && value < TEEN_MAX_AGE
 }
 
+/**
+ * Профиль известного взрослого возраста (`age >= TEEN_MAX_AGE`).
+ *
+ * Issue #414: чистая функция домена `calculateProgression` не знает серверную
+ * политику тренировок (`server/userTrainingPolicies.ts`), но условие «профиль
+ * без noFailurePolicy» эквивалентно «известный взрослый возраст»: `policyForAge`
+ * выводит `allowFailureSets: true` ровно при `age >= TEEN_MAX_AGE`. Поэтому
+ * возрастная граница берётся из единственного источника истины — этого модуля.
+ * Неизвестный возраст (null/undefined/0) даёт `false`: неопределённость
+ * разрешается вниз, как у `isTeenAge`.
+ */
+export function isAdultAge(age: number | null | undefined): boolean {
+  const value = Number(age)
+  return Number.isFinite(value) && value >= TEEN_MAX_AGE
+}
+
 /** Метаданные упражнения из справочника (`exercise_library`). */
 export interface ExerciseMovementSource {
   equipment?: string | null
