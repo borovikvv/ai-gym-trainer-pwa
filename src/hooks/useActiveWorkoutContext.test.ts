@@ -138,3 +138,69 @@ describe('useActiveWorkoutContext — предпросмотр прогресс�
     expect(result.current.progressionSummary[0].type).toBe('hold')
   })
 })
+
+// Issue #414: возраст профиля должен доезжать из useActiveWorkoutContext в
+// progressionSummary, иначе превью обзора разойдётся с сохранением.
+describe('useActiveWorkoutContext — возраст профиля в прогрессии (#414)', () => {
+  const marginLogs = {
+    [planned.id]: {
+      exerciseId: planned.id,
+      pain: false,
+      sets: [
+        { weight: 40, reps: 9, rpe: 7, completed: true },
+        { weight: 40, reps: 9, rpe: 7, completed: true },
+        { weight: 40, reps: 9, rpe: 7, completed: true },
+      ],
+    },
+  }
+
+  function programDataWithAge(age: number | null) {
+    return {
+      ...fallbackProgramData,
+      workoutDays: [workoutDay],
+      workoutDaysByUser: { [userId]: [workoutDay] },
+      profilesByUser: {
+        [userId]: { ...fallbackProgramData.profilesByUser[userId], age },
+      },
+    }
+  }
+
+  it('взрослый возраст: превью показывает increase при запасе в диапазоне', () => {
+    const { result } = renderContext({ logs: marginLogs, programData: programDataWithAge(30) })
+
+    expect(result.current.progressionSummary[0].type).toBe('increase')
+    expect(result.current.progressionSummary[0].recommendedWeight).toBe(42.5)
+    expect(result.current.progressionSummary[0].reason).toContain('не ждём потолка')
+  })
+
+  it('подростковый и неизвестный возраст: превью остаётся hold', () => {
+    expect(renderContext({ logs: marginLogs, programData: programDataWithAge(15) }).result.current.progressionSummary[0].type).toBe('hold')
+    expect(renderContext({ logs: marginLogs, programData: programDataWithAge(null) }).result.current.progressionSummary[0].type).toBe('hold')
+  })
+
+  it('смена возраста пересчитывает превью — возраст в зависимостях memo', () => {
+    const { result, rerender } = renderHook(
+      ({ age }: { age: number | null }) => useActiveWorkoutContext({
+        programData: programDataWithAge(age),
+        activeUserId: userId,
+        activeWorkoutDayId: workoutDay.id,
+        plannedWorkouts: [],
+        history: [],
+        extraWorkoutDays: [],
+        coachTodayWorkoutDay: null,
+        extraExercisesByDay: {},
+        activeSessionWorkoutDay: null,
+        draftSessionExercises: null,
+        activeExerciseIndex: 0,
+        logs: marginLogs,
+      }),
+      { initialProps: { age: null as number | null } },
+    )
+
+    expect(result.current.progressionSummary[0].type).toBe('hold')
+
+    rerender({ age: 30 })
+
+    expect(result.current.progressionSummary[0].type).toBe('increase')
+  })
+})

@@ -79,3 +79,64 @@ describe('useWorkoutSave — issue #255: readiness check-in reset between workou
     expect(setReadinessTouched).toHaveBeenCalledWith(false)
   })
 })
+
+// Issue #414: age profile must reach progression through the save path —
+// otherwise the entry would hold while the review preview increases.
+const marginWorkoutDay = {
+  id: 'day-margin',
+  name: 'День M',
+  exercises: [
+    {
+      id: 'bench',
+      name: 'Жим лёжа',
+      sets: 3,
+      reps: 9,
+      repMin: 8,
+      repMax: 10,
+      weight: 60,
+      targetWeight: 60,
+      weightStep: 2.5,
+      restSeconds: 120,
+    },
+  ],
+} as unknown as WorkoutDay
+
+const marginLogs = {
+  bench: {
+    exerciseId: 'bench',
+    pain: false,
+    sets: [
+      { weight: 60, reps: 9, rpe: 7, completed: true },
+      { weight: 60, reps: 9, rpe: 7, completed: true },
+      { weight: 60, reps: 9, rpe: 7, completed: true },
+    ],
+  },
+}
+
+describe('useWorkoutSave — issue #414: profileAge reaches progression', () => {
+  async function savedExercise(profileAge?: number) {
+    const setHistory = vi.fn()
+    const { result } = renderHook(() =>
+      useWorkoutSave(makeOptions({ activeWorkoutDay: marginWorkoutDay, logs: marginLogs, setHistory, profileAge })),
+    )
+
+    await act(async () => { await result.current.saveWorkoutAndExit() })
+
+    return setHistory.mock.calls[0][0][0].exercises[0]
+  }
+
+  it('adult profile: saves increase when sets are in range with margin', async () => {
+    const exercise = await savedExercise(30)
+
+    expect(exercise.progressionType).toBe('increase')
+    expect(exercise.nextRecommendedWeight).toBe(62.5)
+    expect(exercise.progressionReason).toContain('не ждём потолка')
+  })
+
+  it('without age the saved behavior is unchanged: hold', async () => {
+    const exercise = await savedExercise(undefined)
+
+    expect(exercise.progressionType).toBe('hold')
+    expect(exercise.nextRecommendedWeight).toBe(60)
+  })
+})
