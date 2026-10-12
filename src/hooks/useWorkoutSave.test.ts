@@ -37,6 +37,7 @@ function makeOptions(overrides: Partial<Parameters<typeof useWorkoutSave>[0]> = 
     setLogs: vi.fn(),
     setReadinessCheckIn: vi.fn(),
     setReadinessTouched: vi.fn(),
+    setDeviationAnswer: vi.fn(),
     navigate: vi.fn(),
     notify: vi.fn(),
     ...overrides,
@@ -77,5 +78,39 @@ describe('useWorkoutSave — issue #255: readiness check-in reset between workou
 
     expect(setReadinessCheckIn).toHaveBeenCalledWith(defaultReadinessCheckIn)
     expect(setReadinessTouched).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('useWorkoutSave — issue #419: сигнал ответа атлета', () => {
+  const signal = {
+    exerciseId: 'squat',
+    exerciseName: 'Присед',
+    assignedWeight: 77.5,
+    actualWeight: 80,
+    deviation: 2.5,
+    responseText: 'было легко',
+  }
+
+  it('передаёт postWorkoutSignal в сохраняемую запись', async () => {
+    const setHistory = vi.fn()
+    const { result } = renderHook(() =>
+      useWorkoutSave(makeOptions({ setHistory, postWorkoutSignal: signal })),
+    )
+
+    await act(async () => { await result.current.saveWorkoutAndExit() })
+
+    const [savedEntry] = setHistory.mock.calls[0][0]
+    expect(savedEntry.postWorkoutSignal).toEqual(signal)
+  })
+
+  it('сбрасывает ответ после сохранения', async () => {
+    const setDeviationAnswer = vi.fn()
+    const { result } = renderHook(() =>
+      useWorkoutSave(makeOptions({ setDeviationAnswer })),
+    )
+
+    await act(async () => { await result.current.saveWorkoutAndExit() })
+
+    expect(setDeviationAnswer).toHaveBeenCalledWith('')
   })
 })

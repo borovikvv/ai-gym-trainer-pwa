@@ -9,7 +9,7 @@ import { useBodyWeightLog } from '../hooks/useBodyWeightLog'
 import { BodyWeightCard } from '../components/BodyWeightCard'
 import { PreWorkoutPreview } from '../components/PreWorkoutPreview'
 import { GymScreen } from '../components/GymScreen'
-import { WorkoutReviewScreen } from '../components/WorkoutReviewScreen'
+import { WorkoutReviewScreen, type DeviationQuestion } from '../components/WorkoutReviewScreen'
 import { ExercisePickerSheet } from '../components/ExercisePickerSheet'
 import { ExerciseGuideModal } from '../components/ExerciseGuideModal'
 import { ReplacementSheet } from '../components/ReplacementSheet'
@@ -46,6 +46,8 @@ interface GymPageProps {
   reviewDebrief: import("../domain/workoutDebrief").WorkoutDebrief | null | undefined
   // Issue #167: отклонение фактических повторов от ожидаемых на том же весе
   reviewRepDeviation: import("../domain/repExpectation").SessionRepDeviation | null | undefined
+  // Issue #419: вопрос тренера на экране итогов (один повод за тренировку)
+  reviewDeviationQuestion: DeviationQuestion | null | undefined
   isSavingWorkout: boolean
   // Readiness
   workoutReadinessMode: ReadinessMode
@@ -202,6 +204,7 @@ export function GymPage(props: GymPageProps) {
           totalVolume={props.totalVolume}
           debrief={props.reviewDebrief}
           repDeviation={props.reviewRepDeviation}
+          deviationQuestion={props.reviewDeviationQuestion}
           isSaving={props.isSavingWorkout}
           onBackToWorkout={() => onNavigate('session')}
           onSaveAndExit={props.onSaveAndExit}

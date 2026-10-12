@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { WorkoutDay, Screen } from '../../shared/types'
+import type { WorkoutDay, Screen, PostWorkoutSignalInput } from '../../shared/types'
 import type { ReadinessCheckIn } from '../domain/readinessCheckIn'
 import { defaultReadinessCheckIn } from '../domain/readinessCheckIn'
 import {
@@ -23,6 +23,9 @@ type UseWorkoutSaveOptions = {
   activeExerciseIndex: number
   readinessCheckIn?: ReadinessCheckIn | null
   logs: Record<string, ExerciseLog>
+  // Issue #419: непустой ответ атлета на вопрос после тренировки либо null.
+  // Пустой/нетронутый ответ вызывающий передаёт как null (аналог #246).
+  postWorkoutSignal?: PostWorkoutSignalInput | null
   history: WorkoutHistoryEntry[]
   setHistory: Dispatch<SetStateAction<WorkoutHistoryEntry[]>>
   setPlannedWorkouts: Dispatch<SetStateAction<PlannedWorkout[]>>
@@ -32,6 +35,8 @@ type UseWorkoutSaveOptions = {
   setLogs: Dispatch<SetStateAction<Record<string, ExerciseLog>>>
   setReadinessCheckIn: Dispatch<SetStateAction<ReadinessCheckIn>>
   setReadinessTouched: Dispatch<SetStateAction<boolean>>
+  // Issue #419: сброс ответа на вопрос после успешного сохранения.
+  setDeviationAnswer: Dispatch<SetStateAction<string>>
   navigate: (screen: Screen, options?: { allowReviewExit?: boolean }) => void
   notify: (message: string) => void
 }
@@ -42,6 +47,7 @@ export function useWorkoutSave({
   activeExerciseIndex,
   readinessCheckIn,
   logs,
+  postWorkoutSignal,
   history,
   setHistory,
   setPlannedWorkouts,
@@ -51,6 +57,7 @@ export function useWorkoutSave({
   setLogs,
   setReadinessCheckIn,
   setReadinessTouched,
+  setDeviationAnswer,
   navigate,
   notify,
 }: UseWorkoutSaveOptions) {
@@ -68,6 +75,8 @@ export function useWorkoutSave({
       exercises: activeWorkoutDay.exercises.slice(0, Math.max(1, activeExerciseIndex + 1)),
       logs,
       readinessCheckIn,
+      // Issue #419: ответ атлета (либо null) — сигнал уходит в историю и на сервер.
+      postWorkoutSignal,
       // Issue #245/#247: история уходит в previousFailureCount и в отклонение
       // повторов; по userId её фильтрует сам createWorkoutHistoryEntry.
       history,
@@ -128,6 +137,9 @@ export function useWorkoutSave({
               setLogs(createInitialLogs(activeWorkoutDay, updatedTargets))
               setReadinessCheckIn(defaultReadinessCheckIn)
               setReadinessTouched(false)
+              // Issue #419: ответ на вопрос относился к завершённой тренировке —
+              // сбрасываем, чтобы он не прилип к следующей.
+              setDeviationAnswer('')
               navigate('home', { allowReviewExit: true })
             } finally {
               savingRef.current = false

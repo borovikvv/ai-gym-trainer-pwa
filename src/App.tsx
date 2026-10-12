@@ -26,6 +26,8 @@ import { useRestTimer, useWakeLock } from './hooks/useRestTimer'
 import { formatWeight } from './lib/format'
 import { createWorkoutHistoryEntry } from './domain/workoutHistory'
 import { computeSessionRepDeviation } from './domain/repExpectation'
+import { pickWeightDeviationQuestionTarget } from './domain/weightAdherence'
+import type { DeviationQuestion } from './components/WorkoutReviewScreen'
 import { suggestExerciseToAdd } from './domain/exerciseSuggestion'
 import {
   adaptWorkoutDayForReadiness,
@@ -125,6 +127,9 @@ function App() {
   // Issue #246: пользователь трогал чек-ин готовности. Дефолт в БД как
   // измерение не пишется — молчание читается как отсутствие данных.
   const [readinessTouched, setReadinessTouched] = useState(false)
+  // Issue #419: свободный ответ атлета на вопрос после тренировки. Пустая
+  // строка = не ответил; в БД уходит null, а не «всё нормально» (#246).
+  const [deviationAnswer, setDeviationAnswer] = useState('')
   const [exercisePickerOpen, setExercisePickerOpen] = useState(false)
   // Issue #69: lifted state for useExtraWorkoutToday (hook moved to CoachHomePage)
   const [coachTodayWorkoutDay, setCoachTodayWorkoutDay] = useState<WorkoutDay | null>(null)
@@ -498,6 +503,33 @@ function App() {
     }
   }, [notify, setHistory])
 
+  // Issue #419: единственный повод задать вопрос на экране итогов — отклонение
+  // фактического веса от плана. Не больше одного вопроса за тренировку.
+  const reviewDeviationTarget = useMemo(
+    () => pickWeightDeviationQuestionTarget(
+      activeWorkoutDay.exercises.map((exercise) => ({
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        targetWeight: exercise.targetWeight,
+        weightStep: exercise.weightStep,
+        sets: logs[exercise.id]?.sets ?? [],
+      })),
+    ),
+    [activeWorkoutDay, logs],
+  )
+  // Issue #246/#419: пустой/нетронутый ответ — это молчание, а не наблюдение.
+  // На сервер уходит null, LLM для пустого ответа не вызывается.
+  const postWorkoutSignalInput = reviewDeviationTarget && deviationAnswer.trim() !== ''
+    ? {
+        exerciseId: reviewDeviationTarget.exerciseId,
+        exerciseName: reviewDeviationTarget.exerciseName,
+        assignedWeight: reviewDeviationTarget.targetWeight,
+        actualWeight: reviewDeviationTarget.actualWeight,
+        deviation: reviewDeviationTarget.deviation,
+        responseText: deviationAnswer.trim(),
+      }
+    : null
+
           const { saveWorkoutAndExit, isSavingWorkout } = useWorkoutSave({
     activeUserId,
     activeWorkoutDay,
@@ -508,6 +540,7 @@ function App() {
     // там он нужен для локальной адаптации тренировки.
     readinessCheckIn: readinessTouched ? readinessCheckIn : null,
     logs,
+    postWorkoutSignal: postWorkoutSignalInput,
     history,
     setHistory,
     setPlannedWorkouts,
@@ -517,6 +550,7 @@ function App() {
     setLogs,
     setReadinessCheckIn,
     setReadinessTouched,
+    setDeviationAnswer,
     navigate,
     notify,
   })
@@ -536,6 +570,18 @@ function App() {
     () => computeSessionRepDeviation(reviewEntry, userHistory),
     [reviewEntry, userHistory],
   )
+  // Issue #419: вопрос на экране итогов. Два фиксированных варианта по знаку
+  // отклонения; ни один не упоминает отказ/предельный вес, поэтому отдельной
+  // подростковой формулировки не требуется.
+  const reviewDeviationQuestion: DeviationQuestion | null = reviewDeviationTarget
+    ? {
+        prompt: reviewDeviationTarget.heavier
+          ? `Ты взял ${formatWeight(reviewDeviationTarget.actualWeight)} кг вместо ${formatWeight(reviewDeviationTarget.targetWeight)} на «${reviewDeviationTarget.exerciseName}» — было легко или просто захотелось?`
+          : `Ты взял ${formatWeight(reviewDeviationTarget.actualWeight)} кг вместо ${formatWeight(reviewDeviationTarget.targetWeight)} на «${reviewDeviationTarget.exerciseName}» — что помешало: устал, болит, не было времени или другое?`,
+        answer: deviationAnswer,
+        onChange: setDeviationAnswer,
+      }
+    : null
 
 
   // Issue #368: без программы из базы (или её сохранённой копии) мок не показываем.
@@ -605,6 +651,7 @@ function App() {
             totalVolume={totalVolume}
             reviewDebrief={reviewDebrief}
             reviewRepDeviation={reviewRepDeviation}
+            reviewDeviationQuestion={reviewDeviationQuestion}
             isSavingWorkout={isSavingWorkout}
             workoutReadinessMode={workoutReadinessMode}
             readinessOptions={readinessOptions}

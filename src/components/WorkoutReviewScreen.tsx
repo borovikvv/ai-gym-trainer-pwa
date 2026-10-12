@@ -5,6 +5,14 @@ import type { ProgressionResult } from '../domain/progression'
 import type { WorkoutDebrief } from '../../shared/types'
 import type { SessionRepDeviation } from '../domain/repExpectation'
 
+// Issue #419: один вопрос тренера на экране итогов. prompt — фиксированная
+// формулировка под знак отклонения, answer — свободный ответ атлета.
+export type DeviationQuestion = {
+  prompt: string
+  answer: string
+  onChange: (value: string) => void
+}
+
 type WorkoutReviewScreenProps = {
   progressionSummary: ProgressionResult[]
   totalVolume: number
@@ -12,6 +20,8 @@ type WorkoutReviewScreenProps = {
   // Issue #167: отклонение фактических повторов от ожидаемых на том же весе.
   // Показываем как есть — на решения тренера пока не влияет.
   repDeviation?: SessionRepDeviation | null
+  // Issue #419: вопрос по отклонению веса от плана; null — нет повода.
+  deviationQuestion?: DeviationQuestion | null
   isSaving?: boolean
   onBackToWorkout: () => void
   onSaveAndExit: () => void
@@ -22,6 +32,7 @@ export function WorkoutReviewScreen({
   totalVolume,
   debrief,
   repDeviation = null,
+  deviationQuestion = null,
   isSaving = false,
   onBackToWorkout,
   onSaveAndExit,
@@ -77,6 +88,20 @@ export function WorkoutReviewScreen({
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Issue #419: вопрос тренера по отклонению веса от плана (один повод) */}
+      {deviationQuestion && (
+        <div className="review-section" data-testid="review-deviation-question">
+          <div className="card review-debrief-card">
+            <p>{deviationQuestion.prompt}</p>
+            <textarea
+              data-testid="review-deviation-question-input"
+              value={deviationQuestion.answer}
+              onChange={(event) => deviationQuestion.onChange(event.target.value)}
+            />
           </div>
         </div>
       )}

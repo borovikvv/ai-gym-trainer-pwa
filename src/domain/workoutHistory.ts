@@ -1,4 +1,4 @@
-import type { ExercisePlan, WorkoutHistoryEntry } from '../../shared/types'
+import type { ExercisePlan, PostWorkoutSignalInput, WorkoutHistoryEntry } from '../../shared/types'
 import type { ReadinessCheckIn } from './readinessCheckIn'
 import { calculateProgression, countPreviousFailures, type WorkoutSetInput } from './progression'
 import { computeSessionRepDeviation } from './repExpectation'
@@ -27,6 +27,9 @@ export type CreateWorkoutHistoryEntryInput = {
   exercises: ExercisePlan[]
   logs: Record<string, ExerciseLog>
   readinessCheckIn?: ReadinessCheckIn | null
+  // Issue #419: ответ атлета на вопрос после тренировки. Пустой ответ сюда
+  // не кладём — вызывающий передаёт null (см. App.tsx, аналог #246).
+  postWorkoutSignal?: PostWorkoutSignalInput | null
   completedAt?: string
   // Issue #245/#247: предыдущие сессии — из них считаются previousFailureCount
   // (второй провал подряд ниже repMin → deload) и отклонение повторов.
@@ -113,6 +116,9 @@ export function createWorkoutHistoryEntry(input: CreateWorkoutHistoryEntryInput)
     completedAt,
     totalVolume: exercises.reduce((sum, exercise) => sum + exercise.volume, 0),
     readinessCheckIn: input.readinessCheckIn ?? null,
+    // Issue #419: ответ атлета уезжает на сервер, где LLM разбирает его в
+    // типизированный сигнал. null — «не спрашивали» или «не ответил».
+    postWorkoutSignal: input.postWorkoutSignal ?? null,
     exercises,
   }
   return {

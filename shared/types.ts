@@ -107,6 +107,23 @@ export interface CompletedExerciseHistory {
   progressionReason: string
 }
 
+// Issue #419: сигнал от ответа атлета на вопрос тренера после тренировки.
+// Повод на старте один — отклонение фактического веса от плана. Сырой текст
+// ответа едет на сервер, где LLM разбирает его в типизированный сигнал; здесь
+// хранится только вход (триггер + текст), не результат разбора.
+export interface PostWorkoutSignalInput {
+  exerciseId: string
+  exerciseName: string
+  /** Назначенный планом вес (> 0). */
+  assignedWeight: number
+  /** Фактически выполненный вес. */
+  actualWeight: number
+  /** Факт минус назначение. */
+  deviation: number
+  /** Непустой (после trim) ответ атлета своими словами. */
+  responseText: string
+}
+
 export interface WorkoutHistoryEntry {
   id: string
   userId: string
@@ -115,6 +132,9 @@ export interface WorkoutHistoryEntry {
   completedAt: string
   totalVolume: number
   readinessCheckIn?: ReadinessCheckIn | null
+  // Issue #419: ответ атлета на вопрос после тренировки. null — не спрашивали
+  // или атлет не ответил; «не ответил» не превращается в «всё нормально».
+  postWorkoutSignal?: PostWorkoutSignalInput | null
   // Issue #98 PR3: debrief is computed on frontend post-workout and may
   // be attached to the history entry. Optional because not all loaders
   // populate it (e.g. loadRecentHistory on backend doesn't).

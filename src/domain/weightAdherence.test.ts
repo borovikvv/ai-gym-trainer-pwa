@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeSessionWeightDeviation } from './weightAdherence'
+import { computeSessionWeightDeviation, pickWeightDeviationQuestionTarget, type WeightDeviationQuestionInput } from './weightAdherence'
 
 function bench(sets: Array<{ weight: number; reps: number; completed?: boolean }>, assignedWeight?: number | null) {
   return { exerciseId: 'bench-press', exerciseName: 'Жим лёжа', assignedWeight, sets }
@@ -107,5 +107,56 @@ describe('computeSessionWeightDeviation — причины облегчения 
     const entry = { exercises: [bench([{ weight: 60, reps: 6, completed: true }], 60)] }
     const result = computeSessionWeightDeviation(entry)
     expect(result.exercises[0].easingReasons).toEqual([])
+  })
+})
+
+// Issue #419: выбор единственного повода для вопроса на экране итогов.
+describe('pickWeightDeviationQuestionTarget (#419)', () => {
+  function exercise(overrides: Partial<WeightDeviationQuestionInput> = {}): WeightDeviationQuestionInput {
+    return {
+      exerciseId: 'bench-press',
+      exerciseName: 'Жим лёжа',
+      targetWeight: 77.5,
+      weightStep: 2.5,
+      sets: [{ weight: 80, reps: 6, completed: true }],
+      ...overrides,
+    }
+  }
+
+  it('отклонение ровно на шаг веса → цель с этим отклонением', () => {
+    const target = pickWeightDeviationQuestionTarget([exercise()])
+
+    expect(target).not.toBeNull()
+    expect(target?.exerciseId).toBe('bench-press')
+    expect(target?.targetWeight).toBe(77.5)
+    expect(target?.actualWeight).toBe(80)
+    expect(target?.deviation).toBe(2.5)
+    expect(target?.heavier).toBe(true)
+  })
+
+  it('отклонение меньше шага веса → null (не спрашиваем из-за округления)', () => {
+    const target = pickWeightDeviationQuestionTarget([
+      exercise({ targetWeight: 77.5, weightStep: 2.5, sets: [{ weight: 78.5, reps: 6, completed: true }] }),
+    ])
+
+    expect(target).toBeNull()
+  })
+
+  it('несколько упражнений выше порога → берётся максимальное по модулю отклонение', () => {
+    const target = pickWeightDeviationQuestionTarget([
+      exercise({ exerciseId: 'squat', exerciseName: 'Присед', targetWeight: 80, sets: [{ weight: 85, reps: 6, completed: true }] }),
+      exercise({ exerciseId: 'bench-press', exerciseName: 'Жим лёжа', targetWeight: 60, sets: [{ weight: 70, reps: 6, completed: true }] }),
+    ])
+
+    expect(target?.exerciseId).toBe('bench-press')
+    expect(target?.deviation).toBe(10)
+  })
+
+  it('targetWeight <= 0 (вес тела/на время) пропускается, даже если факт большой', () => {
+    const target = pickWeightDeviationQuestionTarget([
+      exercise({ exerciseId: 'push-up', exerciseName: 'Отжимания', targetWeight: 0, weightStep: 0, sets: [{ weight: 50, reps: 15, completed: true }] }),
+    ])
+
+    expect(target).toBeNull()
   })
 })
