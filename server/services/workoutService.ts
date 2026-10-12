@@ -1,5 +1,5 @@
 // Issue #67 (#36 decomposition): all `any` replaced with concrete types.
-import type { WorkoutHistoryEntry, ReadinessCheckIn } from '../../shared/types.js'
+import type { WorkoutHistoryEntry, ReadinessCheckIn, PostWorkoutSignalInput } from '../../shared/types.js'
 import type { DbClient } from '../dbClient.js'
 import { groupBy, normalizeProgression, normalizeSet } from '../utils.js'
 import { planAndApplyNextWorkout } from './coachPlanningService.js'
@@ -24,6 +24,8 @@ import { computeSessionRepDeviation } from '../../src/domain/repExpectation.js'
 import { computeSessionWeightDeviation } from '../../src/domain/weightAdherence.js'
 // Issue #268: чистый отдых — начало текущего подхода минус конец предыдущего
 import { computeNetRestSeconds } from '../../src/domain/workoutHistory.js'
+// Issue #419: разбор ответа атлета на вопрос после тренировки в типизированный сигнал
+import { buildPostWorkoutSignal } from '../postWorkoutSignal.js'
 import type { TrainingRecordChange } from '../coachTrainingRecord.js'
 
 interface WorkoutSetInput {
@@ -68,6 +70,8 @@ interface WorkoutHistoryEntryInput {
   completedAt?: string
   totalVolume?: number
   readinessCheckIn?: ReadinessCheckIn | null
+  // Issue #419: ответ атлета на вопрос после тренировки (триггер + текст).
+  postWorkoutSignal?: PostWorkoutSignalInput | null
   qualityScore?: number | null
   // Issue #161: user rating 1–5 after workout, optional, null = not rated
   userRating?: number | null
@@ -158,9 +162,12 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
   const sanitizedEntry = sanitizeWorkoutHistoryEntry(entry) as SanitizedEntry
   // Issue #163: build pain_log from exercises with pain details
   const painLog = buildPainLog(entry.exercises ?? [])
+  // Issue #419: разбор ответа атлета в типизированный сигнал. null/пустой
+  // ответ → null, LLM не вызывается (см. buildPostWorkoutSignal).
+  const postWorkoutSignal = await buildPostWorkoutSignal(entry.postWorkoutSignal ?? null)
   await client.query(
-    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, user_rating, pain_log, source)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pwa-api')
+    `insert into public.workout_sessions (id, user_id, workout_day_id, workout_day_name, completed_at, total_volume, readiness_check_in, quality_score, user_rating, pain_log, post_workout_signal, source)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pwa-api')
      on conflict (id) do update set
        user_id = excluded.user_id,
        workout_day_id = excluded.workout_day_id,
@@ -170,8 +177,9 @@ export async function saveWorkoutHistoryEntry(client: DbClient, entry: WorkoutHi
        readiness_check_in = excluded.readiness_check_in,
        quality_score = excluded.quality_score,
        user_rating = excluded.user_rating,
-       pain_log = excluded.pain_log`,
-    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null, sanitizedEntry.userRating ?? null, painLog],
+       pain_log = excluded.pain_log,
+       post_workout_signal = excluded.post_workout_signal`,
+    [sanitizedEntry.id, sanitizedEntry.userId, sanitizedEntry.workoutDayId, sanitizedEntry.workoutDayName, sanitizedEntry.completedAt, sanitizedEntry.totalVolume, sanitizedEntry.readinessCheckIn ?? null, sanitizedEntry.qualityScore ?? null, sanitizedEntry.userRating ?? null, painLog, postWorkoutSignal],
   )
 
   await client.query('delete from public.workout_sets where session_id = $1', [sanitizedEntry.id])

@@ -143,3 +143,28 @@ describe('WorkoutReviewScreen — отклонение повторов (#167)',
     expect(screen.queryByTestId('review-rep-deviation')).not.toBeInTheDocument()
   })
 })
+
+// Issue #419: вопрос тренера на экране итогов.
+describe('WorkoutReviewScreen — вопрос по отклонению веса (#419)', () => {
+  it('при переданном вопросе рендерит поле свободного ответа и отдаёт ввод', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+
+    render(
+      <WorkoutReviewScreen
+        {...defaultProps}
+        deviationQuestion={{ prompt: 'Вопрос тренера', answer: '', onChange }}
+      />,
+    )
+
+    const input = screen.getByTestId('review-deviation-question-input')
+    await user.type(input, 'было легко')
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('без повода блок вопроса не рендерится', () => {
+    render(<WorkoutReviewScreen {...defaultProps} deviationQuestion={null} />)
+
+    expect(screen.queryByTestId('review-deviation-question')).not.toBeInTheDocument()
+  })
+})

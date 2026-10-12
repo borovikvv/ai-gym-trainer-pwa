@@ -117,6 +117,57 @@ export function computeSessionWeightDeviation(entry: SessionLike): SessionWeight
   return { exercises, ...summarize(exercises.flatMap((exercise) => exercise.sets)) }
 }
 
+// Issue #419: повод задать вопрос на экране итогов — отклонение фактического
+// веса от плана. Не переиспользует computeSessionWeightDeviation: тот модуль
+// сознательно держат независимым от смежных правок (см. workingSets()), здесь
+// своя локальная фильтрация рабочих подходов. Вопрос ровно один на тренировку,
+// поэтому функция возвращает не список, а единственную цель или null.
+export interface WeightDeviationQuestionInput {
+  exerciseId: string
+  exerciseName: string
+  /** Назначенный планом вес; <= 0 — числового назначения нет (вес тела/на время). */
+  targetWeight: number
+  /** Шаг веса плана; <= 0 трактуется как дефолтный 2.5 (защита от округления). */
+  weightStep: number
+  sets: SetLike[]
+}
+
+export interface WeightDeviationQuestionTarget {
+  exerciseId: string
+  exerciseName: string
+  targetWeight: number
+  actualWeight: number
+  /** Факт минус назначение. */
+  deviation: number
+  /** true — тяжелее плана, false — легче. */
+  heavier: boolean
+}
+
+export function pickWeightDeviationQuestionTarget(exercises: WeightDeviationQuestionInput[]): WeightDeviationQuestionTarget | null {
+  let best: WeightDeviationQuestionTarget | null = null
+  for (const exercise of exercises ?? []) {
+    const targetWeight = Number(exercise?.targetWeight)
+    if (!(targetWeight > 0)) continue
+    const sets = workingSets(exercise)
+    const lastSet = sets[sets.length - 1]
+    if (!lastSet) continue
+    const actualWeight = Number(lastSet.weight)
+    const deviation = round1(actualWeight - targetWeight)
+    const step = Number(exercise?.weightStep) > 0 ? Number(exercise.weightStep) : 2.5
+    if (Math.abs(deviation) < step) continue
+    const candidate: WeightDeviationQuestionTarget = {
+      exerciseId: exercise.exerciseId,
+      exerciseName: exercise.exerciseName,
+      targetWeight,
+      actualWeight,
+      deviation,
+      heavier: deviation > 0,
+    }
+    if (!best || Math.abs(candidate.deviation) > Math.abs(best.deviation)) best = candidate
+  }
+  return best
+}
+
 function summarize(sets: SetWeightDeviation[]): { avgDeviation: number | null; setsWithAssignment: number; setsWithoutAssignment: number } {
   const measured = sets.filter((set) => set.deviation !== null)
   return {
