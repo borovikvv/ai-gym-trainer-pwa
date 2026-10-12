@@ -6,7 +6,8 @@
  */
 
 import type { CoachState } from '../shared/types.js'
-import { requestLlmText } from './lib/llmClient.js'
+import { requestLlmTextDetailed } from './lib/llmClient.js'
+import { logLlmOutcome } from './activityLog.js'
 
 interface NarrationInput {
   scheduledDate: string
@@ -54,7 +55,7 @@ const LLM_TIMEOUT_MS = 3000
  * Falls back to template if no API key, LLM fails, or timeout.
  */
 export async function generateCoachNarration(input: NarrationInput): Promise<string> {
-  const content = await requestLlmText({
+  const { content, reason } = await requestLlmTextDetailed({
     tier: 'fast',
     caller: 'coachNarrator',
     timeoutMs: LLM_TIMEOUT_MS,
@@ -64,7 +65,11 @@ export async function generateCoachNarration(input: NarrationInput): Promise<str
       'Ты персональный силовой тренер. Объясни пользователю коротко (2-3 предложения) почему именно эта тренировка. Пиши на русском, дружелюбно, без технических терминов (readiness, MEV, MRV). Без emoji. Максимум 3 предложения.',
     prompt: buildLlmPrompt(input),
   })
-  if (!content || content.length < 10) return buildTemplateNarration(input)
+  if (!content || content.length < 10) {
+    logLlmOutcome('coachNarrator', 'fallback', reason ?? 'empty')
+    return buildTemplateNarration(input)
+  }
+  logLlmOutcome('coachNarrator', 'ok', null)
   return content
 }
 

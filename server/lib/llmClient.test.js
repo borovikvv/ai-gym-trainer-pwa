@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { requestLlmJson, requestLlmJsonDetailed, requestLlmText, resolveLlmModel, isLlmConfigured } from './llmClient.ts'
+import { requestLlmJson, requestLlmJsonDetailed, requestLlmText, requestLlmTextDetailed, resolveLlmModel, isLlmConfigured } from './llmClient.ts'
 
 function okResponse(content, usage = { prompt_tokens: 100, completion_tokens: 20 }) {
   return {
@@ -119,22 +119,62 @@ describe('llmClient', () => {
   })
 
   describe('requestLlmJsonDetailed', () => {
-    it('reports truncated=true when finish_reason is length', async () => {
+    it('reports truncated=true and reason=truncated when finish_reason is length', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(responseWithFinish('{"a":1}', 'length')))
       const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
-      expect(result).toEqual({ data: { a: 1 }, truncated: true })
+      expect(result).toEqual({ data: { a: 1 }, truncated: true, reason: 'truncated' })
     })
 
-    it('reports truncated=false when finish_reason is stop', async () => {
+    it('reports truncated=false and reason=null when finish_reason is stop', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(responseWithFinish('{"a":1}', 'stop')))
       const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
-      expect(result).toEqual({ data: { a: 1 }, truncated: false })
+      expect(result).toEqual({ data: { a: 1 }, truncated: false, reason: null })
     })
 
-    it('reports truncated=false when finish_reason is absent', async () => {
+    it('reports truncated=false and reason=null when finish_reason is absent', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('{"a":1}')))
       const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
-      expect(result).toEqual({ data: { a: 1 }, truncated: false })
+      expect(result).toEqual({ data: { a: 1 }, truncated: false, reason: null })
+    })
+
+    // Issue #426: closed set of failure reasons surfaced to callers.
+    it('reason=not_configured without an API key and does not fetch', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '')
+      vi.stubEnv('LLM_API_KEY', '')
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: null, truncated: false, reason: 'not_configured' })
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('reason=empty when the model returns no content', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('')))
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: null, truncated: false, reason: 'empty' })
+    })
+
+    it('reason=invalid_json when the content is not parseable JSON', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('not json at all')))
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: null, truncated: false, reason: 'invalid_json' })
+    })
+
+    it('reason=http_error on a non-ok response', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: null, truncated: false, reason: 'http_error' })
+    })
+
+    it('reason=timeout when the request aborts', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const abortError = new Error('The operation was aborted')
+      abortError.name = 'AbortError'
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abortError))
+      const result = await requestLlmJsonDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ data: null, truncated: false, reason: 'timeout' })
     })
 
     it('logs truncated and maxTokens in the llm.call activity event', async () => {
@@ -165,6 +205,46 @@ describe('llmClient', () => {
     it('returns null on empty content', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('   ')))
       expect(await requestLlmText({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })).toBeNull()
+    })
+  })
+
+  describe('requestLlmTextDetailed', () => {
+    it('returns trimmed text and reason=null on success', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('  Привет, тренер!  ')))
+      const result = await requestLlmTextDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ content: 'Привет, тренер!', reason: null })
+    })
+
+    it('reason=empty when the model returns blank content', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('   ')))
+      const result = await requestLlmTextDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ content: null, reason: 'empty' })
+    })
+
+    it('reason=not_configured without an API key', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '')
+      vi.stubEnv('LLM_API_KEY', '')
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await requestLlmTextDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ content: null, reason: 'not_configured' })
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('reason=http_error on a non-ok response', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+      const result = await requestLlmTextDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ content: null, reason: 'http_error' })
+    })
+
+    it('reason=timeout when the request aborts', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const abortError = new Error('The operation was aborted')
+      abortError.name = 'AbortError'
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abortError))
+      const result = await requestLlmTextDetailed({ tier: 'fast', system: 's', prompt: 'p', caller: 'test' })
+      expect(result).toEqual({ content: null, reason: 'timeout' })
     })
   })
 })

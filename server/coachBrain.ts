@@ -1,7 +1,8 @@
 // Issue #65 (#36 decomposition): all `any` replaced with concrete types.
 import type { CoachState, ExerciseRef } from '../shared/types.js'
 import { getUserTrainingPolicy, type UserTrainingPolicy } from './userTrainingPolicies.js'
-import { requestLlmJson } from './lib/llmClient.js'
+import { requestLlmJsonDetailed } from './lib/llmClient.js'
+import { logLlmOutcome } from './activityLog.js'
 
 const ALLOWED_LIVE_ACTIONS = new Set([
   'hold_strategy',
@@ -111,7 +112,12 @@ export async function buildLiveStrategyDecision({
       session,
       rulesDecision,
     })
-    return clampLiveStrategyDecision(llmDecision ?? rulesDecision, { userId, age })
+    // A null decision means the transport already logged its fallback outcome
+    // inside requestLlmLiveStrategy — do not log the same call twice.
+    if (!llmDecision) return clampLiveStrategyDecision(rulesDecision, { userId, age })
+    const decision = clampLiveStrategyDecision(llmDecision, { userId, age })
+    logLlmOutcome('coachBrain', decision.clamped ? 'degraded' : 'ok', decision.clamped ? 'rejected_by_clamp' : null)
+    return decision
   } catch {
     return rulesDecision
   }
@@ -132,7 +138,7 @@ export async function requestLlmLiveStrategy({
   session: SessionContext
   rulesDecision: LiveStrategyDecision
 }): Promise<LiveStrategyDecision | null> {
-  const parsed = await requestLlmJson<RawLlmDecision>({
+  const { data: parsed, reason } = await requestLlmJsonDetailed<RawLlmDecision>({
     tier: 'fast',
     caller: 'coachBrain.liveStrategy',
     timeoutMs: 5000,
@@ -140,7 +146,10 @@ export async function requestLlmLiveStrategy({
     system: 'Ты персональный силовой тренер. Верни только валидный JSON. Безопасность, техника и восстановление важнее добивания объёма.',
     prompt: buildLiveStrategyPrompt({ userId, exercise, completedSets, coachState, session, rulesDecision }),
   })
-  if (!parsed) return null
+  if (!parsed) {
+    logLlmOutcome('coachBrain', 'fallback', reason)
+    return null
+  }
   return { ...parsed, source: 'llm', decisionType: 'live_strategy' } as LiveStrategyDecision
 }
 

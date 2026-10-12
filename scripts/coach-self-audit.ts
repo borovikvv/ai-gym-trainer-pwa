@@ -16,9 +16,10 @@
 // Результат — текстовый отчёт в OUT_DIR, по образцу check-training-records.sh.
 
 import { Pool } from 'pg'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { DbClient } from '../server/dbClient.js'
+import type { LlmOutcome, LlmOutcomeReason } from '../server/activityLog.js'
 import { buildAllMuscleVolumeSnapshots } from '../server/buildVolumeSnapshot.js'
 import { loadRecentHistory, loadUserProfile } from '../server/services/programService.js'
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../src/domain/estimatedOneRepMax.js'
@@ -81,6 +82,21 @@ export const DEGENERATE_MIN_SAMPLE = 10
  * что решений мало, — и отчёт превращается в шум.
  */
 export const BRANCH_MIN_SAMPLE = 10
+
+/**
+ * Issue #426: столько исходов LLM-вызовов должно набраться у вызывающего,
+ * чтобы судить о тревоге. На меньшем числе «ok = 0» и доля fallback ещё ничего
+ * не значат.
+ */
+export const LLM_OUTCOME_MIN_SAMPLE = 10
+
+/**
+ * Issue #426: доля fallback, начиная с которой самоаудит бьёт тревогу. 50 % —
+ * осознанный дефолт: истории исходов до #426 не существует, калибровать по
+ * прод-данным невозможно. Отдельным issue после первого прогона, если порог
+ * окажется шумным или слишком тихим.
+ */
+export const LLM_FALLBACK_SHARE_ALARM_THRESHOLD = 0.5
 
 // --- Чистая арифметика (проверяется в coach-self-audit.test.js) -------------
 
@@ -194,6 +210,84 @@ export function totalObservations(counts: Map<string, number>): number {
 
 function fmtShare(value: number): string {
   return `${Math.round(value * 100)} %`
+}
+
+// --- Исходы LLM-вызовов (issue #426) ----------------------------------------
+
+export interface LlmOutcomeEvent {
+  caller: string
+  outcome: LlmOutcome
+  reason: LlmOutcomeReason | null
+}
+
+export interface LlmOutcomeCallerTally {
+  total: number
+  outcomes: Map<string, number>
+  reasons: Map<string, number>
+}
+
+export type LlmOutcomeTally = Map<string, LlmOutcomeCallerTally>
+
+/**
+ * Разобрать одну строку журнала (`TRAINER_EVENT {…}`) в событие исхода
+ * LLM-вызова. Возвращает null на любой мусор — постороннее событие, битый
+ * JSON, неизвестный исход — и никогда не бросает исключение.
+ */
+export function parseLlmOutcomeLine(line: string): LlmOutcomeEvent | null {
+  if (typeof line !== 'string') return null
+  const marker = 'TRAINER_EVENT '
+  const start = line.indexOf(marker)
+  if (start === -1) return null
+  let body: { event?: unknown; caller?: unknown; outcome?: unknown; reason?: unknown }
+  try {
+    body = JSON.parse(line.slice(start + marker.length).trim()) as typeof body
+  } catch {
+    return null
+  }
+  if (body?.event !== 'llm.outcome') return null
+  const caller = typeof body.caller === 'string' ? body.caller : ''
+  if (!caller) return null
+  const outcome = body.outcome
+  if (outcome !== 'ok' && outcome !== 'degraded' && outcome !== 'fallback') return null
+  const reason = body.reason === null || body.reason === undefined ? null : (String(body.reason) as LlmOutcomeReason)
+  return { caller, outcome, reason }
+}
+
+/** Сгруппировать исходы по вызывающему: всего, разбивка по исходам и причинам. */
+export function tallyLlmOutcomes(events: LlmOutcomeEvent[]): LlmOutcomeTally {
+  const tally: LlmOutcomeTally = new Map()
+  for (const event of events) {
+    const bucket = tally.get(event.caller) ?? { total: 0, outcomes: new Map<string, number>(), reasons: new Map<string, number>() }
+    bucket.total += 1
+    bump(bucket.outcomes, event.outcome)
+    if (event.reason) bump(bucket.reasons, event.reason)
+    tally.set(event.caller, bucket)
+  }
+  return tally
+}
+
+/**
+ * Тревоги по одному вызывающему: мало данных — не судим; ноль `ok` за окно;
+ * доля `fallback` не ниже порога; плюс топ-3 причины по частоте.
+ */
+export function llmOutcomeAlarms(caller: string, tally: LlmOutcomeCallerTally): string[] {
+  if (tally.total < LLM_OUTCOME_MIN_SAMPLE) {
+    return [`  ${caller}: мало данных (${tally.total} < ${LLM_OUTCOME_MIN_SAMPLE}), об исходах не судим`]
+  }
+  const alarms: string[] = []
+  const okCount = tally.outcomes.get('ok') ?? 0
+  if (okCount === 0) {
+    alarms.push(`  ВЕТКА НЕ НАБЛЮДАЛАСЬ: ${caller} ok = 0 за окно (всего вызовов ${tally.total})`)
+  }
+  const fallbackShare = (tally.outcomes.get('fallback') ?? 0) / tally.total
+  if (fallbackShare >= LLM_FALLBACK_SHARE_ALARM_THRESHOLD) {
+    alarms.push(`  !!! ДОЛЯ FALLBACK: ${caller} ${fmtShare(fallbackShare)} ≥ ${fmtShare(LLM_FALLBACK_SHARE_ALARM_THRESHOLD)}`)
+  }
+  const top = [...tally.reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+  if (top.length > 0) {
+    alarms.push(`  топ причин ${caller}: ${top.map(([reason, n]) => `${reason}: ${n}`).join(', ')}`)
+  }
+  return alarms
 }
 
 // --- Загрузка (только чтение) -----------------------------------------------
@@ -604,6 +698,34 @@ async function main(): Promise<void> {
     } else {
       const personalShare = repsLostStats.mode === 'personal' ? repsLostStats.modeShare : 1 - repsLostStats.modeShare
       lines.push(`  личная модель доступна: personal ${fmtShare(personalShare)}`)
+    }
+    lines.push('')
+
+    // Issue #426: исходы LLM-вызовов. Источник — выгрузка журнала
+    // (TRAINER_EVENT, событие llm.outcome) в файл, как journalctl для
+    // check-llm-health.sh: сам скрипт журнал не читает. Без SELF_AUDIT_LOG_FILE
+    // раздел пропускается — это ожидаемо, выгрузка лога остаётся ручным шагом,
+    // как и туннель к БД. Без этого раздела самоаудит исходы LLM не покажет.
+    lines.push('## Исходы LLM-вызовов (журнал)')
+    const auditLogFile = process.env.SELF_AUDIT_LOG_FILE
+    if (!auditLogFile) {
+      lines.push('  источник не настроен (SELF_AUDIT_LOG_FILE), пропускаем')
+    } else if (!existsSync(auditLogFile)) {
+      lines.push(`  файл журнала не найден: ${auditLogFile}, пропускаем`)
+    } else {
+      const events = readFileSync(auditLogFile, 'utf8')
+        .split('\n')
+        .map(parseLlmOutcomeLine)
+        .filter((event): event is LlmOutcomeEvent => event !== null)
+      const outcomeTally = tallyLlmOutcomes(events)
+      if (outcomeTally.size === 0) {
+        lines.push('  событий llm.outcome не найдено')
+      } else {
+        for (const [caller, bucket] of outcomeTally) {
+          lines.push(`  ${caller}: всего ${bucket.total}, исходы ${fmtCounts(bucket.outcomes)}; причины ${fmtCounts(bucket.reasons)}`)
+          lines.push(...llmOutcomeAlarms(caller, bucket))
+        }
+      }
     }
     lines.push('')
 

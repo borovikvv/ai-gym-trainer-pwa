@@ -15,6 +15,14 @@ const {
 } = await import('./services/programService.js')
 const { planAndApplyNextWorkout } = await import('./services/coachPlanningService.js')
 
+function llmOutcomes(logSpy) {
+  return logSpy.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.startsWith('TRAINER_EVENT '))
+    .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+    .filter((body) => body.event === 'llm.outcome')
+}
+
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
@@ -159,6 +167,7 @@ describe('coach planning service', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
 
     const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
     const planPromise = planAndApplyNextWorkout(client, {
@@ -192,9 +201,77 @@ describe('coach planning service', () => {
       expect.stringContaining('coachPlanningService LLM failed'),
       expect.any(String),
     )
+    // Issue #426: the outcome event explains the fallback for the self-audit.
+    expect(llmOutcomes(logSpy)).toContainEqual(
+      expect.objectContaining({ caller: 'coachPlanningService', outcome: 'fallback', reason: 'timeout' }),
+    )
 
     vi.useRealTimers()
     warn.mockRestore()
+  })
+
+  it('Issue #426: logs fallback/rejected_by_clamp when the clamp rejects the whole LLM plan', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
+
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({
+              summary: 'OK',
+              plateaus: [], improvements: [], warnings: [], suggestions: [],
+              exerciseFlags: [],
+              globalFlags: { overtraining: false, recommendedDeload: false },
+            }) } }],
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({
+            summary: 'LLM: изменить упражнение вне следующей тренировки',
+            source: 'llm',
+            changes: [{
+              programExerciseId: 'pe-nonexistent',
+              targetWeight: 45,
+              setsCount: 3,
+              repMin: 8,
+              repMax: 10,
+              restSeconds: 120,
+              coachFocus: 'LLM',
+            }],
+            warnings: [],
+          }) } }],
+        }),
+      })
+    }))
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    const client = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) }
+    const result = await planAndApplyNextWorkout(client, {
+      id: 'session-rejected',
+      userId: 'vyacheslav',
+      workoutDayId: 'day-a',
+      completedAt: '2026-06-08T12:00:00.000Z',
+      exercises: [
+        {
+          exerciseId: 'bench-press',
+          exerciseName: 'Жим лёжа',
+          nextRecommendedWeight: 50,
+          sets: [{ weight: 50, reps: 6, rpe: 8, completed: true }],
+        },
+      ],
+    })
+
+    expect(result.source).toBe('rules')
+    expect(llmOutcomes(logSpy)).toContainEqual(
+      expect.objectContaining({ caller: 'coachPlanningService', outcome: 'fallback', reason: 'rejected_by_clamp' }),
+    )
   })
 
   it('Issue #107: LLM plan is used when valid (not replaced by rules)', async () => {

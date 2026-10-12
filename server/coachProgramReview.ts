@@ -12,7 +12,8 @@
  */
 
 import type { WorkoutHistoryEntry, CoachState, CoachMemory } from '../shared/types.js'
-import { requestLlmJson } from './lib/llmClient.js'
+import { requestLlmJsonDetailed } from './lib/llmClient.js'
+import { logLlmOutcome } from './activityLog.js'
 
 interface WorkoutDayInput {
   name?: string
@@ -64,7 +65,7 @@ export interface ProgramReview {
  * Review the training program and suggest changes.
  */
 export async function reviewProgram(input: ProgramReviewInput): Promise<ProgramReview> {
-  const parsed = await requestLlmJson<ProgramReview>({
+  const { data: parsed, truncated, reason } = await requestLlmJsonDetailed<ProgramReview>({
     tier: 'smart',
     caller: 'coachProgramReview',
     temperature: 0.3,
@@ -73,12 +74,17 @@ export async function reviewProgram(input: ProgramReviewInput): Promise<ProgramR
       'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Если у атлета есть цели и по ним видно отставание от графика — предлагай изменения, приближающие к цели (приоритет целевого упражнения, объём на нужную группу), и отрази путь к цели в nextWeekFocus. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"priority":"high|medium|low"}],"nextWeekFocus":""}. Пиши на русском. Максимум 3 изменения.',
     prompt: buildLlmPrompt(input),
   })
-  if (!parsed) return ruleBasedReview(input)
+  if (!parsed) {
+    logLlmOutcome('coachProgramReview', 'fallback', reason)
+    return ruleBasedReview(input)
+  }
   parsed.date = input.now.toISOString()
   // Clamp changes to 3
   if (parsed.changes && parsed.changes.length > 3) {
     parsed.changes = parsed.changes.slice(0, 3)
   }
+  if (truncated) logLlmOutcome('coachProgramReview', 'degraded', 'truncated')
+  else logLlmOutcome('coachProgramReview', 'ok', null)
   return parsed
 }
 

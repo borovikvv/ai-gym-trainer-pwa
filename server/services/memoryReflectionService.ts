@@ -8,7 +8,8 @@
 // затрагивает сохранение тренировки.
 import type { DbClient } from '../dbClient.js'
 import type { WorkoutHistoryEntry } from '../../shared/types.js'
-import { isLlmConfigured, requestLlmJson } from '../lib/llmClient.js'
+import { isLlmConfigured, requestLlmJsonDetailed } from '../lib/llmClient.js'
+import { logLlmOutcome } from '../activityLog.js'
 import {
   applyMemoryUpdates,
   loadGoals,
@@ -52,16 +53,20 @@ const SYSTEM_PROMPT = [
 ].join('\n')
 
 export async function runMemoryReflection({ client, entry, debrief = null }: RunMemoryReflectionInput): Promise<void> {
-  if (!isLlmConfigured()) return
   const userId = String(entry.userId ?? '')
+  // No user — no call and no decision, so no outcome is logged.
   if (!userId) return
+  if (!isLlmConfigured()) {
+    logLlmOutcome('memoryReflectionService', 'fallback', 'not_configured')
+    return
+  }
 
   const [facts, goals] = await Promise.all([
     loadMemoryFacts(client, userId, 'active'),
     loadGoals(client, userId, 'active'),
   ])
 
-  const response = await requestLlmJson<ReflectionResponse>({
+  const { data: response, reason } = await requestLlmJsonDetailed<ReflectionResponse>({
     tier: 'mid',
     caller: 'memoryReflection',
     timeoutMs: 8000,
@@ -70,7 +75,11 @@ export async function runMemoryReflection({ client, entry, debrief = null }: Run
     system: SYSTEM_PROMPT,
     prompt: buildReflectionPrompt({ entry, debrief, facts, goals }),
   })
-  if (!response) return
+  if (!response) {
+    logLlmOutcome('memoryReflectionService', 'fallback', reason)
+    return
+  }
+  logLlmOutcome('memoryReflectionService', 'ok', null)
 
   const operations = (response.factOperations ?? []).filter((op) => op?.op === 'add' || op?.op === 'update')
   if (operations.length) {

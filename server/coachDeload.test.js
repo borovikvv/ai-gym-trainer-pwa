@@ -6,7 +6,16 @@ import { generateCoachNarration } from './coachNarrator.js'
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
+
+function llmOutcomes(logSpy) {
+  return logSpy.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.startsWith('TRAINER_EVENT '))
+    .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+    .filter((body) => body.event === 'llm.outcome')
+}
 
 const deloadCoachState = {
   userId: 'vyacheslav',
@@ -157,6 +166,7 @@ describe('coachProgramReview — issue #90 deload-aware add_deload suggestion', 
   it('does NOT suggest add_deload when already in deload phase', async () => {
     vi.stubEnv('OPENAI_API_KEY', '')
     vi.stubEnv('LLM_API_KEY', '')
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const result = await reviewProgram({
       userId: 'vyacheslav',
@@ -170,6 +180,41 @@ describe('coachProgramReview — issue #90 deload-aware add_deload suggestion', 
 
     const addDeloadChanges = result.changes.filter((c) => c.type === 'add_deload')
     expect(addDeloadChanges).toEqual([])
+    // Issue #426: LLM disabled is a visible fallback, not a silent one.
+    expect(llmOutcomes(logSpy)).toContainEqual(
+      expect.objectContaining({ caller: 'coachProgramReview', outcome: 'fallback', reason: 'not_configured' }),
+    )
+  })
+
+  it('Issue #426: logs degraded/truncated when the review was cut off', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: { content: JSON.stringify({ summary: 'обрезано', rating: 'good', changes: [], nextWeekFocus: 'дальше' }) },
+          finish_reason: 'length',
+        }],
+      }),
+    }))
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const result = await reviewProgram({
+      userId: 'vyacheslav',
+      history: recentHistoryWithHighRpe,
+      programDays,
+      coachState: loadingCoachState,
+      coachMemory: null,
+      profile,
+      now,
+    })
+
+    expect(result.rating).toBe('good')
+    expect(llmOutcomes(logSpy)).toContainEqual(
+      expect.objectContaining({ caller: 'coachProgramReview', outcome: 'degraded', reason: 'truncated' }),
+    )
   })
 
   it('DOES suggest add_deload during loading phase with high RPE', async () => {
@@ -263,5 +308,34 @@ describe('coachNarrator — issue #90 deload context in LLM prompt', () => {
     const body = JSON.parse(fetchCall[1].body)
     const userPrompt = body.messages.find((m) => m.role === 'user').content
     expect(userPrompt).not.toContain('разгрузочная неделя (deload) — объём')
+  })
+
+  it('Issue #426: logs fallback/not_configured when the narrator LLM is off', async () => {
+    vi.stubEnv('OPENAI_API_KEY', '')
+    vi.stubEnv('LLM_API_KEY', '')
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await generateCoachNarration({
+      scheduledDate: '2026-07-03',
+      coachState: loadingCoachState,
+      coachMemory: null,
+      decision: { summary: 'normal', reasons: [], priorityMuscleGroups: [], avoidMuscleGroups: [], loadPolicy: 'normal' },
+      lowReadiness: false,
+      weeklyContext: {
+        daysSincePreviousWorkout: 3,
+        calendarWorkoutCountLast7: 2,
+        previousExerciseIds: new Set(),
+        recoveryRestrictedMuscleKeys: new Set(),
+      },
+      selectedExercises: [
+        { exerciseName: 'Присед', muscleGroup: 'Ноги', targetWeight: 80, setsCount: 3, repMin: 6, repMax: 8 },
+      ],
+      profile: { goal: 'сила', level: 'intermediate', age: 43, workoutsPerWeek: 3 },
+      preferences: {},
+    })
+
+    expect(llmOutcomes(logSpy)).toContainEqual(
+      expect.objectContaining({ caller: 'coachNarrator', outcome: 'fallback', reason: 'not_configured' }),
+    )
   })
 })

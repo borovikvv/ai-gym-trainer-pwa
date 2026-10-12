@@ -1,5 +1,6 @@
 // Issue #66 (#36 decomposition): all `any` replaced with concrete types.
 import type { CoachState } from '../shared/types.js'
+import type { LlmFailureReason } from './lib/llmClient.js'
 
 interface SetInput {
   weight?: number
@@ -155,6 +156,26 @@ export function logActivity(event: string, payload: object = {}): void {
     ...payload,
   }
   console.log(`${PREFIX} ${JSON.stringify(body)}`)
+}
+
+/** Issue #426: overall outcome of one LLM call from the caller's point of view. */
+export type LlmOutcome = 'ok' | 'degraded' | 'fallback'
+
+/**
+ * Closed set of outcome reasons: transport failures (`LlmFailureReason`) plus
+ * caller-side rejects that never reach the transport — a clamp that rejected
+ * the LLM decision, or a failed live-context build.
+ */
+export type LlmOutcomeReason = LlmFailureReason | 'rejected_by_clamp' | 'context_failed'
+
+/**
+ * Issue #426: one outcome event per LLM call. `ok` — the answer was used in
+ * full; `degraded` — used partially (truncated, some fields dropped);
+ * `fallback` — rules or a template were used instead. This makes silent
+ * degradation visible without changing the fallback behaviour itself.
+ */
+export function logLlmOutcome(caller: string, outcome: LlmOutcome, reason: LlmOutcomeReason | null = null): void {
+  logActivity('llm.outcome', { caller, outcome, reason })
 }
 
 export function buildCoachNextSetEvent({

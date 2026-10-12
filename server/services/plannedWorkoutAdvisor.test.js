@@ -1,5 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clampRefinedPlannedExercises, refinePlannedWorkoutPrescriptions, resolvePlannedSwaps } from './plannedWorkoutAdvisor.js'
+
+function llmOutcomes(logSpy) {
+  return logSpy.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.startsWith('TRAINER_EVENT '))
+    .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+    .filter((body) => body.event === 'llm.outcome')
+}
 
 const bench = {
   exerciseId: 'bench-press',
@@ -228,6 +236,7 @@ describe('refinePlannedWorkoutPrescriptions', () => {
   })
 
   it('falls back to the deterministic baseline when the LLM is not configured', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const result = await refinePlannedWorkoutPrescriptions({
       scheduledDate: '2026-07-23',
       baseline: [bench],
@@ -236,6 +245,11 @@ describe('refinePlannedWorkoutPrescriptions', () => {
     })
     expect(result.source).toBe('rules')
     expect(result.exercises).toEqual([bench])
+    // Issue #426: the silent rules fallback is now a visible outcome.
+    expect(llmOutcomes(logSpy)).toEqual([
+      expect.objectContaining({ caller: 'plannedWorkoutAdvisor', outcome: 'fallback', reason: 'not_configured' }),
+    ])
+    logSpy.mockRestore()
   })
 
   it('returns an empty rules result for an empty baseline', async () => {
