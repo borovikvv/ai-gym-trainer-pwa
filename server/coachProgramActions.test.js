@@ -486,11 +486,14 @@ describe('revertProgramChangeAction — swap_exercise (#442)', () => {
     }
   }
 
-  function swapRevertClient(initial) {
+  function swapRevertClient(initial, currentExerciseId = initial.after?.exerciseId) {
     return {
-      query: vi.fn(async (text) => {
+      query: vi.fn(async (text, params) => {
+        if (text.includes('select exercise_id from public.program_exercises')) {
+          return { rows: [{ exercise_id: currentExerciseId }], rowCount: 1 }
+        }
         if (text.includes('update public.program_change_actions')) {
-          return { rows: [{ ...initial, status: 'reverted', reverted_at: '2026-07-09T13:00:00.000Z' }], rowCount: 1 }
+          return { rows: [{ ...initial, status: params[2], reverted_at: params[1], safety_note: params[3] ?? initial.safety_note }], rowCount: 1 }
         }
         if (text.includes('from public.program_change_actions')) {
           return { rows: [initial], rowCount: 1 }
@@ -513,6 +516,26 @@ describe('revertProgramChangeAction — swap_exercise (#442)', () => {
       repMax: 10,
       targetWeight: 60,
     }))
+  })
+
+  // Issue #450: планировщик (applyPlanAndLog) после тренировки сменил упражнение
+  // в этом слоте (B → C). Отмена не должна перезаписывать более свежее решение
+  // снимком A: помечаем stale и слот не трогаем.
+  it('слот переписан планировщиком — stale, снимок не восстанавливаем', async () => {
+    const client = swapRevertClient(swapActionRow(), 'bench-machine')
+    const result = await revertProgramChangeAction(client, { actionId: 'action-swap', userId: 'oleg' })
+
+    expect(result.status).toBe('stale')
+    expect(result.safetyNote).toBeTruthy()
+    expect(updateProgramExercise).not.toHaveBeenCalled()
+  })
+
+  it('повторная отмена stale идемпотентна — мутация не повторяется', async () => {
+    const client = swapRevertClient({ ...swapActionRow(), status: 'stale' })
+    const result = await revertProgramChangeAction(client, { actionId: 'action-swap', userId: 'oleg' })
+
+    expect(result.status).toBe('stale')
+    expect(updateProgramExercise).not.toHaveBeenCalled()
   })
 })
 

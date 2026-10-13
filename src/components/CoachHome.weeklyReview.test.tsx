@@ -194,4 +194,45 @@ describe('CoachHome — применённые изменения недельн
     expect(status).toHaveTextContent('Жим штанги лёжа')
     expect(status).toHaveTextContent('Жим гантелей лёжа')
   })
+
+  // Issue #450: планировщик уже сменил упражнение в слоте — сервер помечает
+  // отмену stale, снимок не восстанавливается, кнопка отмены исчезает.
+  it('устаревшая отмена: статус stale, кнопки отмены нет', async () => {
+    const userEv = userEvent.setup()
+    const swapReview = {
+      ...review,
+      changes: [{
+        type: 'swap_exercise',
+        description: 'Заменить упражнение',
+        rationale: 'застой',
+        exerciseName: 'Жим штанги лёжа',
+        priority: 'high',
+        appliedAction: {
+          id: 'action-4',
+          status: 'applied',
+          before: { exerciseId: 'bench-barbell', exerciseName: 'Жим штанги лёжа', setsCount: 3 },
+          after: { exerciseId: 'bench-dumbbell', exerciseName: 'Жим гантелей лёжа', setsCount: 3 },
+          safetyNote: 'замена в безопасном списке',
+        },
+      }],
+    }
+    vi.mocked(apiFetch).mockImplementation((url, init) => {
+      if (String(url).includes('/program-review/')) return jsonResponse({ ok: true, review: swapReview })
+      if (String(url).endsWith('/program-change/action-4/revert') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          action: { ...swapReview.changes[0].appliedAction, status: 'stale', safetyNote: 'не отменено: тренер уже обновил упражнение в этом слоте' },
+        })
+      }
+      return jsonResponse(null, false)
+    })
+
+    render(<CoachHome {...props} />)
+
+    await userEv.click(await screen.findByTestId('weekly-review-change'))
+    await userEv.click(screen.getByRole('button', { name: 'Отменить изменение плана' }))
+
+    await waitFor(() => expect(screen.getByTestId('review-sheet-action-status')).toHaveAttribute('data-status', 'stale'))
+    expect(screen.queryByRole('button', { name: 'Отменить изменение плана' })).not.toBeInTheDocument()
+  })
 })

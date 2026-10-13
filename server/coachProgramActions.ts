@@ -777,6 +777,8 @@ export async function refreshAppliedActionStatuses(
  * Отменяет применённое действие: возвращает упражнению прежнее число подходов
  * и помечает запись reverted. Идемпотентно — повторный вызов уже отменённого
  * действия ничего не делает. null — запись не найдена.
+ * Issue #450: если слот swap_exercise уже переписан (упражнение не совпадает с
+ * after-снимком), помечаем stale и не восстанавливаем — отменять нечего.
  */
 export async function revertProgramChangeAction(
   client: DbClient,
@@ -796,24 +798,48 @@ export async function revertProgramChangeAction(
     error.statusCode = 403
     throw error
   }
-  if (action.status === 'reverted') return action
+  // Issue #450: stale — такой же терминальный статус, повторный вызов не лезет в БД.
+  if (action.status === 'reverted' || action.status === 'stale') return action
 
   const reverted = await withTransaction(client, async () => {
     // Статус и мутация тоже в одной транзакции: если восстановление упадёт,
     // запись останется applied и повторный revert снова сработает.
     //
-    // Issue #442: простая безусловная отмена. CAS-проверка «слот всё ещё занят
-    // упражнением агента» вынесена в отдельный PR (потолок диффа этой задачи).
-    // Принятый риск: если планировщик после тренировки уже заменил упражнение
-    // в этом слоте, отмена перезапишет его более свежее решение.
+    // Issue #450: swap_exercise отменяем только если слот всё ещё занят тем
+    // упражнением, которое оставил агент. Планировщик (applyPlanAndLog) после
+    // каждой тренировки перезаписывает предписание и может сменить упражнение:
+    // тогда отмена к before перезаписала бы более свежее решение (A → B → C,
+    // отмена вернула бы A). Сверяем только exercise_id: предписание планировщик
+    // легитимно переписывает, это не конфликт. SELECT FOR UPDATE держит слот до
+    // commit — проверка и запись атомарны. Для adjust_volume/change_focus риск
+    // того же рода остаётся принятым осознанно (#450): объект конфликта — число
+    // подходов, а не идентификатор, и семантика «кто важнее» иная.
+    let conflict = false
+    if (action.changeType === 'swap_exercise') {
+      const current = await client.query(
+        `select exercise_id from public.program_exercises where id = $1 for update`,
+        [action.programExerciseId],
+      )
+      const after = action.after as SwapExerciseSnapshot | null
+      const currentExerciseId = current.rows[0]?.exercise_id
+      const expectedExerciseId = after?.exerciseId
+      conflict = expectedExerciseId != null
+        && currentExerciseId != null
+        && String(currentExerciseId) !== expectedExerciseId
+    }
     const updated = await client.query(
       `update public.program_change_actions
-       set status = 'reverted', reverted_at = $2
+       set status = $3, reverted_at = $2, safety_note = coalesce($4, safety_note)
        where id = $1
        returning ${ACTION_COLUMNS}`,
-      [actionId, now.toISOString()],
+      [
+        actionId,
+        now.toISOString(),
+        conflict ? 'stale' : 'reverted',
+        conflict ? 'не отменено: тренер уже обновил упражнение в этом слоте' : null,
+      ],
     )
-    await restoreSnapshot(client, action)
+    if (!conflict) await restoreSnapshot(client, action)
     return mapActionRow(updated.rows[0], userId, null)
   })
   // Issue #444: после снятия назначения пересобираем неделю, иначе разгрузочные
