@@ -4,10 +4,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // program_change_actions; мутацию упражнения отдаём моку.
 vi.mock('./services/programService.js', () => ({
   updateProgramExercise: vi.fn(),
+  loadUserProfile: vi.fn(async () => ({ workoutsPerWeek: 3 })),
+}))
+// Issue #445: move_workout пересобирает тренировку — генерацию мокаем.
+vi.mock('./services/plannedWorkoutService.js', () => ({
+  regeneratePlannedWorkout: vi.fn(),
+  cascadeRegenerateFutureWorkouts: vi.fn(),
+}))
+vi.mock('./services/athleteAvailability.js', () => ({
+  markDateUnavailable: vi.fn(),
+  loadUnavailableDates: vi.fn(async () => []),
 }))
 
-const { applyAdjustVolumeChange, applyAdjustVolumeChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { applyAdjustVolumeChange, applyAdjustVolumeChanges, applyMoveWorkoutChange, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
 const { updateProgramExercise } = await import('./services/programService.js')
+const { regeneratePlannedWorkout, cascadeRegenerateFutureWorkouts } = await import('./services/plannedWorkoutService.js')
+const { loadUnavailableDates } = await import('./services/athleteAvailability.js')
 
 const NOW = new Date('2026-07-09T12:00:00Z')
 const RECENT = '2026-07-08T18:00:00Z'
@@ -430,5 +442,150 @@ describe('refreshAppliedActionStatuses (#420)', () => {
     const client = { query: vi.fn() }
     await refreshAppliedActionStatuses(client, 'oleg', [adjustChange(5)])
     expect(client.query).not.toHaveBeenCalled()
+  })
+})
+
+// Issue #445: перенос тренировки под отметку «день недоступен».
+describe('applyMoveWorkoutChange (#445)', () => {
+  function actionRow(params) {
+    return {
+      id: 'action-move-1',
+      user_id: params[0],
+      program_exercise_id: params[1],
+      change_type: params[2],
+      status: params[3],
+      before: params[4],
+      after: params[5],
+      rationale: params[6],
+      safety_note: params[7],
+      applied_at: params[8],
+      reverted_at: null,
+      created_at: NOW.toISOString(),
+    }
+  }
+
+  function moveClient({ status = 'generated', scheduledDate = '2026-07-09', userId = 'oleg', siblings = [] } = {}) {
+    return {
+      query: vi.fn(async (text, params) => {
+        if (text === 'begin' || text === 'commit' || text === 'rollback') return { rows: [], rowCount: null }
+        if (text.includes('from public.planned_workouts where id = $1')) {
+          return {
+            rows: [{
+              id: params[0],
+              user_id: userId,
+              scheduled_date: new Date(`${scheduledDate}T00:00:00.000Z`),
+              status,
+              workout_day_name: 'День A',
+            }],
+            rowCount: 1,
+          }
+        }
+        if (text.includes('select scheduled_date from public.planned_workouts')) {
+          return { rows: siblings.map((date) => ({ scheduled_date: new Date(`${date}T00:00:00.000Z`) })), rowCount: siblings.length }
+        }
+        if (text.includes('insert into public.program_change_actions')) {
+          return { rows: [actionRow(params)], rowCount: 1 }
+        }
+        if (text.includes('update public.planned_workouts set scheduled_date')) {
+          return { rows: [], rowCount: 1 }
+        }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+  }
+
+  it('переносит на свободный день недели, пишет applied и журнал с before/after датами', async () => {
+    const client = moveClient({ siblings: ['2026-07-07'] })
+
+    const result = await applyMoveWorkoutChange(client, { userId: 'oleg', plannedWorkoutId: 'planned-w1', now: NOW })
+
+    expect(result.status).toBe('applied')
+    expect(result.before).toEqual({ scheduledDate: '2026-07-09' })
+    expect(result.after).toEqual({ scheduledDate: '2026-07-10' })
+    const plannedUpdate = client.query.mock.calls.find(([text]) => text.includes('update public.planned_workouts set scheduled_date'))
+    expect(plannedUpdate[1]).toEqual(['planned-w1', '2026-07-10'])
+    expect(regeneratePlannedWorkout).toHaveBeenCalledWith(client, { plannedWorkoutId: 'planned-w1', userId: 'oleg', scheduledDate: '2026-07-10' })
+    expect(cascadeRegenerateFutureWorkouts).toHaveBeenCalledWith(client, { userId: 'oleg' })
+  })
+
+  it('нарушение восстановления: свободен только день через день — unmatched, дата не меняется', async () => {
+    loadUnavailableDates.mockResolvedValueOnce(['2026-07-10', '2026-07-11', '2026-07-12'])
+    const client = moveClient({ siblings: ['2026-07-07'] })
+
+    const result = await applyMoveWorkoutChange(client, {
+      userId: 'oleg',
+      plannedWorkoutId: 'planned-w1',
+      now: new Date('2026-07-07T12:00:00Z'),
+    })
+
+    expect(result.status).toBe('unmatched')
+    expect(result.before).toEqual({ scheduledDate: '2026-07-09' })
+    expect(result.after).toBeNull()
+    expect(client.query.mock.calls.some(([text]) => text.includes('update public.planned_workouts set scheduled_date'))).toBe(false)
+    expect(regeneratePlannedWorkout).not.toHaveBeenCalled()
+  })
+
+  it('тренировка не в статусе planned/generated — null, журнал не пишется', async () => {
+    const client = moveClient({ status: 'completed' })
+
+    const result = await applyMoveWorkoutChange(client, { userId: 'oleg', plannedWorkoutId: 'planned-w1', now: NOW })
+
+    expect(result).toBeNull()
+    expect(client.query.mock.calls.some(([text]) => text.includes('insert into public.program_change_actions'))).toBe(false)
+  })
+
+  it('отмена move_workout возвращает прежнюю дату и пересобирает тренировку', async () => {
+    const client = {
+      query: vi.fn(async (text) => {
+        if (text === 'begin' || text === 'commit' || text === 'rollback') return { rows: [], rowCount: null }
+        if (text.includes('select') && text.includes('program_change_actions')) {
+          return {
+            rows: [{
+              id: 'action-move-1',
+              user_id: 'oleg',
+              program_exercise_id: 'planned-w1',
+              change_type: 'move_workout',
+              status: 'applied',
+              before: { scheduledDate: '2026-07-09' },
+              after: { scheduledDate: '2026-07-10' },
+              rationale: null,
+              safety_note: null,
+              applied_at: NOW.toISOString(),
+              reverted_at: null,
+              created_at: NOW.toISOString(),
+            }],
+            rowCount: 1,
+          }
+        }
+        if (text.includes('update public.program_change_actions')) {
+          return {
+            rows: [{
+              id: 'action-move-1',
+              user_id: 'oleg',
+              program_exercise_id: 'planned-w1',
+              change_type: 'move_workout',
+              status: 'reverted',
+              before: { scheduledDate: '2026-07-09' },
+              after: { scheduledDate: '2026-07-10' },
+              rationale: null,
+              safety_note: null,
+              applied_at: NOW.toISOString(),
+              reverted_at: NOW.toISOString(),
+              created_at: NOW.toISOString(),
+            }],
+            rowCount: 1,
+          }
+        }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    const result = await revertProgramChangeAction(client, { actionId: 'action-move-1', userId: 'oleg' })
+
+    expect(result.status).toBe('reverted')
+    expect(updateProgramExercise).not.toHaveBeenCalled()
+    const plannedUpdate = client.query.mock.calls.find(([text]) => text.includes('update public.planned_workouts set scheduled_date'))
+    expect(plannedUpdate[1]).toEqual(['planned-w1', '2026-07-09'])
+    expect(regeneratePlannedWorkout).toHaveBeenCalledWith(client, { plannedWorkoutId: 'planned-w1', userId: 'oleg', scheduledDate: '2026-07-09' })
   })
 })

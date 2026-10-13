@@ -399,6 +399,7 @@ function App() {
 	    savePlannedWorkoutDate,
 	    regeneratePlannedWorkout,
 	    cancelPlannedWorkout,
+	    markPlannedWorkoutUnavailable,
 	    resetPlanningStart: _resetPlanningStart,
 	  } = usePlannedWorkouts({
     activeUserId,
@@ -724,6 +725,7 @@ function App() {
               onSavePlannedWorkoutDate={savePlannedWorkoutDate}
               onRegeneratePlannedWorkout={regeneratePlannedWorkout}
               onCancelPlannedWorkout={cancelPlannedWorkout}
+              onMarkPlannedWorkoutUnavailable={markPlannedWorkoutUnavailable}
               onSelectWorkoutDay={selectWorkoutDay}
               onStartWorkout={startWorkout}
               onStartEditExercise={startEditExercise}

@@ -37,6 +37,7 @@ type PlanCalendarProps = {
   onSavePlannedWorkoutDate: (workoutId: string) => void
   onRegeneratePlannedWorkout: (workoutId: string) => void
   onCancelPlannedWorkout: (workoutId: string) => void
+  onMarkPlannedWorkoutUnavailable: (workoutId: string) => void
   onStartEditExercise: (exercise: ExercisePlan) => void
   formatDateOnly: (dateOnly: string) => string
   formatWeight: (weight: number) => string
@@ -178,6 +179,7 @@ export function PlanCalendar({
   onSavePlannedWorkoutDate,
   onRegeneratePlannedWorkout,
   onCancelPlannedWorkout,
+  onMarkPlannedWorkoutUnavailable,
   onStartEditExercise,
   formatDateOnly,
   formatWeight,
@@ -441,6 +443,7 @@ export function PlanCalendar({
           ? [
               { label: 'Открыть', onSelect: () => onStartWorkout(selectedWorkout.workoutDay) },
               { label: 'Перенести', onSelect: () => onBeginEditPlannedDate(selectedWorkout.id, selectedWorkout.scheduledDate) },
+              { label: 'Недоступен', testId: 'plan-action-unavailable', onSelect: () => onMarkPlannedWorkoutUnavailable(selectedWorkout.id) },
               { label: 'Обновить', onSelect: () => onRegeneratePlannedWorkout(selectedWorkout.id) },
               { label: 'Состав', onSelect: () => onSelectWorkoutDay(selectedWorkout.workoutDay) },
               { label: 'Убрать', tone: 'danger' as const, onSelect: () => onCancelPlannedWorkout(selectedWorkout.id) },

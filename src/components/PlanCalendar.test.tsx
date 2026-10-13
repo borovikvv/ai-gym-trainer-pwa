@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { WorkoutDay  } from '../../shared/types'
 import type { PlannedWorkout, UserQuestionnaire } from '../data/programApi'
@@ -93,6 +94,7 @@ describe('PlanCalendar', () => {
         onSavePlannedWorkoutDate={vi.fn()}
         onRegeneratePlannedWorkout={vi.fn()}
         onCancelPlannedWorkout={vi.fn()}
+        onMarkPlannedWorkoutUnavailable={vi.fn()}
         onStartEditExercise={vi.fn()}
         formatDateOnly={(date) => date}
         formatWeight={String}
@@ -136,6 +138,7 @@ describe('PlanCalendar', () => {
         onSavePlannedWorkoutDate={vi.fn()}
         onRegeneratePlannedWorkout={vi.fn()}
         onCancelPlannedWorkout={vi.fn()}
+        onMarkPlannedWorkoutUnavailable={vi.fn()}
         onStartEditExercise={vi.fn()}
         formatDateOnly={(date) => date}
         formatWeight={String}
@@ -190,6 +193,7 @@ describe('PlanCalendar', () => {
         onSavePlannedWorkoutDate={vi.fn()}
         onRegeneratePlannedWorkout={vi.fn()}
         onCancelPlannedWorkout={vi.fn()}
+        onMarkPlannedWorkoutUnavailable={vi.fn()}
         onStartEditExercise={vi.fn()}
         formatDateOnly={(date) => date}
         formatWeight={String}
@@ -232,6 +236,7 @@ describe('PlanCalendar', () => {
         onSavePlannedWorkoutDate={vi.fn()}
         onRegeneratePlannedWorkout={vi.fn()}
         onCancelPlannedWorkout={vi.fn()}
+        onMarkPlannedWorkoutUnavailable={vi.fn()}
         onStartEditExercise={vi.fn()}
         formatDateOnly={(date) => date}
         formatWeight={String}
@@ -274,6 +279,7 @@ describe('PlanCalendar', () => {
         onSavePlannedWorkoutDate={vi.fn()}
         onRegeneratePlannedWorkout={vi.fn()}
         onCancelPlannedWorkout={vi.fn()}
+        onMarkPlannedWorkoutUnavailable={vi.fn()}
         onStartEditExercise={vi.fn()}
         formatDateOnly={(date) => date}
         formatWeight={String}
@@ -321,6 +327,7 @@ describe('PlanCalendar — тап по ближайшей будущей тре�
         onSavePlannedWorkoutDate={vi.fn()}
         onRegeneratePlannedWorkout={vi.fn()}
         onCancelPlannedWorkout={vi.fn()}
+        onMarkPlannedWorkoutUnavailable={vi.fn()}
         onStartEditExercise={vi.fn()}
         formatDateOnly={(date) => date}
         formatWeight={String}
@@ -346,5 +353,51 @@ describe('PlanCalendar — тап по ближайшей будущей тре�
     fireEvent.click(screen.getByRole('button', { name: /09\.06.*тренировка/i }))
 
     expect(onToggleWeekDate).not.toHaveBeenCalled()
+  })
+})
+
+// Issue #445: структурная отметка «день недоступен» из меню выбранной
+// тренировки. Адресуемся к пункту по data-testid, а не по подписи: смена
+// надписи не должна ронять CI (правило ревизии 2026-07-19).
+describe('PlanCalendar — отметка дня недоступным (#445)', () => {
+  it('пункт меню «Недоступен» передаёт id выбранной тренировки', async () => {
+    const user = userEvent.setup()
+    const onMarkPlannedWorkoutUnavailable = vi.fn()
+    const workout = planned('planned-1', '2026-06-11')
+
+    render(
+      <PlanCalendar
+        activeProfile={profile}
+        selectedWeekDates={['2026-06-11']}
+        weekDateOptions={[{ label: 'Чт', date: '2026-06-11', formatted: 'чт, 11.06' }]}
+        plannedWorkouts={[workout]}
+        userHistory={[]}
+        trainingCalendar={[]}
+        activeUserId="vyacheslav"
+        activeWorkoutDay={workout.workoutDay}
+        editingPlannedWorkoutId={null}
+        editingPlannedDate=""
+        coachState={null}
+        onToggleWeekDate={vi.fn()}
+        onSelectWorkoutDay={vi.fn()}
+        onStartWorkout={vi.fn()}
+        onBeginEditPlannedDate={vi.fn()}
+        onSetEditingPlannedDate={vi.fn()}
+        onCancelEditPlannedDate={vi.fn()}
+        onSavePlannedWorkoutDate={vi.fn()}
+        onRegeneratePlannedWorkout={vi.fn()}
+        onCancelPlannedWorkout={vi.fn()}
+        onMarkPlannedWorkoutUnavailable={onMarkPlannedWorkoutUnavailable}
+        onStartEditExercise={vi.fn()}
+        formatDateOnly={(date) => date}
+        formatWeight={String}
+        todayDateInputValue={() => '2026-06-08'}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Действия для/ }))
+    await user.click(screen.getByTestId('plan-action-unavailable'))
+
+    expect(onMarkPlannedWorkoutUnavailable).toHaveBeenCalledWith('planned-1')
   })
 })

@@ -43,7 +43,7 @@ interface ProgramReviewInput {
   now: Date
 }
 
-export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focus' | 'add_deload'
+export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focus' | 'add_deload' | 'move_workout'
 
 /** Issue #420: статус применённого/отменённого действия над планом. */
 export type ProgramChangeActionStatus = 'applied' | 'clamped' | 'unmatched' | 'reverted'
@@ -60,8 +60,8 @@ export interface ProgramChangeAppliedAction {
   programExerciseId: string
   changeType: ProgramChangeType
   status: ProgramChangeActionStatus
-  before: { setsCount: number } | null
-  after: { setsCount: number } | null
+  before: { setsCount: number } | { scheduledDate: string } | null
+  after: { setsCount: number } | { scheduledDate: string } | null
   rationale: string | null
   safetyNote: string | null
   appliedAt: string | null
@@ -78,6 +78,8 @@ export interface ProgramChange {
   newExerciseId?: string
   newExerciseName?: string
   newSetsCount?: number
+  /** Issue #445: id planned_workouts для move_workout (исполняется детерминированно, не из LLM). */
+  plannedWorkoutId?: string
   priority: 'high' | 'medium' | 'low'
   /** Issue #420: результат применения для adjust_volume; остальные типы — без него. */
   appliedAction?: ProgramChangeAppliedAction

@@ -20,8 +20,11 @@ import type { ProgramChange, ProgramChangeAppliedAction } from './coachProgramRe
 import { buildMuscleVolumeSnapshot } from './buildVolumeSnapshot.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { labelFor, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
-import { updateProgramExercise } from './services/programService.js'
+import { updateProgramExercise, loadUserProfile } from './services/programService.js'
 import { assertAllowedRowOwner } from './privateUsers.js'
+import { dateToDateOnly, endOfWeek, startOfWeek } from './utils.js'
+import { loadUnavailableDates } from './services/athleteAvailability.js'
+import { cascadeRegenerateFutureWorkouts, regeneratePlannedWorkout } from './services/plannedWorkoutService.js'
 
 interface ProgramExerciseForActions {
   id?: string
@@ -60,6 +63,18 @@ export interface RevertProgramChangeInput {
   actionId: string
   userId: string
   now?: Date
+}
+
+/**
+ * Issue #445: перенос тренировки под ограничение атлета. Вызывается синхронно,
+ * когда атлет отметил дату недоступной (POST /planned-workouts/:id/unavailable),
+ * а не через недельный кэш обзора: ждать раз-в-неделю обновления противоречит
+ * сценарию «уезжаю в четверг».
+ */
+export interface ApplyMoveWorkoutInput {
+  userId: string
+  plannedWorkoutId: string
+  now: Date
 }
 
 /** program_exercises.sets_count: check (sets_count > 0). */
@@ -183,6 +198,174 @@ export async function applyAdjustVolumeChanges(
 }
 
 /**
+ * Issue #445: перенос тренировки на другой день той же недели, когда атлет
+ * отметил исходный день недоступным. Детерминированно и без LLM: гейт подбирает
+ * первую свободную дату недели, которая не нарушает восстановление (#225) и не
+ * отмечена недоступной. Нет кандидата — пишем status=unmatched и план не трогаем
+ * (это и есть «перенос, нарушающий восстановление, не применяется»).
+ *
+ * Возвращает null, когда переносить нечего (тренировка не найдена или её статус
+ * не planned/generated) — в этом случае журнал не пишется.
+ */
+export async function applyMoveWorkoutChange(
+  client: DbClient,
+  { userId, plannedWorkoutId, now }: ApplyMoveWorkoutInput,
+): Promise<ProgramChangeAppliedAction | null> {
+  const current = await client.query(
+    `select id, user_id, scheduled_date, status, workout_day_name
+     from public.planned_workouts where id = $1`,
+    [plannedWorkoutId],
+  )
+  const row = current.rows[0]
+  if (!row) return null
+  assertAllowedRowOwner(row)
+  const status = String(row.status ?? '')
+  if (status !== 'planned' && status !== 'generated') return null
+
+  const originalDate = dateToDateOnly(row.scheduled_date as Date | string)
+  const weekStart = dateToDateOnly(startOfWeek(new Date(`${originalDate}T00:00:00`)))
+  const weekEnd = dateToDateOnly(endOfWeek(new Date(`${originalDate}T00:00:00`)))
+
+  // Сиблинги недели задают занятые даты; текущая тренировка исключена — её
+  // исходная дата станет свободной после переноса и не считается занятой.
+  const siblings = await client.query(
+    `select scheduled_date from public.planned_workouts
+     where user_id = $1
+       and id <> $2
+       and scheduled_date between $3::date and $4::date
+       and status in ('planned', 'generated', 'moved', 'completed')`,
+    [userId, plannedWorkoutId, weekStart, weekEnd],
+  )
+  const occupied = new Set(siblings.rows.map((sibling) => dateToDateOnly(sibling.scheduled_date as Date | string)))
+  const unavailable = new Set(await loadUnavailableDates(client, userId, weekStart, weekEnd))
+
+  const profile = await loadUserProfile(client, userId)
+  const workoutsPerWeek = Number(profile?.workoutsPerWeek ?? 3)
+
+  const candidate = findMoveCandidate({
+    originalDate,
+    weekStart,
+    weekEnd,
+    today: dateToDateOnly(now),
+    occupied,
+    unavailable,
+    workoutsPerWeek,
+  })
+
+  if (!candidate) {
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        plannedWorkoutId,
+        'move_workout',
+        'unmatched',
+        JSON.stringify({ scheduledDate: originalDate }),
+        null,
+        `Атлет отметил «${originalDate}» недоступным`,
+        'нет свободной даты в пределах недели без нарушения восстановления',
+        null,
+      ],
+    )
+    return mapActionRow(result.rows[0], userId, null)
+  }
+
+  const action = await withTransaction(client, async () => {
+    // Сначала журнал, потом мутация: если вставка не прошла (например, не
+    // накатили миграцию), дата тренировки не меняется и «тихой» порчи нет.
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        plannedWorkoutId,
+        'move_workout',
+        'applied',
+        JSON.stringify({ scheduledDate: originalDate }),
+        JSON.stringify({ scheduledDate: candidate }),
+        `Атлет отметил «${originalDate}» недоступным`,
+        'перенос в пределах недели, разрыв восстановления не нарушен',
+        now.toISOString(),
+      ],
+    )
+    await client.query(
+      `update public.planned_workouts set scheduled_date = $2::date where id = $1`,
+      [plannedWorkoutId, candidate],
+    )
+    await regeneratePlannedWorkout(client, { plannedWorkoutId, userId, scheduledDate: candidate })
+    await cascadeRegenerateFutureWorkouts(client, { userId })
+    return mapActionRow(result.rows[0], userId, null)
+  })
+  return action
+}
+
+/**
+ * Первая дата недели от max(сегодня, понедельник) до воскресенья, свободная от
+ * занятых и недоступных дней и не дающая разрыв ровно в 1 день до соседней
+ * тренировки, когда неделя короткая (workoutsPerWeek <= 3, #225). Иначе null.
+ */
+function findMoveCandidate({
+  originalDate,
+  weekStart,
+  weekEnd,
+  today,
+  occupied,
+  unavailable,
+  workoutsPerWeek,
+}: {
+  originalDate: string
+  weekStart: string
+  weekEnd: string
+  today: string
+  occupied: Set<string>
+  unavailable: Set<string>
+  workoutsPerWeek: number
+}): string | null {
+  let cursor = today > weekStart ? today : weekStart
+  while (cursor <= weekEnd) {
+    if (
+      cursor !== originalDate
+      && !occupied.has(cursor)
+      && !unavailable.has(cursor)
+      && !violatesRecoveryGap(cursor, occupied, workoutsPerWeek)
+    ) {
+      return cursor
+    }
+    cursor = addDaysDateOnly(cursor, 1)
+  }
+  return null
+}
+
+/** Соседняя тренировка через день при короткой неделе — нарушение восстановления. */
+function violatesRecoveryGap(candidate: string, occupied: Set<string>, workoutsPerWeek: number): boolean {
+  if (workoutsPerWeek > 3) return false
+  for (const date of occupied) {
+    if (Math.abs(daysBetweenDateOnly(date, candidate)) === 1) return true
+  }
+  return false
+}
+
+function addDaysDateOnly(dateOnly: string, days: number): string {
+  const base = new Date(`${dateOnly}T00:00:00`)
+  if (Number.isNaN(base.getTime())) return dateOnly
+  base.setDate(base.getDate() + days)
+  return dateToDateOnly(base)
+}
+
+function daysBetweenDateOnly(from: string, to: string): number {
+  const fromMs = new Date(`${from}T00:00:00`).getTime()
+  const toMs = new Date(`${to}T00:00:00`).getTime()
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return Number.POSITIVE_INFINITY
+  return Math.round((toMs - fromMs) / 86_400_000)
+}
+
+
+/**
  * Обзор кэшируется на неделю вместе со статусами действий, а отмена меняет
  * статус только в журнале. Перед отдачей кэша статусы перечитываются оттуда,
  * иначе отменённое изменение снова выглядело бы применённым.
@@ -234,10 +417,12 @@ export async function revertProgramChangeAction(
   }
   if (action.status === 'reverted') return action
 
-  const beforeSetsCount = Number(action.before?.setsCount)
+  const before = action.before
+  const beforeSetsCount = before && 'setsCount' in before ? Number(before.setsCount) : Number.NaN
+  const beforeScheduledDate = before && 'scheduledDate' in before ? before.scheduledDate : null
   return withTransaction(client, async () => {
-    // Статус и мутация тоже в одной транзакции: если восстановление подходов
-    // упадёт, запись останется applied и повторный revert снова сработает.
+    // Статус и мутация тоже в одной транзакции: если восстановление упадёт,
+    // запись останется applied и повторный revert снова сработает.
     const updated = await client.query(
       `update public.program_change_actions
        set status = 'reverted', reverted_at = $2
@@ -245,7 +430,18 @@ export async function revertProgramChangeAction(
        returning ${ACTION_COLUMNS}`,
       [actionId, now.toISOString()],
     )
-    if (Number.isFinite(beforeSetsCount)) {
+    if (action.changeType === 'move_workout') {
+      // Issue #445: у move_workout program_exercise_id хранит id тренировки,
+      // before.scheduledDate — прежнюю дату. Возвращаем дату и пересобираем.
+      if (beforeScheduledDate) {
+        await client.query(
+          `update public.planned_workouts set scheduled_date = $2::date where id = $1`,
+          [action.programExerciseId, beforeScheduledDate],
+        )
+        await regeneratePlannedWorkout(client, { plannedWorkoutId: action.programExerciseId, userId, scheduledDate: beforeScheduledDate })
+        await cascadeRegenerateFutureWorkouts(client, { userId })
+      }
+    } else if (Number.isFinite(beforeSetsCount)) {
       await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
     }
     return mapActionRow(updated.rows[0], userId, null)

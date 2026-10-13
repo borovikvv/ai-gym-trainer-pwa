@@ -5,6 +5,8 @@ import { reconcileSchedule } from '../services/scheduleReconciliation.js'
 import { dateToDateOnly } from '../utils.js'
 import { buildPlannedWeekEvent, logActivity } from '../activityLog.js'
 import { assertAllowedRowOwner, assertAllowedUserId } from '../privateUsers.js'
+import { markDateUnavailable } from '../services/athleteAvailability.js'
+import { applyMoveWorkoutChange } from '../coachProgramActions.js'
 
 export const plannedWorkoutRoutes = Router()
 
@@ -139,6 +141,39 @@ plannedWorkoutRoutes.post('/planned-workouts/:id/generate', async (req, res, nex
 	    res.json({ ok: true, plannedWorkouts })
   } catch (error) {
     await client.query('rollback')
+    next(error)
+  } finally {
+    client.release()
+  }
+})
+
+// Issue #445: атлет отмечает день недоступным. Отметка и перенос ближайшей
+// подходящей тренировки в пределах недели выполняются синхронно — ждать
+// недельного обзора для «уезжаю в четверг» бессмысленно. Гейт переноса —
+// детерминированный (applyMoveWorkoutChange), не LLM.
+plannedWorkoutRoutes.post('/planned-workouts/:id/unavailable', async (req, res, next) => {
+  const client = await pool.connect()
+  try {
+    const current = await client.query(
+      `select id, user_id, scheduled_date from public.planned_workouts where id = $1`,
+      [req.params.id],
+    )
+    if (current.rowCount === 0) {
+      return res.status(404).json({ error: 'planned workout not found' })
+    }
+    const row = current.rows[0]
+    const userId = assertAllowedRowOwner(row)
+    // Сначала отметка, потом перенос: даже если переносить нечего (нет
+    // кандидата/статус не тот), исходный день остаётся недоступным.
+    await markDateUnavailable(client, { userId, date: dateToDateOnly(row.scheduled_date) })
+    const moved = await applyMoveWorkoutChange(client, {
+      userId,
+      plannedWorkoutId: String(row.id),
+      now: new Date(),
+    })
+    const plannedWorkouts = await loadPlannedWorkouts(pool, userId)
+    res.json({ ok: true, plannedWorkouts, moved: moved ?? null })
+  } catch (error) {
     next(error)
   } finally {
     client.release()
