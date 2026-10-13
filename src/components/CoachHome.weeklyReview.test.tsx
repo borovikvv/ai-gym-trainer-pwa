@@ -106,14 +106,14 @@ describe('CoachHome — применённые изменения недельн
 
     render(<CoachHome {...props} />)
 
-    expect(await screen.findByTestId('weekly-review-change-status')).toHaveTextContent('3 → 4')
+    expect(await screen.findByTestId('weekly-review-change-status')).toHaveAttribute('data-status', 'applied')
     await userEv.click(screen.getByTestId('weekly-review-change'))
     await userEv.click(screen.getByRole('button', { name: 'Отменить изменение плана' }))
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Отменить изменение плана' })).not.toBeInTheDocument())
     const revertCall = vi.mocked(apiFetch).mock.calls.find(([url]) => String(url).includes('/revert'))
     expect(JSON.parse(String(revertCall?.[1]?.body))).toEqual({ userId: 'vyacheslav' })
-    expect(screen.getByTestId('review-sheet-action-status')).toHaveTextContent('отменено')
+    expect(screen.getByTestId('review-sheet-action-status')).toHaveAttribute('data-status', 'reverted')
   })
 
   it('сбой отмены оставляет кнопку и показывает ошибку', async () => {
@@ -132,7 +132,7 @@ describe('CoachHome — применённые изменения недельн
     expect(screen.getByRole('button', { name: 'Отменить изменение плана' })).toBeEnabled()
   })
 
-  it('гейт оставил прежний объём — без кнопки отмены и без слова «применено»', async () => {
+  it('гейт оставил прежний объём — статус «без изменений», без кнопки отмены', async () => {
     const userEv = userEvent.setup()
     const unchanged = {
       ...review,
@@ -144,7 +144,7 @@ describe('CoachHome — применённые изменения недельн
 
     render(<CoachHome {...props} />)
 
-    expect(await screen.findByTestId('weekly-review-change-status')).toHaveTextContent('оставлено без изменений')
+    expect(await screen.findByTestId('weekly-review-change-status')).toHaveAttribute('data-status', 'unchanged')
     await userEv.click(screen.getByTestId('weekly-review-change'))
     expect(screen.queryByRole('button', { name: 'Отменить изменение плана' })).not.toBeInTheDocument()
   })

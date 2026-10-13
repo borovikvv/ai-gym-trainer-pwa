@@ -58,6 +58,12 @@ export function appliedActionLabel(action?: AppliedActionLike | null): string {
   }
 }
 
+/** Машинный статус для разметки (data-status): не зависит от формулировок. */
+export function appliedActionStatus(action?: AppliedActionLike | null): string {
+  if (!action) return ''
+  return action.status === 'clamped' && isNoOp(action) ? 'unchanged' : action.status
+}
+
 /** Отменить можно только то, что реально изменило план. */
 export function canRevertAction(action?: AppliedActionLike | null): boolean {
   return Boolean(action?.id) && (action?.status === 'applied' || action?.status === 'clamped') && !isNoOp(action)

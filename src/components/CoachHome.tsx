@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { isProgramApiConfigured } from '../data/programApi'
 import { apiFetch } from '../data/apiAuth'
-import { appliedActionLabel, canRevertAction, changeAction, changeTitle, reviewTypeLabel, type AppliedActionLike } from './weeklyReview'
+import { appliedActionLabel, appliedActionStatus, canRevertAction, changeAction, changeTitle, reviewTypeLabel, type AppliedActionLike } from './weeklyReview'
 
 /**
  * Compute streak (consecutive weeks with at least 1 workout) from history.
@@ -427,7 +427,7 @@ export function CoachHome({
                     {reviewTypeLabel(change.type)}{changeAction(change) ? ` · ${changeAction(change)}` : ''}
                   </div>
                   {appliedActionLabel(change.appliedAction) && (
-                    <div className="review-card__meta" data-testid="weekly-review-change-status">
+                    <div className="review-card__meta" data-testid="weekly-review-change-status" data-status={appliedActionStatus(change.appliedAction)}>
                       {appliedActionLabel(change.appliedAction)}
                     </div>
                   )}
@@ -539,7 +539,7 @@ export function CoachHome({
             </div>
             <div className="review-sheet__body">{reviewDetail.body}</div>
             {appliedActionLabel(detailAction) && (
-              <div className="review-sheet__body" data-testid="review-sheet-action-status">
+              <div className="review-sheet__body" data-testid="review-sheet-action-status" data-status={appliedActionStatus(detailAction)}>
                 {appliedActionLabel(detailAction)}{detailAction?.safetyNote ? `\n${detailAction.safetyNote}` : ''}
               </div>
             )}
