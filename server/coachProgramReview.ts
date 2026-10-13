@@ -80,6 +80,8 @@ export interface ProgramChange {
   newSetsCount?: number
   /** Issue #445: id planned_workouts для move_workout (исполняется детерминированно, не из LLM). */
   plannedWorkoutId?: string
+  /** Issue #443: для change_focus — группа мышц, чью недельную цель подходов меняем. */
+  muscleGroup?: string
   priority: 'high' | 'medium' | 'low'
   /** Issue #420: результат применения для adjust_volume; остальные типы — без него. */
   appliedAction?: ProgramChangeAppliedAction
@@ -103,7 +105,7 @@ export async function reviewProgram(input: ProgramReviewInput): Promise<ProgramR
     temperature: 0.3,
     maxTokens: 1500,
     system:
-      'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Если у атлета есть цели и по ним видно отставание от графика — предлагай изменения, приближающие к цели (приоритет целевого упражнения, объём на нужную группу), и отрази путь к цели в nextWeekFocus. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"priority":"high|medium|low"}],"nextWeekFocus":""}. Пиши на русском. Максимум 3 изменения.',
+      'Ты опытный силовой тренер. Проанализируй программу атлета за последнюю неделю и предложи изменения. Если у атлета есть цели и по ним видно отставание от графика — предлагай изменения, приближающие к цели (приоритет целевого упражнения, объём на нужную группу), и отрази путь к цели в nextWeekFocus. Верни строго JSON: {"summary":"коротко","rating":"excellent|good|needs_adjustment|stale","changes":[{"type":"swap_exercise|adjust_volume|change_focus|add_deload","description":"","rationale":"","exerciseName":"","newExerciseName":"","newSetsCount":0,"muscleGroup":"","priority":"high|medium|low"}],"nextWeekFocus":""}. Для change_focus: muscleGroup — одно из «спина/грудь/ноги/плечи/руки/кор», newSetsCount — предложенная недельная цель подходов этой группы. Для adjust_volume поля не меняются. Пиши на русском. Максимум 3 изменения.',
     prompt: buildLlmPrompt(input),
   })
   if (!parsed) {

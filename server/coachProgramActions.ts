@@ -19,8 +19,9 @@ import type { DbClient } from './dbClient.js'
 import type { ProgramChange, ProgramChangeAppliedAction } from './coachProgramReview.js'
 import { buildMuscleVolumeSnapshot } from './buildVolumeSnapshot.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
-import { labelFor, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
+import { labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { updateProgramExercise, loadUserProfile } from './services/programService.js'
+import { loadWeeklyVolumeTargets, updateWeeklyVolumeTargetSets } from './weeklyVolumeTargets.js'
 import { assertAllowedRowOwner } from './privateUsers.js'
 import { dateToDateOnly, endOfWeek, startOfWeek } from './utils.js'
 import { loadUnavailableDates } from './services/athleteAvailability.js'
@@ -57,6 +58,15 @@ export interface ApplyAdjustVolumeInput {
   now: Date
   /** Сдвиг недельного объёма по группе от изменений, уже применённых в этом проходе. */
   volumeOffsets?: Map<string, number>
+}
+
+export interface ApplyChangeFocusInput {
+  userId: string
+  change: ProgramChange
+  ageRecoveryPhase: AgeRecoveryPhase
+  /** Понедельник текущей недели (YYYY-MM-DD): цель этой недели и меняем. */
+  weekStart: string
+  now: Date
 }
 
 export interface RevertProgramChangeInput {
@@ -193,6 +203,84 @@ export async function applyAdjustVolumeChanges(
       change.appliedAction = await applyAdjustVolumeChange(client, { ...input, change, volumeOffsets })
     } catch (error) {
       console.error('applyAdjustVolumeChange (non-fatal):', error instanceof Error ? error.message : error)
+    }
+  }
+}
+
+/**
+ * Применяет изменение change_focus: двигает недельную цель подходов одной
+ * группы мышц (weekly_volume_targets.target_sets), урезая её до [MEV, MRV].
+ * `programExerciseId` в журнале хранит id строки weekly_volume_targets —
+ * колонка общая, для adjust_volume в ней id упражнения. unmatched — БД не
+ * трогали.
+ */
+export async function applyChangeFocusChange(
+  client: DbClient,
+  input: ApplyChangeFocusInput,
+): Promise<ProgramChangeAppliedAction> {
+  const { userId, change, ageRecoveryPhase, weekStart, now } = input
+
+  const muscleKey = normalizeMuscleGroup(change.muscleGroup ?? '')
+  const landmarks = getVolumeLandmarks(muscleKey, ageRecoveryPhase)
+  if (!landmarks) {
+    return unmatchedAction(userId, '', NaN, change, now, 'группа не распознана')
+  }
+
+  const targets = await loadWeeklyVolumeTargets(client, userId, weekStart)
+  const target = targets[muscleKey]
+  if (!target) {
+    return unmatchedAction(userId, '', NaN, change, now, 'нет цели по группе на эту неделю')
+  }
+
+  const proposedSetsCount = Number(change.newSetsCount)
+  if (!Number.isFinite(proposedSetsCount)) {
+    return unmatchedAction(userId, target.id, target.targetSets, change, now, 'не указано новое число подходов')
+  }
+
+  const finalSetsCount = Math.max(landmarks.mev, Math.min(landmarks.mrv, Math.round(proposedSetsCount)))
+  const clamped = finalSetsCount !== Math.round(proposedSetsCount)
+
+  const safetyNote = clamped
+    ? `подрезано: недельная цель ${Math.round(proposedSetsCount)} вне [${landmarks.mev}, ${landmarks.mrv}] по «${labelFor(muscleKey)}» (фаза ${ageRecoveryPhase})`
+    : `в пределах нормы [${landmarks.mev}, ${landmarks.mrv}] по «${labelFor(muscleKey)}» (фаза ${ageRecoveryPhase})`
+
+  return withTransaction(client, async () => {
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        target.id,
+        change.type,
+        clamped ? 'clamped' : 'applied',
+        JSON.stringify({ setsCount: target.targetSets }),
+        JSON.stringify({ setsCount: finalSetsCount }),
+        change.rationale ?? null,
+        safetyNote,
+        now.toISOString(),
+      ],
+    )
+    await updateWeeklyVolumeTargetSets(client, { id: target.id, targetSets: finalSetsCount })
+    return mapActionRow(result.rows[0], userId, change)
+  })
+}
+
+/**
+ * Применяет все change_focus недельного обзора. Сбой одного изменения не
+ * роняет обзор: оно остаётся предложением без appliedAction.
+ */
+export async function applyChangeFocusChanges(
+  client: DbClient,
+  { changes, ...input }: Omit<ApplyChangeFocusInput, 'change'> & { changes: ProgramChange[] },
+): Promise<void> {
+  for (const change of changes) {
+    if (change.type !== 'change_focus') continue
+    try {
+      change.appliedAction = await applyChangeFocusChange(client, { ...input, change })
+    } catch (error) {
+      console.error('applyChangeFocusChange (non-fatal):', error instanceof Error ? error.message : error)
     }
   }
 }
@@ -364,7 +452,6 @@ function daysBetweenDateOnly(from: string, to: string): number {
   return Math.round((toMs - fromMs) / 86_400_000)
 }
 
-
 /**
  * Обзор кэшируется на неделю вместе со статусами действий, а отмена меняет
  * статус только в журнале. Перед отдачей кэша статусы перечитываются оттуда,
@@ -442,7 +529,11 @@ export async function revertProgramChangeAction(
         await cascadeRegenerateFutureWorkouts(client, { userId })
       }
     } else if (Number.isFinite(beforeSetsCount)) {
-      await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
+      if (action.changeType === 'change_focus') {
+        await updateWeeklyVolumeTargetSets(client, { id: action.programExerciseId, targetSets: beforeSetsCount })
+      } else {
+        await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
+      }
     }
     return mapActionRow(updated.rows[0], userId, null)
   })
