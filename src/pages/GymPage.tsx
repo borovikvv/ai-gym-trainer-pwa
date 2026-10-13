@@ -14,6 +14,7 @@ import { ExercisePickerSheet } from '../components/ExercisePickerSheet'
 import { ExerciseGuideModal } from '../components/ExerciseGuideModal'
 import { ReplacementSheet } from '../components/ReplacementSheet'
 import { formatWeight } from '../lib/format'
+import type { WakeLockStatus } from '../hooks/useWakeLock'
 
 type ReadinessMode = 'normal' | 'light' | 'very_light' | 'heavy'
 
@@ -26,6 +27,8 @@ interface ReadinessOption {
 
 interface GymPageProps {
   screen: Screen
+  // Issue #458: состояние wake lock — показываем на экране «Зал» честно.
+  wakeLockStatus: WakeLockStatus
   // Workout data
   activeWorkoutDay: WorkoutDay
   previewWorkoutDay: WorkoutDay
@@ -156,6 +159,7 @@ export function GymPage(props: GymPageProps) {
       {screen === 'session' && (
         <GymScreen
           activeWorkoutDay={props.activeWorkoutDay}
+          wakeLockStatus={props.wakeLockStatus}
           activeExercise={props.activeExercise!}
           activeExerciseIndex={props.activeExerciseIndex}
           activeLog={props.activeLog!}

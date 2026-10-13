@@ -5,6 +5,7 @@ import { GymScreen } from './GymScreen'
 import type { NextSetHint } from './gymTypes'
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import type { ExerciseLog } from '../domain/workoutHistory'
+import type { WakeLockStatus } from '../hooks/useWakeLock'
 
 function makeExercise(partial: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name'>): ExercisePlan {
   return {
@@ -38,6 +39,8 @@ describe('GymScreen', () => {
     // Issue #163: анкета боли читает лог упражнения и уводит с экрана по
     // красному флагу — обоим тестам нужен доступ к этим двум пропсам.
     painLog?: Partial<ExerciseLog>
+    // Issue #458: состояние wake lock — по умолчанию активен.
+    wakeLockStatus?: WakeLockStatus
   } = {}) {
     const navigate = vi.fn()
     const bench = makeExercise({
@@ -69,6 +72,7 @@ describe('GymScreen', () => {
         allSetsCompleted={overrides.allSetsCompleted ?? false}
         restRemainingSeconds={0}
         draftStatus=""
+        wakeLockStatus={overrides.wakeLockStatus ?? 'active'}
         exerciseAddSuggestion={null}
         formatWeight={String}
         navigate={navigate}
@@ -157,6 +161,7 @@ describe('GymScreen', () => {
         allSetsCompleted={false}
         restRemainingSeconds={0}
         draftStatus="Черновик сохранён · 07.06, 22:45"
+        wakeLockStatus="active"
         exerciseAddSuggestion={null}
         formatWeight={String}
         navigate={vi.fn()}
@@ -210,6 +215,7 @@ describe('GymScreen', () => {
         restRemainingSeconds={0}
         draftStatus=""
         nextExercise={row}
+        wakeLockStatus="active"
         exerciseAddSuggestion={null}
         formatWeight={String}
         navigate={vi.fn()}
@@ -265,4 +271,14 @@ describe('GymScreen', () => {
 
     expect(navigate).toHaveBeenCalledWith('review')
   })
+
+  // Issue #458: индикатор удержания экрана читается через data-state, не текст.
+  it.each(['active', 'rejected'] as const)(
+    'показывает индикатор удержания экрана в состоянии %s',
+    (wakeLockStatus) => {
+      renderGym({ wakeLockStatus })
+
+      expect(screen.getByTestId('wake-lock-indicator')).toHaveAttribute('data-state', wakeLockStatus)
+    },
+  )
 })

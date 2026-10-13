@@ -9,6 +9,7 @@ import type { ActiveWorkoutDraft } from './useProgramData'
 import type { NextSetHint, SetDraft } from '../components/gymTypes'
 import { formatWeight } from '../lib/format'
 import { requestNotificationPermissionOnce } from './useRestTimer'
+import { requestWakeLock } from './useWakeLock'
 
 // Issue #242: повторы не предзаполняются. Раньше первый подход жима лёжа
 // получал 10 повторов по хардкоду `exercise.id === 'bench-press'` — у всех
@@ -451,6 +452,9 @@ export function useWorkoutNavigation({
     // Фаза 3.2: разрешение на уведомления «отдых окончен» запрашивается один
     // раз, из жеста пользователя (кнопка «Начать тренировку»).
     requestNotificationPermissionOnce()
+    // Issue #458: wake lock тоже берём из жеста, а не только из эффекта —
+    // Safari требует transient activation для запроса, который станет живым.
+    requestWakeLock()
     setActiveSessionWorkoutDay(previewWorkoutDay)
     setActiveExerciseIndex(0)
     setRestRemainingSeconds(0)
