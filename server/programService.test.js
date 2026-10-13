@@ -81,3 +81,29 @@ describe('updateProgramExercise — владелец строки (#316)', () =>
     expect(updateCall[1][0]).toBe('pe-1')
   })
 })
+
+// Issue #420: applyAdjustVolumeChange/revertProgramChangeAction вызывают
+// updateProgramExercise только с { id, setsCount }. Без coalesce UPDATE писал
+// бы NULL в not null rep_min/rep_max и ронял весь недельный обзор на реальной
+// Postgres-схеме. Тест идёт через настоящую функцию, а не мок.
+describe('updateProgramExercise — частичное обновление не затирает NOT NULL колонки (#420)', () => {
+  it('с одними id/setsCount UPDATE использует coalesce для остальных колонок', async () => {
+    const client = {
+      query: vi.fn().mockImplementation(async (text) => {
+        if (text.includes('where pe.id = $1')) return { rows: [{ user_id: 'oleg' }], rowCount: 1 }
+        if (text.includes('update public.program_exercises')) return { rows: [{ id: 'pe-1' }], rowCount: 1 }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    const result = await updateProgramExercise(client, { id: 'pe-1', setsCount: 4 })
+
+    expect(result).toEqual({ id: 'pe-1' })
+    const [sql, params] = client.query.mock.calls.find(([text]) => text.includes('update public.program_exercises'))
+    for (const column of ['sets_count', 'rep_min', 'rep_max', 'target_weight', 'weight_step', 'rest_seconds', 'coach_focus']) {
+      expect(sql).toMatch(new RegExp(`${column}\\s*=\\s*coalesce\\(`, 'i'))
+    }
+    expect(params[0]).toBe('pe-1')
+    expect(params[1]).toBe(4)
+  })
+})

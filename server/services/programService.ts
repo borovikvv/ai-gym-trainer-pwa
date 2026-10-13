@@ -163,15 +163,20 @@ export async function updateProgramExercise(client: DbClient, { id, setsCount, r
   if (owner.rowCount === 0) return null
   assertAllowedRowOwner(owner.rows[0])
 
+  // Issue #420: apply/revert adjust_volume меняют только число подходов. Раньше
+  // UPDATE писал все колонки напрямую: непереданные поля приезжали как NULL и
+  // роняли NOT NULL rep_min/rep_max на реальной схеме. coalesce делает
+  // обновление частичным — PATCH из programRoutes по-прежнему присылает все
+  // восемь полей и перезаписывает их полностью.
   const result = await client.query(
     `update public.program_exercises
-     set sets_count = $2,
-         rep_min = $3,
-         rep_max = $4,
-         target_weight = $5,
-         weight_step = $6,
-         rest_seconds = $7,
-         coach_focus = $8
+     set sets_count = coalesce($2, sets_count),
+         rep_min = coalesce($3, rep_min),
+         rep_max = coalesce($4, rep_max),
+         target_weight = coalesce($5, target_weight),
+         weight_step = coalesce($6, weight_step),
+         rest_seconds = coalesce($7, rest_seconds),
+         coach_focus = coalesce($8, coach_focus)
      where id = $1
      returning id`,
     [id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus],

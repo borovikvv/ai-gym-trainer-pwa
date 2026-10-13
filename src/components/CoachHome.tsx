@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { isTimedExercise } from '../domain/exerciseMetrics'
 import { isProgramApiConfigured } from '../data/programApi'
 import { apiFetch } from '../data/apiAuth'
-import { changeAction, changeTitle, reviewTypeLabel } from './weeklyReview'
+import { appliedActionLabel, appliedActionStatus, canRevertAction, changeAction, changeTitle, reviewTypeLabel, type AppliedActionLike } from './weeklyReview'
 
 /**
  * Compute streak (consecutive weeks with at least 1 workout) from history.
@@ -203,6 +203,8 @@ export function CoachHome({
       rationale: string
       exerciseName?: string
       priority: string
+      // Issue #420: что агент применил к плану (только adjust_volume).
+      appliedAction?: AppliedActionLike
     }>
     nextWeekFocus: string
   } | null>(null)
@@ -227,7 +229,37 @@ export function CoachHome({
     kicker: string
     title: string
     body: string
+    changeIndex: number
   } | null>(null)
+  const [revertError, setRevertError] = useState(false)
+  const [revertPending, setRevertPending] = useState(false)
+  const detailAction = reviewDetail ? programReview?.changes[reviewDetail.changeIndex]?.appliedAction : undefined
+
+  // Issue #420: изменения плана применяются автоматически, атлет может их отменить.
+  async function revertDetailChange() {
+    const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
+    if (!reviewDetail || !detailAction?.id || !apiBase) return
+    const index = reviewDetail.changeIndex
+    setRevertPending(true)
+    setRevertError(false)
+    try {
+      const response = await apiFetch(`${apiBase}/api/coach/program-change/${encodeURIComponent(detailAction.id)}/revert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: activeUserId }),
+      })
+      const data = response.ok ? await response.json() : null
+      if (!data?.action) throw new Error('revert failed')
+      setProgramReview((prev) => prev && {
+        ...prev,
+        changes: prev.changes.map((change, i) => (i === index ? { ...change, appliedAction: data.action } : change)),
+      })
+    } catch {
+      setRevertError(true)
+    } finally {
+      setRevertPending(false)
+    }
+  }
 
   // Детали завершённой тренировки (bottom-sheet)
   const [historyDetail, setHistoryDetail] = useState<WorkoutHistoryEntry | null>(null)
@@ -378,11 +410,15 @@ export function CoachHome({
                 type="button"
                 data-testid="weekly-review-change"
                 aria-label={`${changeTitle(change)}: ${reviewTypeLabel(change.type)}`}
-                onClick={() => setReviewDetail({
-                  kicker: reviewTypeLabel(change.type),
-                  title: changeTitle(change),
-                  body: change.rationale,
-                })}
+                onClick={() => {
+                  setRevertError(false)
+                  setReviewDetail({
+                    kicker: reviewTypeLabel(change.type),
+                    title: changeTitle(change),
+                    body: change.rationale,
+                    changeIndex: i,
+                  })
+                }}
               >
                 <span className={`review-card__dot review-card__dot--${change.priority}`} aria-hidden="true" />
                 <div className="review-card__body">
@@ -390,6 +426,11 @@ export function CoachHome({
                   <div className="review-card__meta">
                     {reviewTypeLabel(change.type)}{changeAction(change) ? ` · ${changeAction(change)}` : ''}
                   </div>
+                  {appliedActionLabel(change.appliedAction) && (
+                    <div className="review-card__meta" data-testid="weekly-review-change-status" data-status={appliedActionStatus(change.appliedAction)}>
+                      {appliedActionLabel(change.appliedAction)}
+                    </div>
+                  )}
                 </div>
                 <span className="review-card__arrow" aria-hidden="true">›</span>
               </button>
@@ -497,6 +538,23 @@ export function CoachHome({
               </button>
             </div>
             <div className="review-sheet__body">{reviewDetail.body}</div>
+            {appliedActionLabel(detailAction) && (
+              <div className="review-sheet__body" data-testid="review-sheet-action-status" data-status={appliedActionStatus(detailAction)}>
+                {appliedActionLabel(detailAction)}{detailAction?.safetyNote ? `\n${detailAction.safetyNote}` : ''}
+              </div>
+            )}
+            {canRevertAction(detailAction) && (
+              <button
+                className="secondary wide review-sheet__done"
+                type="button"
+                aria-label="Отменить изменение плана"
+                disabled={revertPending}
+                onClick={revertDetailChange}
+              >
+                Отменить изменение
+              </button>
+            )}
+            {revertError && <div className="muted" role="alert">Не удалось отменить. Попробуйте ещё раз.</div>}
             <button className="primary review-sheet__done" type="button" onClick={() => setReviewDetail(null)}>Понятно</button>
           </div>
         </div>

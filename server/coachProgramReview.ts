@@ -28,6 +28,10 @@ interface ProgramReviewInput {
   coachMemory: CoachMemory | null
   /** Фаза 2: блок долгосрочной памяти (травмы, реакции, цели с прогрессом). */
   longTermMemory?: string
+  /** Issue #420: личная модель атлета (#418) — только контекст, не гейт. */
+  personalModelNote?: string
+  /** Issue #420: разобранные ответы атлета после тренировок (#419). */
+  athleteSignalsNote?: string
   profile: {
     goal?: string
     level?: string
@@ -41,6 +45,30 @@ interface ProgramReviewInput {
 
 export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focus' | 'add_deload'
 
+/** Issue #420: статус применённого/отменённого действия над планом. */
+export type ProgramChangeActionStatus = 'applied' | 'clamped' | 'unmatched' | 'reverted'
+
+/**
+ * Issue #420: запись об изменении плана, применённом агентом. Хранится в
+ * public.program_change_actions, отдаётся на фронт внутри review.changes[i].
+ * Двигатель применения — server/coachProgramActions.ts. `unmatched` — план не
+ * изменялся (упражнение не найдено), строки в БД нет, id пустой.
+ */
+export interface ProgramChangeAppliedAction {
+  id: string
+  userId: string
+  programExerciseId: string
+  changeType: ProgramChangeType
+  status: ProgramChangeActionStatus
+  before: { setsCount: number } | null
+  after: { setsCount: number } | null
+  rationale: string | null
+  safetyNote: string | null
+  appliedAt: string | null
+  revertedAt: string | null
+  createdAt: string
+}
+
 export interface ProgramChange {
   type: ProgramChangeType
   description: string
@@ -51,6 +79,8 @@ export interface ProgramChange {
   newExerciseName?: string
   newSetsCount?: number
   priority: 'high' | 'medium' | 'low'
+  /** Issue #420: результат применения для adjust_volume; остальные типы — без него. */
+  appliedAction?: ProgramChangeAppliedAction
 }
 
 export interface ProgramReview {
@@ -150,9 +180,14 @@ function buildLlmPrompt(input: ProgramReviewInput): string {
   // Фаза 2: память + цели. Обзор обязан оценивать «путь к цели» — прогресс
   // уже посчитан правилами (refreshGoalProgress) и входит в блок памяти.
   const memoryBlock = input.longTermMemory ? `\n${input.longTermMemory}\n` : ''
+  // Issue #420: агент читает личную модель и ответы атлета.
+  const athleteBlock = [input.personalModelNote, input.athleteSignalsNote]
+    .filter((note) => Boolean(note))
+    .map((note) => `\n${note}\n`)
+    .join('')
 
   return `Дата: ${now.toISOString().slice(0, 10)}
-${memoryBlock}
+${memoryBlock}${athleteBlock}
 Текущая программа:
 ${programText}
 
