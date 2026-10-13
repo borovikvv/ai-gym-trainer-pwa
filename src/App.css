@@ -262,6 +262,8 @@ select:disabled {
   background: rgba(29, 29, 31, 0.9);
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(18px);
+  /* Issue #454: отдельный композитный слой для fixed-планки в WebKit. */
+  will-change: transform;
 }
 
 .nav button {
