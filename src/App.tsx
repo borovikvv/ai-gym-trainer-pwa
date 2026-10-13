@@ -485,7 +485,7 @@ function App() {
       const { replayQueuedRequests, getQueuedCount } = await import('./lib/offlineQueue')
       const count = await getQueuedCount()
       if (count === 0) return
-      const sent = await replayQueuedRequests()
+      const { sent, abandoned } = await replayQueuedRequests()
       if (!cancelled && sent > 0) {
         notify(`Отправлено в базу: ${sent} отложенн${sent === 1 ? 'ая' : 'ых'} трениров${sent === 1 ? 'ка' : 'ок'}`)
         // Reload history from server to reflect the synced data.
@@ -494,6 +494,11 @@ function App() {
           const remoteHistory = await loadWorkoutHistoryFromApi()
           setHistory(remoteHistory)
         } catch { /* non-fatal */ }
+      }
+      // Issue #465: записи, исчерпавшие попытки, удалены из очереди — о потере
+      // сообщаем явно, а не выбрасываем молча.
+      if (!cancelled && abandoned > 0) {
+        notify(`Не доставлено в базу: ${abandoned} трениров${abandoned === 1 ? 'ка' : 'ки'}. Сервер отклонил запрос — откройте тренировку и сохраните заново.`)
       }
     }
     // Try on startup.

@@ -36,9 +36,9 @@ describe('offlineQueue replay', () => {
       { 'Content-Type': 'application/json' },
     )
 
-    const count = await replayQueuedRequests()
+    const { sent } = await replayQueuedRequests()
 
-    expect(count).toBe(1)
+    expect(sent).toBe(1)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('http://api.test/api/workout-history')
@@ -66,5 +66,24 @@ describe('offlineQueue replay', () => {
     const queued = await getQueuedRequests()
     expect(queued).toHaveLength(1)
     expect(queued[0].retryCount).toBe(1)
+  })
+
+  it('удаляет и считает записи, исчерпавшие лимит попыток (issue #465)', async () => {
+    configureToken(TOKEN)
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 400 })
+    vi.stubGlobal('fetch', fetchMock)
+    const { enqueueRequest, replayQueuedRequests, getQueuedRequests } = await import('./offlineQueue')
+
+    await enqueueRequest('http://api.test/api/workout-history', 'POST', { foo: 'bar' })
+
+    // Пять реплеев накручивают retryCount до лимита (5).
+    for (let i = 0; i < 5; i++) {
+      expect(await replayQueuedRequests()).toEqual({ sent: 0, abandoned: 0 })
+    }
+    expect(await getQueuedRequests()).toHaveLength(1)
+
+    // Шестой — запись исчерпала попытки: удаляем и сообщаем о потере.
+    expect(await replayQueuedRequests()).toEqual({ sent: 0, abandoned: 1 })
+    expect(await getQueuedRequests()).toEqual([])
   })
 })
