@@ -81,6 +81,7 @@ export function appliedActionLabel(action?: AppliedActionLike | null): string {
       ? 'оставлено без изменений: объём уже на границе безопасного'
       : `применено с поправкой на безопасный объём${detail}`
     case 'reverted': return 'отменено'
+    case 'stale': return 'не отменено: тренер уже обновил упражнение в этом слоте'
     case 'unmatched': return 'не применено: упражнения нет в программе'
     default: return ''
   }

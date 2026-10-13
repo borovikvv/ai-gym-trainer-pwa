@@ -45,8 +45,11 @@ interface ProgramReviewInput {
 
 export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focus' | 'add_deload' | 'move_workout'
 
-/** Issue #420: статус применённого/отменённого действия над планом. */
-export type ProgramChangeActionStatus = 'applied' | 'clamped' | 'unmatched' | 'reverted'
+/**
+ * Issue #420: статус применённого/отменённого действия над планом.
+ * Issue #450: stale — отмена не выполнена, слот уже переписан после замены.
+ */
+export type ProgramChangeActionStatus = 'applied' | 'clamped' | 'unmatched' | 'reverted' | 'stale'
 
 /**
  * Issue #420/#442: снимок числа подходов — база для adjust_volume/change_focus.
