@@ -7,19 +7,21 @@ vi.mock('./services/programService.js', () => ({
   loadUserProfile: vi.fn(async () => ({ workoutsPerWeek: 3 })),
 }))
 // Issue #445: move_workout пересобирает тренировку — генерацию мокаем.
+// Issue #444: применение add_deload пересобирает тренировки недели каскадом.
 vi.mock('./services/plannedWorkoutService.js', () => ({
   regeneratePlannedWorkout: vi.fn(),
-  cascadeRegenerateFutureWorkouts: vi.fn(),
+  cascadeRegenerateFutureWorkouts: vi.fn(async () => 0),
 }))
 vi.mock('./services/athleteAvailability.js', () => ({
   markDateUnavailable: vi.fn(),
   loadUnavailableDates: vi.fn(async () => []),
 }))
 
-const { applyAdjustVolumeChange, applyAdjustVolumeChanges, applyMoveWorkoutChange, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { applyAdjustVolumeChange, applyAdjustVolumeChanges, applyAddDeloadChange, applyAddDeloadChanges, applyMoveWorkoutChange, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
 const { updateProgramExercise } = await import('./services/programService.js')
 const { regeneratePlannedWorkout, cascadeRegenerateFutureWorkouts } = await import('./services/plannedWorkoutService.js')
 const { loadUnavailableDates } = await import('./services/athleteAvailability.js')
+const { dateToDateOnly, endOfWeek, startOfWeek } = await import('./utils.js')
 
 const NOW = new Date('2026-07-09T12:00:00Z')
 const RECENT = '2026-07-08T18:00:00Z'
@@ -587,5 +589,130 @@ describe('applyMoveWorkoutChange (#445)', () => {
     const plannedUpdate = client.query.mock.calls.find(([text]) => text.includes('update public.planned_workouts set scheduled_date'))
     expect(plannedUpdate[1]).toEqual(['planned-w1', '2026-07-09'])
     expect(regeneratePlannedWorkout).toHaveBeenCalledWith(client, { plannedWorkoutId: 'planned-w1', userId: 'oleg', scheduledDate: '2026-07-09' })
+  })
+})
+
+describe('applyAddDeloadChange (#444)', () => {
+  const MESO = { isDeload: false, weekInCycle: 3, cycleStartedOn: '2026-07-06' }
+
+  function addDeloadChange() {
+    return { type: 'add_deload', description: 'разгрузка', rationale: 'высокая усталость', priority: 'high' }
+  }
+
+  function expectedHorizon(now) {
+    return Math.max(1, Math.ceil((endOfWeek(now).getTime() - now.getTime()) / 86_400_000))
+  }
+
+  it('проходит гейт: applied, weekStart — понедельник недели now, каскад пересборки', async () => {
+    const client = insertClient()
+    const change = addDeloadChange()
+
+    await applyAddDeloadChanges(client, {
+      userId: 'oleg',
+      changes: [change],
+      mesocycleState: MESO,
+      latestAppliedAddDeloadAt: null,
+      now: NOW,
+    })
+
+    expect(change.appliedAction).toMatchObject({ status: 'applied', after: { weekStart: dateToDateOnly(startOfWeek(NOW)) } })
+    const insert = client.query.mock.calls.find(([text]) => text.includes('insert into public.program_change_actions'))
+    expect(insert[1][2]).toBe('add_deload')
+    expect(insert[1][1]).toBe('')
+    expect(cascadeRegenerateFutureWorkouts).toHaveBeenCalledWith(client, {
+      userId: 'oleg',
+      horizonDays: expectedHorizon(NOW),
+    })
+  })
+
+  it('гейт «неделя уже разгрузочная»: unmatched, БД и каскад не трогаем', async () => {
+    const client = { query: vi.fn() }
+    const result = await applyAddDeloadChange(client, {
+      userId: 'oleg',
+      change: addDeloadChange(),
+      mesocycleState: { ...MESO, isDeload: true },
+      latestAppliedAddDeloadAt: null,
+      now: NOW,
+    })
+
+    expect(result.status).toBe('unmatched')
+    expect(client.query).not.toHaveBeenCalled()
+    expect(cascadeRegenerateFutureWorkouts).not.toHaveBeenCalled()
+  })
+
+  it('гейт «первая неделя цикла»: unmatched', async () => {
+    const client = { query: vi.fn() }
+    const result = await applyAddDeloadChange(client, {
+      userId: 'oleg',
+      change: addDeloadChange(),
+      mesocycleState: { ...MESO, weekInCycle: 1 },
+      latestAppliedAddDeloadAt: null,
+      now: NOW,
+    })
+
+    expect(result.status).toBe('unmatched')
+    expect(client.query).not.toHaveBeenCalled()
+  })
+
+  it('гейт «уже назначено в этом цикле»: unmatched', async () => {
+    const client = { query: vi.fn() }
+    const result = await applyAddDeloadChange(client, {
+      userId: 'oleg',
+      change: addDeloadChange(),
+      mesocycleState: MESO,
+      latestAppliedAddDeloadAt: new Date('2026-07-08T00:00:00Z'),
+      now: NOW,
+    })
+
+    expect(result.status).toBe('unmatched')
+    expect(client.query).not.toHaveBeenCalled()
+  })
+
+  it('два add_deload в одном обзоре: второй unmatched, каскад ровно один раз', async () => {
+    const client = insertClient()
+    const changes = [addDeloadChange(), addDeloadChange()]
+
+    await applyAddDeloadChanges(client, {
+      userId: 'oleg',
+      changes,
+      mesocycleState: MESO,
+      latestAppliedAddDeloadAt: null,
+      now: NOW,
+    })
+
+    expect(changes[0].appliedAction).toMatchObject({ status: 'applied' })
+    expect(changes[1].appliedAction).toMatchObject({ status: 'unmatched' })
+    expect(cascadeRegenerateFutureWorkouts).toHaveBeenCalledTimes(1)
+  })
+
+  it('revert add_deload: статус reverted, подходы не трогаем, каскад один раз', async () => {
+    const row = {
+      id: 'action-1',
+      user_id: 'oleg',
+      program_exercise_id: '',
+      change_type: 'add_deload',
+      status: 'applied',
+      before: null,
+      after: { weekStart: '2026-07-06' },
+      rationale: 'высокая усталость',
+      safety_note: null,
+      applied_at: '2026-07-09T00:00:00.000Z',
+      reverted_at: null,
+      created_at: '2026-07-09T00:00:00.000Z',
+    }
+    const client = {
+      query: vi.fn(async (text) => {
+        if (text.includes('select') && text.includes('program_change_actions')) return { rows: [row], rowCount: 1 }
+        if (text.includes('update public.program_change_actions')) return { rows: [{ ...row, status: 'reverted', reverted_at: NOW.toISOString() }], rowCount: 1 }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    const result = await revertProgramChangeAction(client, { actionId: 'action-1', userId: 'oleg' })
+
+    expect(result.status).toBe('reverted')
+    expect(updateProgramExercise).not.toHaveBeenCalled()
+    expect(cascadeRegenerateFutureWorkouts).toHaveBeenCalledTimes(1)
+    expect(cascadeRegenerateFutureWorkouts).toHaveBeenCalledWith(client, expect.objectContaining({ userId: 'oleg' }))
   })
 })

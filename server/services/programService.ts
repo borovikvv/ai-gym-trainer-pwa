@@ -385,6 +385,24 @@ export async function loadRecentHistory(client: DbClient, userId: string) {
   }) as unknown as WorkoutHistoryEntry[]
 }
 
+/**
+ * Issue #444: момент последнего применённого агентом назначения разгрузки
+ * (program_change_actions: change_type=add_deload, status=applied) либо null.
+ * Мезоцикл превращает факт «назначено на этой неделе» в разгрузочную неделю.
+ */
+export async function loadLatestAppliedAddDeload(client: DbClient, userId: string): Promise<Date | null> {
+  const result = await client.query(
+    `select applied_at from public.program_change_actions
+     where user_id = $1 and change_type = 'add_deload' and status = 'applied'
+     order by applied_at desc limit 1`,
+    [userId],
+  )
+  const value = result.rows[0]?.applied_at
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(String(value))
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 export async function loadCoachStateForUser(client: DbClient, userId: string, now: Date = new Date()): Promise<CoachState> {
   // Two-pass path: compute coachMemory first (which itself needs a first-pass
   // coachState), then recompute coachState with coachMemory available so the
@@ -396,13 +414,14 @@ export async function loadCoachStateForUser(client: DbClient, userId: string, no
 }
 
 export async function loadCoachMemoryForUser(client: DbClient, userId: string, now: Date = new Date()) {
-  const [profile, workoutDays, exerciseLibrary, history, coachDecisionLogs, volumeLandmarkOverrides] = await Promise.all([
+  const [profile, workoutDays, exerciseLibrary, history, coachDecisionLogs, volumeLandmarkOverrides, latestAppliedAddDeloadAt] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
     loadRecentCoachDecisionLogs(client, userId),
     loadVolumeLandmarkOverrides(client, userId),
+    loadLatestAppliedAddDeload(client, userId),
   ])
   // Build e1RM histories once — used by the adaptive volume engine to
   // detect strength trends per muscle group.
@@ -412,7 +431,7 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   const coachStatePass1 = computeCoachState({
     profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, now,
     exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"],
-    volumeLandmarkOverrides, e1rmHistories,
+    volumeLandmarkOverrides, e1rmHistories, earlyDeloadAssignedAt: latestAppliedAddDeloadAt,
   })
   const coachMemory = computeCoachMemory({
     profile,
@@ -423,10 +442,12 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
     now,
   })
   // Second pass: coachState WITH coachMemory — mesocycle MRV triggers now work.
+  // Issue #444: earlyDeloadAssignedAt передаём в оба прохода, иначе первый и
+  // второй разойдутся по фазе (как было бы и с MRV-триггером).
   const coachState = computeCoachState({
     profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history, coachMemory, now,
     exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"],
-    volumeLandmarkOverrides, e1rmHistories,
+    volumeLandmarkOverrides, e1rmHistories, earlyDeloadAssignedAt: latestAppliedAddDeloadAt,
   })
   // Persist any non-hold adjustment decisions to volume_landmark_overrides.
   // This updates lastAdjustmentIso so the 2-week cooldown applies next time.
@@ -459,7 +480,9 @@ export async function loadCoachMemoryForUser(client: DbClient, userId: string, n
   )
   // profile / history / e1rmHistories are already computed here — expose them
   // so per-set live coach calls (liveCoachContext) don't re-query everything.
-  return { coachMemory, coachState, profile, history, e1rmHistories, blockGoal, weeklyVolume }
+  // Issue #444: latestAppliedAddDeloadAt нужен роуту обзора для гейта без
+  // повторного запроса.
+  return { coachMemory, coachState, profile, history, e1rmHistories, blockGoal, weeklyVolume, latestAppliedAddDeloadAt }
 }
 
 /**

@@ -12,7 +12,7 @@ import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
 import { buildPersonalModelNote, loadAthleteSignalsNote } from '../coachProgramReviewContext.js'
-import { applyAdjustVolumeChanges, applyChangeFocusChanges, refreshAppliedActionStatuses, revertProgramChangeAction, type ProgramDayForActions } from '../coachProgramActions.js'
+import { applyAdjustVolumeChanges, applyAddDeloadChanges, applyChangeFocusChanges, refreshAppliedActionStatuses, revertProgramChangeAction, type ProgramDayForActions } from '../coachProgramActions.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { requireAllowedUserId } from '../privateUsers.js'
@@ -318,7 +318,7 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
     loadUserWorkoutDays(pool, userId),
     loadCoachMemoryForUser(pool, userId),
   ])
-  const { coachMemory, coachState, e1rmHistories } = memoryResult
+  const { coachMemory, coachState, e1rmHistories, latestAppliedAddDeloadAt } = memoryResult
   const history = await loadRecentHistory(pool, userId)
   // Фаза 2: «путь к цели» — правила считают траекторию по e1RM-трендам и
   // обновляют progress_note каждой активной цели; свежие оценки попадают в
@@ -384,6 +384,14 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
       changes: review.changes,
       ageRecoveryPhase,
       weekStart: dateToDateOnly(startOfWeek(generatedAt)),
+      now: generatedAt,
+    })
+    // Issue #444: назначение разгрузочной недели агентом (гейт внутри).
+    await applyAddDeloadChanges(applyClient, {
+      userId,
+      changes: review.changes,
+      mesocycleState: coachState?.mesocycle ?? null,
+      latestAppliedAddDeloadAt: latestAppliedAddDeloadAt ?? null,
       now: generatedAt,
     })
   } finally {

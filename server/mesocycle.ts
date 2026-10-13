@@ -70,6 +70,13 @@ interface ComputeMesocycleStateInput {
   history: WorkoutHistoryEntry[]
   coachMemory: CoachMemory | null
   now?: Date
+  /**
+   * Issue #444: момент последнего program_change_actions.applied_at с
+   * change_type=add_deload и status=applied. Гейт и журнал — в
+   * coachProgramActions.ts; здесь только эффект на фазу: назначение в текущей
+   * календарной неделе делает неделю разгрузочной наравне с триггерами.
+   */
+  earlyDeloadAssignedAt?: Date | string | null
 }
 
 /** Internal: a single ISO-week bucket of completed workouts. */
@@ -125,6 +132,7 @@ export function computeMesocycleState({
   history = [],
   coachMemory = null,
   now = new Date(),
+  earlyDeloadAssignedAt = null,
 }: ComputeMesocycleStateInput): MesocycleState {
   const nowDate = new Date(now)
   const policy: UserTrainingPolicy | null = getUserTrainingPolicy({ ...profile, age: profile.age ?? undefined })
@@ -156,9 +164,18 @@ export function computeMesocycleState({
     phase,
   })
 
+  // Issue #444: назначение агента — независимый третий источник force, рядом с
+  // триггерами MRV/боли (checkEarlyDeloadTriggers не трогаем). Действует только
+  // на своей календарной неделе, чтобы не тянуть разгрузку на соседние.
+  const agentAssignedThisWeek = earlyDeloadAssignedAt != null
+    && startOfWeek(new Date(earlyDeloadAssignedAt)).getTime() === startOfWeek(nowDate).getTime()
+  const forceDeload = earlyDeload.force || agentAssignedThisWeek
+  const forceDeloadReason = earlyDeload.reason
+    ?? (agentAssignedThisWeek ? 'Разгрузка назначена тренером-агентом по недельному разбору.' : null)
+
   // --- 5. Deload delay (not enough stress accumulated) ---
   const completionRatio = plannedThisCycle > 0 ? workoutsThisCycle / plannedThisCycle : 0
-  const shouldDelayDeload = !earlyDeload.force
+  const shouldDelayDeload = !forceDeload
     && currentPhase === 'deload'
     && completionRatio < 0.5
 
@@ -167,9 +184,9 @@ export function computeMesocycleState({
   let triggerReason: string | null = null
   let deloadScheduled = weekInCycle === config.loadingWeeks && !shouldDelayDeload
 
-  if (earlyDeload.force) {
+  if (forceDeload) {
     finalPhase = 'deload'
-    triggerReason = earlyDeload.reason
+    triggerReason = forceDeloadReason
     deloadScheduled = false // already IN deload
   } else if (shouldDelayDeload) {
     // Extend loading — treat as if we're still in the last loading week

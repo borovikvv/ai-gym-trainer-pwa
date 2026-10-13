@@ -475,6 +475,57 @@ describe('computeMesocycleState — early deload triggers', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Issue #444: разгрузка, назначенная агентом (add_deload)
+// ---------------------------------------------------------------------------
+
+describe('computeMesocycleState — agent-assigned deload (#444)', () => {
+  // Среда 2026-06-17: середина ISO-недели, чтобы сдвиг таймзоны не менял неделю.
+  const NOW = '2026-06-17T18:00:00Z'
+  const THIS_WEEK = '2026-06-17T09:00:00Z'
+  const LAST_WEEK = '2026-06-10T09:00:00Z'
+
+  it('назначение агента на текущей неделе делает неделю разгрузочной', () => {
+    const result = computeMesocycleState({
+      profile: { age: 25, workoutsPerWeek: 3 },
+      history: [session('2026-06-17T12:00:00Z')],
+      now: NOW,
+      earlyDeloadAssignedAt: THIS_WEEK,
+    })
+
+    expect(result.isDeload).toBe(true)
+    expect(result.triggerReason).toContain('недельному разбору')
+  })
+
+  it('назначение на прошлой неделе не тянет разгрузку на текущую', () => {
+    const result = computeMesocycleState({
+      profile: { age: 25, workoutsPerWeek: 3 },
+      history: [session('2026-06-17T12:00:00Z')],
+      now: NOW,
+      earlyDeloadAssignedAt: LAST_WEEK,
+    })
+
+    expect(result.isDeload).toBe(false)
+  })
+
+  it('без назначения поведение не меняется', () => {
+    const withField = computeMesocycleState({
+      profile: { age: 25, workoutsPerWeek: 3 },
+      history: [session('2026-06-17T12:00:00Z')],
+      now: NOW,
+      earlyDeloadAssignedAt: null,
+    })
+    const without = computeMesocycleState({
+      profile: { age: 25, workoutsPerWeek: 3 },
+      history: [session('2026-06-17T12:00:00Z')],
+      now: NOW,
+    })
+
+    expect(withField.isDeload).toBe(false)
+    expect(without.isDeload).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Cycle reset after gap
 // ---------------------------------------------------------------------------
 

@@ -90,6 +90,8 @@ interface ComputeCoachStateInput {
   coachMemory?: { muscleGroupProfiles?: Record<string, unknown> } | null
   volumeLandmarkOverrides?: VolumeLandmarkOverridesInput | null
   e1rmHistories?: E1rmHistoryInput[] | null
+  /** Issue #444: назначение разгрузки агентом (program_change_actions). */
+  earlyDeloadAssignedAt?: Date | string | null
 }
 
 interface WorkoutHistoryEntryInput extends Omit<WorkoutHistoryEntry, 'workoutDayId'> {
@@ -160,6 +162,7 @@ export function computeCoachState({
   coachMemory = null,
   volumeLandmarkOverrides = null,
   e1rmHistories = null,
+  earlyDeloadAssignedAt = null,
 }: ComputeCoachStateInput): CoachState {
   const nowDate = new Date(now)
   const normalizedHistory = [...(history ?? [])]
@@ -215,6 +218,7 @@ export function computeCoachState({
     history: normalizedHistory as unknown as WorkoutHistoryEntry[],
     coachMemory: coachMemory as Parameters<typeof computeMesocycleState>[0]['coachMemory'],
     now: nowDate,
+    earlyDeloadAssignedAt,
   })
 
   // --- Adaptive volume landmark adjustments (Phase 3 issue #6) ---

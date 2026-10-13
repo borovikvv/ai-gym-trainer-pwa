@@ -5,7 +5,7 @@ import { computeCoachState } from '../coachState.js'
 import { computeCoachMemory } from '../coachMemory.js'
 import { buildGeneratedPlannedWorkout } from '../plannedWorkoutGenerator.js'
 import { dateToDateOnly, groupBy, nextPlannedDatesFromProfile, normalizeProgramExercise, resolveSessionAnchor, type NormalizedProgramExercise } from '../utils.js'
-import { loadExerciseLibrary, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
+import { loadExerciseLibrary, loadLatestAppliedAddDeload, loadRecentHistory, loadUserProfile, loadUserWorkoutDays } from './programService.js'
 import { formatWeight } from '../../shared/format.js'
 import { isTimedExerciseName } from '../../shared/muscleGroups.js'
 import { loadLongTermMemoryBlock } from '../coachLongTermMemory.js'
@@ -264,17 +264,20 @@ export async function replacePlannedTrainingRange(client: DbClient, { userId, da
 }
 
 export async function createGeneratedPlannedWorkoutForDate(client: DbClient, { userId, scheduledDate, source = 'coach', previousGeneratedWorkouts = [] }: CreateGeneratedPlannedWorkoutParams): Promise<PlannedWorkout | undefined> {
-  const [profile, workoutDays, exerciseLibrary, history] = await Promise.all([
+  const [profile, workoutDays, exerciseLibrary, history, latestAppliedAddDeloadAt] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
-  ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[]]
+    loadLatestAppliedAddDeload(client, userId),
+  ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[], Date | null]
   // Issue #223: момент сессии — не полдень, а привычное время тренировки
   // (иначе для вечернего графика разрыв «пятница → воскресенье» считается как
   // один день вместо двух и обычный день расписания уезжает в «Разгрузку»).
   const sessionAnchor = resolveSessionAnchor(scheduledDate, history as Array<{ completedAt?: string | Date | null }>)
-  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"] })
+  // Issue #444: назначенная агентом разгрузка делает пересобранные тренировки
+  // недели разгрузочными — без этого новая неделя осталась бы обычной.
+  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"], earlyDeloadAssignedAt: latestAppliedAddDeloadAt })
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
   const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: sessionAnchor })
   // Issue #166: сессия планируется под остаток недельной цели по группам.
@@ -352,16 +355,17 @@ export async function cascadeRegenerateFutureWorkouts(
 }
 
 export async function regeneratePlannedWorkout(client: DbClient, { plannedWorkoutId, userId, scheduledDate, refineWithLlm = false }: RegeneratePlannedWorkoutParams): Promise<void> {
-  const [profile, workoutDays, exerciseLibrary, history] = await Promise.all([
+  const [profile, workoutDays, exerciseLibrary, history, latestAppliedAddDeloadAt] = await Promise.all([
     loadUserProfile(client, userId),
     loadUserWorkoutDays(client, userId),
     loadExerciseLibrary(client),
     loadRecentHistory(client, userId),
-  ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[]]
+    loadLatestAppliedAddDeload(client, userId),
+  ]) as unknown as [Record<string, unknown>, unknown[], unknown[], unknown[], Date | null]
   // Issue #223: тот же якорь, что и при первой генерации — иначе перегенерация
   // считала бы готовность по другому моменту суток.
   const sessionAnchor = resolveSessionAnchor(scheduledDate, history as Array<{ completedAt?: string | Date | null }>)
-  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"] })
+  const coachState = computeCoachState({ profile, workoutDays: workoutDays as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["workoutDays"], history: history as unknown as WorkoutHistoryEntry[], now: sessionAnchor, exerciseLibrary: exerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachState>[0]>["exerciseLibrary"], earlyDeloadAssignedAt: latestAppliedAddDeloadAt })
   const previousGeneratedWorkouts = await loadPreviousGeneratedWorkoutContext(client, { userId, scheduledDate, excludeId: plannedWorkoutId })
   const enrichedExerciseLibrary = enrichExerciseLibraryWithWorkoutDays(exerciseLibrary, workoutDays)
   const coachMemory = computeCoachMemory({ profile, exerciseLibrary: enrichedExerciseLibrary as unknown as NonNullable<Parameters<typeof computeCoachMemory>[0]>["exerciseLibrary"], history: history as unknown as WorkoutHistoryEntry[], coachState, now: sessionAnchor })
