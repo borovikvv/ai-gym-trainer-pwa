@@ -41,9 +41,21 @@ export function canonicalExerciseId(exerciseOrId: string | ExerciseLike | null |
  */
 export const getCanonicalExerciseId = canonicalExerciseId
 
+/**
+ * Collapse generated ids to a canonical exercise id.
+ *
+ * A single `-alternative-` marker is intentionally collapsed to the BASE id:
+ * the repeat-penalty planner relies on that (issues #221/#286). A nested chain
+ * (two or more `-alternative-` markers) instead resolves to the LAST segment —
+ * the exercise actually performed (issue #459).
+ */
 function normalizeGeneratedExerciseId(id: string): string {
-  return String(id ?? '')
-    .replace(/-alternative-.+$/u, '')
+  const value = String(id ?? '')
+  const marker = '-alternative-'
+  const tail = value.split(marker).length - 1 >= 2
+    ? value.slice(value.lastIndexOf(marker) + marker.length)
+    : value.replace(/-alternative-.+$/u, '')
+  return tail
     .replace(/-(extra|replacement)-\d+$/u, '')
     .replace(/-(light|very_light|heavy)$/u, '')
 }
