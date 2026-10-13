@@ -3,13 +3,21 @@ import { z } from 'zod'
 export const workoutSetSchema = z
   .object({
     weight: z.number().min(0).max(1000),
-    reps: z.number().positive().max(1000),
+    reps: z.number().min(0).max(1000),
     rpe: z.number().min(1).max(10),
     completed: z.boolean().optional(),
     performedAt: z.string().optional(),
     startedAt: z.string().optional(),
   })
   .passthrough()
+  // Issue #464: reps > 0 требуется только у выполненных подходов — как в
+  // isValidCompletedSet (server/services/workoutService.ts). Незавершённый
+  // подход (completed === false) с reps: 0 должен доходить до домена, где
+  // sanitizeWorkoutHistoryEntry его отбросит, а не ронять всю запись.
+  .refine((set) => set.completed === false || set.reps > 0, {
+    message: 'Too small: expected number to be >0',
+    path: ['reps'],
+  })
 
 export const exerciseEntrySchema = z
   .object({
