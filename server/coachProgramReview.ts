@@ -28,6 +28,10 @@ interface ProgramReviewInput {
   coachMemory: CoachMemory | null
   /** Фаза 2: блок долгосрочной памяти (травмы, реакции, цели с прогрессом). */
   longTermMemory?: string
+  /** Issue #420: личная модель атлета (#418) — только контекст, не гейт. */
+  personalModelNote?: string
+  /** Issue #420: разобранные ответы атлета после тренировок (#419). */
+  athleteSignalsNote?: string
   profile: {
     goal?: string
     level?: string
@@ -176,9 +180,14 @@ function buildLlmPrompt(input: ProgramReviewInput): string {
   // Фаза 2: память + цели. Обзор обязан оценивать «путь к цели» — прогресс
   // уже посчитан правилами (refreshGoalProgress) и входит в блок памяти.
   const memoryBlock = input.longTermMemory ? `\n${input.longTermMemory}\n` : ''
+  // Issue #420: агент читает личную модель и ответы атлета.
+  const athleteBlock = [input.personalModelNote, input.athleteSignalsNote]
+    .filter((note) => Boolean(note))
+    .map((note) => `\n${note}\n`)
+    .join('')
 
   return `Дата: ${now.toISOString().slice(0, 10)}
-${memoryBlock}
+${memoryBlock}${athleteBlock}
 Текущая программа:
 ${programText}
 

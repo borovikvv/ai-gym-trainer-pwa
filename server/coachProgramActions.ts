@@ -52,6 +52,8 @@ export interface ApplyAdjustVolumeInput {
   e1rmHistories: E1rmHistoryLike[]
   ageRecoveryPhase: AgeRecoveryPhase
   now: Date
+  /** Сдвиг недельного объёма по группе от изменений, уже применённых в этом проходе. */
+  volumeOffsets?: Map<string, number>
 }
 
 export interface RevertProgramChangeInput {
@@ -59,6 +61,9 @@ export interface RevertProgramChangeInput {
   userId: string
   now?: Date
 }
+
+/** program_exercises.sets_count: check (sets_count > 0). */
+const MIN_SETS_COUNT = 1
 
 const ACTION_COLUMNS =
   'id, user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at, reverted_at, created_at'
@@ -109,18 +114,24 @@ export async function applyAdjustVolumeChange(
     return unmatchedAction(userId, programExerciseId, oldSetsCount, change, now, `группа «${exercise.muscleGroup ?? '?'}» без рамок объёма`)
   }
 
+  // Изменения, уже применённые к этой группе в том же проходе, входят в объём:
+  // иначе два изменения по отдельности укладываются в MRV, а вместе — нет.
   const weeklySets = buildMuscleVolumeSnapshot(muscleKey, history, e1rmHistories, ageRecoveryPhase, now).weeklySets
+    + (input.volumeOffsets?.get(muscleKey) ?? 0)
   const projected = weeklySets - oldSetsCount + proposedSetsCount
-  const lowBound = oldSetsCount + (landmarks.mev - weeklySets)
+  // MEV удерживает от урезания ниже минимума, но объём сам не наращивает: после
+  // пропущенной недели факт ниже MEV, и граница вытянула бы упражнение далеко
+  // выше предложенного. Гейт только ограничивает.
+  const lowBound = Math.min(oldSetsCount, oldSetsCount + (landmarks.mev - weeklySets))
   const highBound = oldSetsCount + (landmarks.mrv - weeklySets)
-  const finalSetsCount = Math.max(0, Math.round(Math.min(Math.max(proposedSetsCount, lowBound), highBound)))
+  const finalSetsCount = Math.max(MIN_SETS_COUNT, Math.round(Math.min(Math.max(proposedSetsCount, lowBound), highBound)))
   const clamped = finalSetsCount !== proposedSetsCount
 
   const safetyNote = clamped
     ? `подрезано: проекция объёма ${projected} вне [${landmarks.mev}, ${landmarks.mrv}] по «${labelFor(muscleKey)}» (фаза ${ageRecoveryPhase})`
     : `в пределах нормы [${landmarks.mev}, ${landmarks.mrv}] по «${labelFor(muscleKey)}» (фаза ${ageRecoveryPhase})`
 
-  return withTransaction(client, async () => {
+  const action = await withTransaction(client, async () => {
     // Сначала журнал, потом мутация: если вставка не прошла (например, не
     // накатили миграцию), число подходов не меняется и «тихой» порчи нет.
     const result = await client.query(
@@ -143,6 +154,59 @@ export async function applyAdjustVolumeChange(
     await updateProgramExercise(client, { id: programExerciseId, setsCount: finalSetsCount })
     return mapActionRow(result.rows[0], userId, change)
   })
+  // Следующие изменения того же прохода видят уже применённое: и объём группы,
+  // и новое число подходов упражнения (programDays загружены на этот запрос).
+  input.volumeOffsets?.set(muscleKey, (input.volumeOffsets.get(muscleKey) ?? 0) + finalSetsCount - oldSetsCount)
+  exercise.setsCount = finalSetsCount
+  return action
+}
+
+/**
+ * Применяет все adjust_volume недельного обзора и кладёт результат в
+ * change.appliedAction. Изменения одной группы учитывают друг друга через общий
+ * сдвиг объёма. Сбой одного изменения не роняет обзор: оно остаётся
+ * предложением без appliedAction, причина уходит в лог.
+ */
+export async function applyAdjustVolumeChanges(
+  client: DbClient,
+  { changes, ...input }: Omit<ApplyAdjustVolumeInput, 'change' | 'volumeOffsets'> & { changes: ProgramChange[] },
+): Promise<void> {
+  const volumeOffsets = new Map<string, number>()
+  for (const change of changes) {
+    if (change.type !== 'adjust_volume') continue
+    try {
+      change.appliedAction = await applyAdjustVolumeChange(client, { ...input, change, volumeOffsets })
+    } catch (error) {
+      console.error('applyAdjustVolumeChange (non-fatal):', error instanceof Error ? error.message : error)
+    }
+  }
+}
+
+/**
+ * Обзор кэшируется на неделю вместе со статусами действий, а отмена меняет
+ * статус только в журнале. Перед отдачей кэша статусы перечитываются оттуда,
+ * иначе отменённое изменение снова выглядело бы применённым.
+ */
+export async function refreshAppliedActionStatuses(
+  client: DbClient,
+  userId: string,
+  changes: ProgramChange[],
+): Promise<void> {
+  const ids = changes.map((change) => change.appliedAction?.id).filter((id): id is string => Boolean(id))
+  if (ids.length === 0) return
+  const result = await client.query(
+    `select id, status, reverted_at from public.program_change_actions
+     where user_id = $1 and id::text = any($2)`,
+    [userId, ids],
+  )
+  const byId = new Map(result.rows.map((row) => [String(row.id), row]))
+  for (const change of changes) {
+    const action = change.appliedAction
+    const row = action ? byId.get(action.id) : undefined
+    if (!action || !row) continue
+    action.status = row.status as ProgramChangeAppliedAction['status']
+    action.revertedAt = toIsoString(row.reverted_at)
+  }
 }
 
 /**

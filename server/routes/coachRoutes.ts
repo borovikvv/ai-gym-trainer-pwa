@@ -11,7 +11,8 @@ import { canonicalExerciseId } from '../../shared/exerciseIdentity.js'
 import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../activityLog.js'
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
-import { applyAdjustVolumeChange, revertProgramChangeAction, type ProgramDayForActions } from '../coachProgramActions.js'
+import { buildPersonalModelNote, loadAthleteSignalsNote } from '../coachProgramReviewContext.js'
+import { applyAdjustVolumeChanges, refreshAppliedActionStatuses, revertProgramChangeAction, type ProgramDayForActions } from '../coachProgramActions.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { requireAllowedUserId } from '../privateUsers.js'
@@ -300,6 +301,12 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
 
   if (cached.rows.length > 0) {
     const review = JSON.parse(cached.rows[0].body)
+    // Issue #420: отмена меняет статус только в журнале действий.
+    try {
+      await refreshAppliedActionStatuses(pool, userId, review.changes ?? [])
+    } catch (refreshErr) {
+      console.warn('refreshAppliedActionStatuses (non-fatal):', refreshErr instanceof Error ? refreshErr.message : refreshErr)
+    }
     res.json({ ok: true, review, cached: true })
     return
   }
@@ -320,6 +327,14 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
   } catch (goalErr) {
     console.warn('refreshGoalProgress (non-fatal):', goalErr instanceof Error ? goalErr.message : goalErr)
   }
+  // Issue #420: агент читает ответы атлета (#419). Колонка post_workout_signal
+  // накатывается миграцией — до неё обзор идёт без этого блока.
+  let athleteSignalsNote = ''
+  try {
+    athleteSignalsNote = await loadAthleteSignalsNote(pool, userId, now)
+  } catch (signalErr) {
+    console.warn('loadAthleteSignalsNote (non-fatal):', signalErr instanceof Error ? signalErr.message : signalErr)
+  }
   const generatedAt = new Date()
   const review = await reviewProgram({
     userId,
@@ -328,6 +343,8 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
     coachState,
     coachMemory,
     longTermMemory: await loadLongTermMemoryBlock(pool, userId),
+    personalModelNote: buildPersonalModelNote(history, programDays as ProgramDayForActions[]),
+    athleteSignalsNote,
     profile: {
       goal: profile.goal,
       level: profile.level,
@@ -345,28 +362,20 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
   // предложениями: под них нет готовой мутации. Статус применения кладём в
   // change.appliedAction до кэширования — недельный кэш не даёт применить
   // одно и то же повторно.
-  //
-  // Ограничение v1: клэмп каждого изменения считается по историческим данным
-  // и не видит другие adjust_volume той же группы мышц из этого же прохода.
-  // Два изменения на одну группу в одном обзоре маловероятны; если появятся —
-  // сумму нужно перепроверять отдельно.
   const ageRecoveryPhase = getUserTrainingPolicy(profile)?.ageRecoveryProfile?.phase ?? 'adult'
-  // Отдельное соединение на весь проход: applyAdjustVolumeChange выполняет
-  // журнал и мутацию в одной транзакции (begin/commit на одном соединении).
+  // Отдельное соединение на весь проход: журнал и мутация идут в одной
+  // транзакции (begin/commit на одном соединении).
   const applyClient = await pool.connect()
   try {
-    for (const change of review.changes) {
-      if (change.type !== 'adjust_volume') continue
-      change.appliedAction = await applyAdjustVolumeChange(applyClient, {
-        userId,
-        change,
-        programDays: programDays as ProgramDayForActions[],
-        history,
-        e1rmHistories: e1rmHistories ?? [],
-        ageRecoveryPhase,
-        now: generatedAt,
-      })
-    }
+    await applyAdjustVolumeChanges(applyClient, {
+      userId,
+      changes: review.changes,
+      programDays: programDays as ProgramDayForActions[],
+      history,
+      e1rmHistories: e1rmHistories ?? [],
+      ageRecoveryPhase,
+      now: generatedAt,
+    })
   } finally {
     applyClient.release()
   }

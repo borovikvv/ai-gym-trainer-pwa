@@ -38,8 +38,13 @@ vi.mock('./coachProgramReview.js', () => ({
   reviewProgram: vi.fn(),
 }))
 vi.mock('./coachProgramActions.js', () => ({
-  applyAdjustVolumeChange: vi.fn(),
+  applyAdjustVolumeChanges: vi.fn(),
+  refreshAppliedActionStatuses: vi.fn(),
   revertProgramChangeAction: vi.fn(),
+}))
+vi.mock('./coachProgramReviewContext.js', () => ({
+  buildPersonalModelNote: vi.fn(() => ''),
+  loadAthleteSignalsNote: vi.fn(async () => ''),
 }))
 vi.mock('./coachLongTermMemory.js', () => ({
   loadGoals: vi.fn(async () => []),
@@ -58,7 +63,8 @@ vi.mock('../../src/domain/estimatedOneRepMax.js', () => ({
 const { coachRoutes } = await import('./routes/coachRoutes.js')
 const { pool } = await import('./db.js')
 const { reviewProgram } = await import('./coachProgramReview.js')
-const { applyAdjustVolumeChange, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { applyAdjustVolumeChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { buildPersonalModelNote, loadAthleteSignalsNote } = await import('./coachProgramReviewContext.js')
 const { loadUserProfile, loadUserWorkoutDays, loadCoachMemoryForUser, loadRecentHistory } = await import('./services/programService.js')
 
 // Helper: find a route handler by path + method in the Express router stack.
@@ -297,7 +303,9 @@ describe('Issue #420: применение и отмена изменения п
       history: [], blockGoal: null, weeklyVolume: null,
     })
     vi.mocked(loadRecentHistory).mockResolvedValue([])
-    vi.mocked(applyAdjustVolumeChange).mockResolvedValue({ id: 'a1', status: 'applied' })
+    vi.mocked(applyAdjustVolumeChanges).mockImplementationOnce(async (_client, { changes }) => {
+      changes[0].appliedAction = { id: 'a1', status: 'applied' }
+    })
 
     const res = makeRes()
     await handlerOf('get', '/coach/program-review/:userId')(
@@ -305,9 +313,67 @@ describe('Issue #420: применение и отмена изменения п
       res,
     )
 
-    expect(applyAdjustVolumeChange).toHaveBeenCalledWith(connectedClient, expect.objectContaining({ userId: 'oleg' }))
+    expect(applyAdjustVolumeChanges).toHaveBeenCalledWith(connectedClient, expect.objectContaining({ userId: 'oleg' }))
     expect(res.body.review.changes[0].appliedAction).toEqual({ id: 'a1', status: 'applied' })
     expect(connectedClient.release).toHaveBeenCalled()
+  })
+
+  // Агент читает личную модель (#418) и ответы атлета (#419); недоступная
+  // колонка ответов (миграция ещё не накачена) не должна ронять обзор.
+  it('GET /coach/program-review передаёт агенту личную модель и ответы атлета', async () => {
+    vi.stubEnv('ALLOWED_USER_IDS', '')
+    vi.mocked(reviewProgram).mockResolvedValue({ date: NOW_ISO, summary: 'ok', rating: 'good', changes: [], nextWeekFocus: '' })
+    vi.mocked(loadUserProfile).mockResolvedValue({ userId: 'oleg', age: 30 })
+    vi.mocked(loadUserWorkoutDays).mockResolvedValue([])
+    vi.mocked(loadCoachMemoryForUser).mockResolvedValue({ coachMemory: null, coachState: null, e1rmHistories: [] })
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+    vi.mocked(buildPersonalModelNote).mockReturnValueOnce('ЛИЧНАЯ МОДЕЛЬ')
+    vi.mocked(loadAthleteSignalsNote).mockResolvedValueOnce('ОТВЕТЫ АТЛЕТА')
+
+    await handlerOf('get', '/coach/program-review/:userId')({ params: { userId: 'oleg' }, body: {} }, makeRes())
+
+    expect(reviewProgram).toHaveBeenCalledWith(expect.objectContaining({
+      personalModelNote: 'ЛИЧНАЯ МОДЕЛЬ',
+      athleteSignalsNote: 'ОТВЕТЫ АТЛЕТА',
+    }))
+  })
+
+  it('GET /coach/program-review: сбой чтения ответов атлета не роняет обзор', async () => {
+    vi.stubEnv('ALLOWED_USER_IDS', '')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(reviewProgram).mockResolvedValue({ date: NOW_ISO, summary: 'ok', rating: 'good', changes: [], nextWeekFocus: '' })
+    vi.mocked(loadUserProfile).mockResolvedValue({ userId: 'oleg', age: 30 })
+    vi.mocked(loadUserWorkoutDays).mockResolvedValue([])
+    vi.mocked(loadCoachMemoryForUser).mockResolvedValue({ coachMemory: null, coachState: null, e1rmHistories: [] })
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+    vi.mocked(loadAthleteSignalsNote).mockRejectedValueOnce(new Error('column "post_workout_signal" does not exist'))
+
+    const res = makeRes()
+    await handlerOf('get', '/coach/program-review/:userId')({ params: { userId: 'oleg' }, body: {} }, res)
+
+    expect(res.body.ok).toBe(true)
+    expect(reviewProgram).toHaveBeenCalledWith(expect.objectContaining({ athleteSignalsNote: '' }))
+  })
+
+  // Кэш хранит статус на момент применения; отмену видно только в журнале.
+  it('GET /coach/program-review из кэша перечитывает статусы действий', async () => {
+    vi.stubEnv('ALLOWED_USER_IDS', '')
+    const cachedReview = {
+      date: NOW_ISO, summary: 'ok', rating: 'good', nextWeekFocus: '',
+      changes: [{ type: 'adjust_volume', exerciseName: 'Жим лёжа', appliedAction: { id: 'a1', status: 'applied' } }],
+    }
+    vi.mocked(pool.query).mockResolvedValueOnce({ rows: [{ body: JSON.stringify(cachedReview) }] })
+    vi.mocked(refreshAppliedActionStatuses).mockImplementationOnce(async (_client, _userId, changes) => {
+      changes[0].appliedAction.status = 'reverted'
+    })
+
+    const res = makeRes()
+    await handlerOf('get', '/coach/program-review/:userId')({ params: { userId: 'oleg' }, body: {} }, res)
+
+    expect(refreshAppliedActionStatuses).toHaveBeenCalledWith(pool, 'oleg', expect.any(Array))
+    expect(res.body.cached).toBe(true)
+    expect(res.body.review.changes[0].appliedAction.status).toBe('reverted')
+    expect(reviewProgram).not.toHaveBeenCalled()
   })
 
   it('POST /coach/program-change/:actionId/revert отдаёт обновлённое действие', async () => {

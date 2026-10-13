@@ -6,7 +6,7 @@ vi.mock('./services/programService.js', () => ({
   updateProgramExercise: vi.fn(),
 }))
 
-const { applyAdjustVolumeChange, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { applyAdjustVolumeChange, applyAdjustVolumeChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
 const { updateProgramExercise } = await import('./services/programService.js')
 
 const NOW = new Date('2026-07-09T12:00:00Z')
@@ -212,6 +212,122 @@ describe('applyAdjustVolumeChange (#420)', () => {
   })
 })
 
+describe('гейт объёма: границы (#420)', () => {
+  function apply(change, programDays, totalSets) {
+    return applyAdjustVolumeChange(insertClient(), {
+      userId: 'oleg',
+      change,
+      programDays,
+      history: historyWithSets('Грудь', 'Жим лёжа', totalSets),
+      e1rmHistories: [],
+      ageRecoveryPhase: 'adult',
+      now: NOW,
+    })
+  }
+
+  // Группа уже выше MRV (факт 20 при MRV 16): граница требует −1 подход.
+  // В схеме sets_count > 0 — ноль уронил бы транзакцию и весь обзор.
+  it('не опускает число подходов ниже одного', async () => {
+    const result = await apply(adjustChange(4), programDaysWith('Жим лёжа', 3), 20)
+
+    expect(result.status).toBe('clamped')
+    expect(result.after).toEqual({ setsCount: 1 })
+    expect(updateProgramExercise).toHaveBeenLastCalledWith(expect.anything(), { id: 'pe-1', setsCount: 1 })
+  })
+
+  // Неделя с пропуском: факт 1 подход при MEV 6. Нижняя граница не должна
+  // вытягивать упражнение до 8 подходов, когда LLM предложил 4.
+  it('MEV не наращивает объём выше предложенного', async () => {
+    const result = await apply(adjustChange(4), programDaysWith('Жим лёжа', 3), 1)
+
+    expect(result.status).toBe('applied')
+    expect(result.after).toEqual({ setsCount: 4 })
+  })
+
+  it('ниже MEV не урезает: предложенное снижение остаётся на прежнем числе', async () => {
+    const result = await apply(adjustChange(2), programDaysWith('Жим лёжа', 3), 1)
+
+    expect(result.status).toBe('clamped')
+    expect(result.after).toEqual({ setsCount: 3 })
+  })
+})
+
+describe('applyAdjustVolumeChanges (#420)', () => {
+  function twoChestExercises() {
+    return [{
+      name: 'День A',
+      exercises: [
+        { name: 'Жим лёжа', programExerciseId: 'pe-1', muscleGroup: 'Грудь', setsCount: 3 },
+        { name: 'Разводка гантелей', programExerciseId: 'pe-2', muscleGroup: 'Грудь', setsCount: 3 },
+      ],
+    }]
+  }
+
+  // Факт 12 при MRV 16. Каждое изменение по отдельности даёт проекцию 15, но
+  // вместе +6 подходов к 12 — это 18 > MRV: второе обязано быть подрезано.
+  it('изменения одной группы в одном проходе учитывают друг друга', async () => {
+    const changes = [adjustChange(6, 'Жим лёжа'), adjustChange(6, 'Разводка гантелей')]
+
+    await applyAdjustVolumeChanges(insertClient(), {
+      userId: 'oleg',
+      changes,
+      programDays: twoChestExercises(),
+      history: historyWithSets('Грудь', 'Жим лёжа', 12),
+      e1rmHistories: [],
+      ageRecoveryPhase: 'adult',
+      now: NOW,
+    })
+
+    expect(changes[0].appliedAction).toMatchObject({ status: 'applied', after: { setsCount: 6 } })
+    expect(changes[1].appliedAction).toMatchObject({ status: 'clamped', after: { setsCount: 4 } })
+  })
+
+  it('сбой одного изменения не роняет остальные и сам проход', async () => {
+    const client = insertClient()
+    const echo = client.query.getMockImplementation()
+    let inserts = 0
+    client.query.mockImplementation(async (text, params) => {
+      if (text.includes('insert into public.program_change_actions') && inserts++ === 0) {
+        throw new Error('connection reset')
+      }
+      return echo(text, params)
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const changes = [adjustChange(4, 'Жим лёжа'), adjustChange(4, 'Разводка гантелей')]
+
+    await applyAdjustVolumeChanges(client, {
+      userId: 'oleg',
+      changes,
+      programDays: twoChestExercises(),
+      history: historyWithSets('Грудь', 'Жим лёжа', 10),
+      e1rmHistories: [],
+      ageRecoveryPhase: 'adult',
+      now: NOW,
+    })
+
+    expect(changes[0].appliedAction).toBeUndefined()
+    expect(changes[1].appliedAction).toMatchObject({ status: 'applied', after: { setsCount: 4 } })
+  })
+
+  it('не трогает изменения других типов', async () => {
+    const client = { query: vi.fn() }
+    const changes = [{ type: 'swap_exercise', description: '', rationale: '', exerciseName: 'Жим лёжа', priority: 'low' }]
+
+    await applyAdjustVolumeChanges(client, {
+      userId: 'oleg',
+      changes,
+      programDays: twoChestExercises(),
+      history: [],
+      e1rmHistories: [],
+      ageRecoveryPhase: 'adult',
+      now: NOW,
+    })
+
+    expect(changes[0].appliedAction).toBeUndefined()
+    expect(client.query).not.toHaveBeenCalled()
+  })
+})
+
 describe('revertProgramChangeAction (#420)', () => {
   function actionRow(status = 'applied') {
     return {
@@ -285,5 +401,34 @@ describe('revertProgramChangeAction (#420)', () => {
 
     expect(client.query).toHaveBeenCalledWith('rollback')
     expect(client.query).not.toHaveBeenCalledWith('commit')
+  })
+})
+
+describe('refreshAppliedActionStatuses (#420)', () => {
+  // Кэш недельного обзора хранит статус на момент применения; после отмены
+  // кэш должен показать reverted, а не снова «применено».
+  it('подтягивает статус и время отмены из журнала', async () => {
+    const client = {
+      query: vi.fn(async () => ({
+        rows: [{ id: 'action-1', status: 'reverted', reverted_at: '2026-07-10T08:00:00.000Z' }],
+        rowCount: 1,
+      })),
+    }
+    const changes = [
+      { ...adjustChange(5), appliedAction: { id: 'action-1', status: 'applied', revertedAt: null } },
+      { ...adjustChange(4, 'Разводка гантелей') },
+    ]
+
+    await refreshAppliedActionStatuses(client, 'oleg', changes)
+
+    expect(changes[0].appliedAction).toMatchObject({ status: 'reverted', revertedAt: '2026-07-10T08:00:00.000Z' })
+    expect(changes[1].appliedAction).toBeUndefined()
+    expect(client.query.mock.calls[0][1]).toEqual(['oleg', ['action-1']])
+  })
+
+  it('без применённых действий в БД не ходит', async () => {
+    const client = { query: vi.fn() }
+    await refreshAppliedActionStatuses(client, 'oleg', [adjustChange(5)])
+    expect(client.query).not.toHaveBeenCalled()
   })
 })
