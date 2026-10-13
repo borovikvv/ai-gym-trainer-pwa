@@ -23,6 +23,7 @@ interface PlanPageProps {
   onSavePlannedWorkoutDate: (workoutId: string) => void
   onRegeneratePlannedWorkout: (workoutId: string) => void
   onCancelPlannedWorkout: (workoutId: string) => void
+  onMarkPlannedWorkoutUnavailable: (workoutId: string) => void
   // Navigation + workout actions
   onSelectWorkoutDay: (day: WorkoutDay) => void
   onStartWorkout: (day: WorkoutDay) => void
@@ -65,6 +66,7 @@ export function PlanPage(props: PlanPageProps) {
       onSavePlannedWorkoutDate={props.onSavePlannedWorkoutDate}
       onRegeneratePlannedWorkout={props.onRegeneratePlannedWorkout}
       onCancelPlannedWorkout={props.onCancelPlannedWorkout}
+      onMarkPlannedWorkoutUnavailable={props.onMarkPlannedWorkoutUnavailable}
       onStartEditExercise={props.onStartEditExercise}
       formatDateOnly={formatDateOnly}
       formatWeight={formatWeight}

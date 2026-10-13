@@ -5,6 +5,7 @@ import { users as fallbackUsers, workoutDays as fallbackWorkoutDays } from './mo
 import type { BlockSummary, ExercisePlan, UserProfile, WorkoutDay } from '../../shared/types'
 import { formatWeight } from '../lib/format'
 import { apiFetch } from './apiAuth'
+import type { AppliedActionLike } from '../components/weeklyReview'
 
 const apiBaseUrl = import.meta.env.MODE === 'test' ? undefined : (import.meta.env.VITE_API_BASE_URL as string | undefined)
 
@@ -429,6 +430,32 @@ export async function generatePlannedWorkoutInApi(
   if (!response.ok) throw new Error(`API planned workout generate failed: ${response.status}`)
   const data = await response.json() as { plannedWorkouts?: Array<Omit<PlannedWorkout, 'workoutDay'> & { workoutDay: ApiWorkoutDay | WorkoutDay }> }
   return (data.plannedWorkouts ?? []).map(mapApiPlannedWorkout)
+}
+
+/**
+ * Issue #445: атлет отмечает день недоступным. Сервер сам помечает дату и
+ * переносит ближайшую подходящую тренировку той же недели; `moved` — запись
+ * журнала перемещения (applied/unmatched) или null, если переносить нечего.
+ */
+export async function markPlannedWorkoutUnavailableInApi(
+  id: string,
+  fetcher: typeof fetch = apiFetch,
+  baseUrl: string | undefined = apiBaseUrl,
+): Promise<{ plannedWorkouts: PlannedWorkout[]; moved: AppliedActionLike | null }> {
+  if (!baseUrl) return { plannedWorkouts: [], moved: null }
+  const response = await fetcher(`${baseUrl}/api/planned-workouts/${id}/unavailable`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) throw new Error(`API planned workout unavailable failed: ${response.status}`)
+  const data = await response.json() as {
+    plannedWorkouts?: Array<Omit<PlannedWorkout, 'workoutDay'> & { workoutDay: ApiWorkoutDay | WorkoutDay }>
+    moved?: AppliedActionLike | null
+  }
+  return {
+    plannedWorkouts: (data.plannedWorkouts ?? []).map(mapApiPlannedWorkout),
+    moved: data.moved ?? null,
+  }
 }
 
 export async function planTrainingWeekInApi(
