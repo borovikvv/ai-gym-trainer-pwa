@@ -43,7 +43,7 @@ interface ProgramReviewInput {
   now: Date
 }
 
-export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focus' | 'add_deload'
+export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focus' | 'add_deload' | 'move_workout'
 
 /** Issue #420: статус применённого/отменённого действия над планом. */
 export type ProgramChangeActionStatus = 'applied' | 'clamped' | 'unmatched' | 'reverted'
@@ -83,8 +83,9 @@ export interface ProgramChangeAppliedAction {
   programExerciseId: string
   changeType: ProgramChangeType
   status: ProgramChangeActionStatus
-  before: AdjustVolumeSnapshot | SwapExerciseSnapshot | null
-  after: AdjustVolumeSnapshot | SwapExerciseSnapshot | null
+  before: AdjustVolumeSnapshot | SwapExerciseSnapshot | { scheduledDate: string } | null
+  /** Issue #444: add_deload хранит назначенную неделю в after.weekStart. */
+  after: AdjustVolumeSnapshot | SwapExerciseSnapshot | { scheduledDate: string } | { weekStart: string } | null
   rationale: string | null
   safetyNote: string | null
   appliedAt: string | null
@@ -101,6 +102,8 @@ export interface ProgramChange {
   newExerciseId?: string
   newExerciseName?: string
   newSetsCount?: number
+  /** Issue #445: id planned_workouts для move_workout (исполняется детерминированно, не из LLM). */
+  plannedWorkoutId?: string
   /** Issue #443: для change_focus — группа мышц, чью недельную цель подходов меняем. */
   muscleGroup?: string
   priority: 'high' | 'medium' | 'low'

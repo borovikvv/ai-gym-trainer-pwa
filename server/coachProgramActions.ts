@@ -14,13 +14,13 @@
 // Двигатель не пишет килограммы и повторы — только число подходов. Веса
 // пересчитает генератор плана после применения.
 
-import type { AgeRecoveryPhase, CoachMemory, CoachState, WorkoutHistoryEntry } from '../shared/types.js'
+import type { AgeRecoveryPhase, CoachMemory, CoachState, MesocycleState, WorkoutHistoryEntry } from '../shared/types.js'
 import type { DbClient } from './dbClient.js'
 import type { AdjustVolumeSnapshot, ProgramChange, ProgramChangeAppliedAction, SwapExerciseSnapshot } from './coachProgramReview.js'
 import { buildMuscleVolumeSnapshot } from './buildVolumeSnapshot.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
-import { updateProgramExercise } from './services/programService.js'
+import { updateProgramExercise, loadUserProfile } from './services/programService.js'
 import { loadWeeklyVolumeTargets, updateWeeklyVolumeTargetSets } from './weeklyVolumeTargets.js'
 import { assertAllowedRowOwner } from './privateUsers.js'
 import { formatWeight } from '../shared/format.js'
@@ -29,6 +29,9 @@ import { normalizeExerciseLibrary } from './workoutExerciseSelection.js'
 import { emptyPreferences, hasActivePainFlag, isBannedExercise, isCoachMemoryRestricted, isHighFatigue, normalizeText } from './workoutExerciseEligibility.js'
 import { applyPrescription } from './workoutLoadPrescription.js'
 import { getUserTrainingPolicy } from './userTrainingPolicies.js'
+import { dateToDateOnly, endOfWeek, startOfWeek } from './utils.js'
+import { loadUnavailableDates } from './services/athleteAvailability.js'
+import { cascadeRegenerateFutureWorkouts, regeneratePlannedWorkout } from './services/plannedWorkoutService.js'
 
 interface ProgramExerciseForActions {
   id?: string
@@ -96,6 +99,28 @@ export interface RevertProgramChangeInput {
   actionId: string
   userId: string
   now?: Date
+}
+
+/** Issue #444: вход применения add_deload — назначение разгрузочной недели. */
+export interface ApplyAddDeloadInput {
+  userId: string
+  change: ProgramChange
+  mesocycleState: MesocycleState | null
+  /** Момент последнего применённого агентом add_deload (для гейта «не чаще цикла»). */
+  latestAppliedAddDeloadAt: Date | string | null
+  now: Date
+}
+
+/**
+ * Issue #445: перенос тренировки под ограничение атлета. Вызывается синхронно,
+ * когда атлет отметил дату недоступной (POST /planned-workouts/:id/unavailable),
+ * а не через недельный кэш обзора: ждать раз-в-неделю обновления противоречит
+ * сценарию «уезжаю в четверг».
+ */
+export interface ApplyMoveWorkoutInput {
+  userId: string
+  plannedWorkoutId: string
+  now: Date
 }
 
 /** program_exercises.sets_count: check (sets_count > 0). */
@@ -292,6 +317,263 @@ export async function applyChangeFocusChanges(
       change.appliedAction = await applyChangeFocusChange(client, { ...input, change })
     } catch (error) {
       console.error('applyChangeFocusChange (non-fatal):', error instanceof Error ? error.message : error)
+    }
+  }
+}
+
+/**
+ * Issue #445: перенос тренировки на другой день той же недели, когда атлет
+ * отметил исходный день недоступным. Детерминированно и без LLM: гейт подбирает
+ * первую свободную дату недели, которая не нарушает восстановление (#225) и не
+ * отмечена недоступной. Нет кандидата — пишем status=unmatched и план не трогаем
+ * (это и есть «перенос, нарушающий восстановление, не применяется»).
+ *
+ * Возвращает null, когда переносить нечего (тренировка не найдена или её статус
+ * не planned/generated) — в этом случае журнал не пишется.
+ */
+export async function applyMoveWorkoutChange(
+  client: DbClient,
+  { userId, plannedWorkoutId, now }: ApplyMoveWorkoutInput,
+): Promise<ProgramChangeAppliedAction | null> {
+  const current = await client.query(
+    `select id, user_id, scheduled_date, status, workout_day_name
+     from public.planned_workouts where id = $1`,
+    [plannedWorkoutId],
+  )
+  const row = current.rows[0]
+  if (!row) return null
+  assertAllowedRowOwner(row)
+  const status = String(row.status ?? '')
+  if (status !== 'planned' && status !== 'generated') return null
+
+  const originalDate = dateToDateOnly(row.scheduled_date as Date | string)
+  const weekStart = dateToDateOnly(startOfWeek(new Date(`${originalDate}T00:00:00`)))
+  const weekEnd = dateToDateOnly(endOfWeek(new Date(`${originalDate}T00:00:00`)))
+
+  // Сиблинги недели задают занятые даты; текущая тренировка исключена — её
+  // исходная дата станет свободной после переноса и не считается занятой.
+  const siblings = await client.query(
+    `select scheduled_date from public.planned_workouts
+     where user_id = $1
+       and id <> $2
+       and scheduled_date between $3::date and $4::date
+       and status in ('planned', 'generated', 'moved', 'completed')`,
+    [userId, plannedWorkoutId, weekStart, weekEnd],
+  )
+  const occupied = new Set(siblings.rows.map((sibling) => dateToDateOnly(sibling.scheduled_date as Date | string)))
+  const unavailable = new Set(await loadUnavailableDates(client, userId, weekStart, weekEnd))
+
+  const profile = await loadUserProfile(client, userId)
+  const workoutsPerWeek = Number(profile?.workoutsPerWeek ?? 3)
+
+  const candidate = findMoveCandidate({
+    originalDate,
+    weekStart,
+    weekEnd,
+    today: dateToDateOnly(now),
+    occupied,
+    unavailable,
+    workoutsPerWeek,
+  })
+
+  if (!candidate) {
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        plannedWorkoutId,
+        'move_workout',
+        'unmatched',
+        JSON.stringify({ scheduledDate: originalDate }),
+        null,
+        `Атлет отметил «${originalDate}» недоступным`,
+        'нет свободной даты в пределах недели без нарушения восстановления',
+        null,
+      ],
+    )
+    return mapActionRow(result.rows[0], userId, null)
+  }
+
+  const action = await withTransaction(client, async () => {
+    // Сначала журнал, потом мутация: если вставка не прошла (например, не
+    // накатили миграцию), дата тренировки не меняется и «тихой» порчи нет.
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        plannedWorkoutId,
+        'move_workout',
+        'applied',
+        JSON.stringify({ scheduledDate: originalDate }),
+        JSON.stringify({ scheduledDate: candidate }),
+        `Атлет отметил «${originalDate}» недоступным`,
+        'перенос в пределах недели, разрыв восстановления не нарушен',
+        now.toISOString(),
+      ],
+    )
+    await client.query(
+      `update public.planned_workouts set scheduled_date = $2::date where id = $1`,
+      [plannedWorkoutId, candidate],
+    )
+    await regeneratePlannedWorkout(client, { plannedWorkoutId, userId, scheduledDate: candidate })
+    await cascadeRegenerateFutureWorkouts(client, { userId })
+    return mapActionRow(result.rows[0], userId, null)
+  })
+  return action
+}
+
+/**
+ * Первая дата недели от max(сегодня, понедельник) до воскресенья, свободная от
+ * занятых и недоступных дней и не дающая разрыв ровно в 1 день до соседней
+ * тренировки, когда неделя короткая (workoutsPerWeek <= 3, #225). Иначе null.
+ */
+function findMoveCandidate({
+  originalDate,
+  weekStart,
+  weekEnd,
+  today,
+  occupied,
+  unavailable,
+  workoutsPerWeek,
+}: {
+  originalDate: string
+  weekStart: string
+  weekEnd: string
+  today: string
+  occupied: Set<string>
+  unavailable: Set<string>
+  workoutsPerWeek: number
+}): string | null {
+  let cursor = today > weekStart ? today : weekStart
+  while (cursor <= weekEnd) {
+    if (
+      cursor !== originalDate
+      && !occupied.has(cursor)
+      && !unavailable.has(cursor)
+      && !violatesRecoveryGap(cursor, occupied, workoutsPerWeek)
+    ) {
+      return cursor
+    }
+    cursor = addDaysDateOnly(cursor, 1)
+  }
+  return null
+}
+
+/** Соседняя тренировка через день при короткой неделе — нарушение восстановления. */
+function violatesRecoveryGap(candidate: string, occupied: Set<string>, workoutsPerWeek: number): boolean {
+  if (workoutsPerWeek > 3) return false
+  for (const date of occupied) {
+    if (Math.abs(daysBetweenDateOnly(date, candidate)) === 1) return true
+  }
+  return false
+}
+
+function addDaysDateOnly(dateOnly: string, days: number): string {
+  const base = new Date(`${dateOnly}T00:00:00`)
+  if (Number.isNaN(base.getTime())) return dateOnly
+  base.setDate(base.getDate() + days)
+  return dateToDateOnly(base)
+}
+
+function daysBetweenDateOnly(from: string, to: string): number {
+  const fromMs = new Date(`${from}T00:00:00`).getTime()
+  const toMs = new Date(`${to}T00:00:00`).getTime()
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return Number.POSITIVE_INFINITY
+  return Math.round((toMs - fromMs) / 86_400_000)
+}
+
+/**
+ * Issue #444: назначение разгрузочной недели агентом. Гейт детерминированный:
+ *  - неделя уже разгрузочная (календарь или MRV/боль сработали раньше агента);
+ *  - первая неделя цикла — разгрузка слишком рано;
+ *  - агент уже назначал разгрузку в этом цикле (cycleStartedOn).
+ * Не прошёл гейт — unmatched: плана не касались, строки в БД нет.
+ */
+export async function applyAddDeloadChange(
+  client: DbClient,
+  input: ApplyAddDeloadInput,
+): Promise<ProgramChangeAppliedAction> {
+  const { userId, change, mesocycleState, latestAppliedAddDeloadAt, now } = input
+
+  if (mesocycleState?.isDeload) {
+    return unmatchedAction(userId, '', NaN, change, now, 'неделя уже разгрузочная')
+  }
+  if (mesocycleState && mesocycleState.weekInCycle <= 1) {
+    return unmatchedAction(userId, '', NaN, change, now, 'первая неделя цикла — разгрузка слишком рано')
+  }
+  if (latestAppliedAddDeloadAt && mesocycleState?.cycleStartedOn) {
+    const last = new Date(latestAppliedAddDeloadAt).getTime()
+    const cycleStart = new Date(`${mesocycleState.cycleStartedOn}T00:00:00`).getTime()
+    if (Number.isFinite(last) && Number.isFinite(cycleStart) && last >= cycleStart) {
+      return unmatchedAction(userId, '', NaN, change, now, 'разгрузка уже назначена агентом в этом цикле')
+    }
+  }
+
+  const weekStart = dateToDateOnly(startOfWeek(now))
+  return withTransaction(client, async () => {
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        '',
+        change.type,
+        'applied',
+        null,
+        JSON.stringify({ weekStart }),
+        change.rationale ?? null,
+        `агентом назначена разгрузочная неделя с ${weekStart}`,
+        now.toISOString(),
+      ],
+    )
+    return mapActionRow(result.rows[0], userId, change)
+  })
+}
+
+/** Число дней от now до конца календарной недели, не меньше одного. */
+function daysToEndOfWeek(now: Date): number {
+  return Math.max(1, Math.ceil((endOfWeek(now).getTime() - now.getTime()) / 86_400_000))
+}
+
+/**
+ * Issue #444: применяет add_deload из недельного обзора. Второе назначение в
+ * том же проходе блокируется локальным флагом (без похода в БД). После первого
+ * успешного применения оставшиеся запланированные тренировки недели
+ * пересобираются, чтобы стать разгрузочными. Сбой одного изменения не роняет
+ * обзор.
+ */
+export async function applyAddDeloadChanges(
+  client: DbClient,
+  { changes, ...input }: Omit<ApplyAddDeloadInput, 'change'> & { changes: ProgramChange[] },
+): Promise<void> {
+  let appliedThisPass = false
+  for (const change of changes) {
+    if (change.type !== 'add_deload') continue
+    try {
+      if (appliedThisPass) {
+        change.appliedAction = unmatchedAction(input.userId, '', NaN, change, input.now, 'разгрузка уже назначена в этом обзоре')
+        continue
+      }
+      const action = await applyAddDeloadChange(client, { ...input, change })
+      change.appliedAction = action
+      if (action.status === 'applied') {
+        appliedThisPass = true
+        try {
+          await cascadeRegenerateFutureWorkouts(client, { userId: input.userId, horizonDays: daysToEndOfWeek(input.now) })
+        } catch (error) {
+          console.error('applyAddDeloadChanges cascade (non-fatal):', error instanceof Error ? error.message : error)
+        }
+      }
+    } catch (error) {
+      console.error('applyAddDeloadChange (non-fatal):', error instanceof Error ? error.message : error)
     }
   }
 }
@@ -516,7 +798,7 @@ export async function revertProgramChangeAction(
   }
   if (action.status === 'reverted') return action
 
-  return withTransaction(client, async () => {
+  const reverted = await withTransaction(client, async () => {
     // Статус и мутация тоже в одной транзакции: если восстановление упадёт,
     // запись останется applied и повторный revert снова сработает.
     //
@@ -534,10 +816,37 @@ export async function revertProgramChangeAction(
     await restoreSnapshot(client, action)
     return mapActionRow(updated.rows[0], userId, null)
   })
+  // Issue #444: после снятия назначения пересобираем неделю, иначе разгрузочные
+  // тренировки останутся разгрузочными. Сбой не фатален — статус уже отменён.
+  if (action.changeType === 'add_deload') {
+    try {
+      await cascadeRegenerateFutureWorkouts(client, { userId, horizonDays: daysToEndOfWeek(now) })
+    } catch (error) {
+      console.error('revertProgramChangeAction cascade (non-fatal):', error instanceof Error ? error.message : error)
+    }
+  }
+  return reverted
 }
 
 /** Issue #442: восстанавливает предписание слота из снимка before. */
 async function restoreSnapshot(client: DbClient, action: ProgramChangeAppliedAction): Promise<void> {
+  if (action.changeType === 'move_workout') {
+    // Issue #445: у move_workout program_exercise_id хранит id тренировки,
+    // before.scheduledDate — прежнюю дату. Возвращаем дату и пересобираем.
+    const beforeScheduledDate = (action.before as { scheduledDate: string } | null)?.scheduledDate
+    if (beforeScheduledDate) {
+      await client.query(
+        `update public.planned_workouts set scheduled_date = $2::date where id = $1`,
+        [action.programExerciseId, beforeScheduledDate],
+      )
+      await regeneratePlannedWorkout(client, { plannedWorkoutId: action.programExerciseId, userId: action.userId, scheduledDate: beforeScheduledDate })
+      await cascadeRegenerateFutureWorkouts(client, { userId: action.userId })
+    }
+    return
+  }
+  // Issue #444: у add_deload нет упражнения — снимаем только назначение
+  // (неделя пересобирается после транзакции).
+  if (action.changeType === 'add_deload') return
   if (action.changeType === 'change_focus') {
     const sets = Number((action.before as AdjustVolumeSnapshot | null)?.setsCount)
     if (Number.isFinite(sets)) {

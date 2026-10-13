@@ -20,6 +20,8 @@ vi.mock('./services/programService.js', () => ({
   loadUserWorkoutDays: vi.fn().mockResolvedValue([]),
   loadExerciseLibrary: vi.fn().mockResolvedValue([]),
   loadRecentHistory: vi.fn().mockResolvedValue([]),
+  // Issue #444: генератор читает назначение разгрузки агентом.
+  loadLatestAppliedAddDeload: vi.fn().mockResolvedValue(null),
 }))
 vi.mock('./coachState.js', () => ({ computeCoachState: vi.fn().mockReturnValue({}) }))
 vi.mock('./coachMemory.js', () => ({ computeCoachMemory: vi.fn().mockReturnValue({}) }))

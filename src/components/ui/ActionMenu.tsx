@@ -6,6 +6,8 @@ export type ActionMenuItem = {
   label: string
   onSelect: () => void
   tone?: 'neutral' | 'danger'
+  /** Stable hook for tests (project rule 2026-07-19: no coupling to label text). */
+  testId?: string
 }
 
 type ActionMenuProps = {
@@ -85,6 +87,7 @@ export function ActionMenu({ title, open, actions, children, onClose }: ActionMe
               className={`action-menu__item ${action.tone === 'danger' ? 'action-menu__item--danger' : ''}`}
               key={`${action.label}-${index}`}
               type="button"
+              data-testid={action.testId}
               onClick={() => {
                 action.onSelect()
                 onClose()

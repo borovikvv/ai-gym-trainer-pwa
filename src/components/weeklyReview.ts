@@ -41,6 +41,8 @@ export type AppliedActionSnapshot = {
   setsCount?: number
   exerciseId?: string
   exerciseName?: string
+  /** Issue #444: add_deload не меняет подходы — хранит назначенную неделю. */
+  weekStart?: string
 }
 
 /** Issue #420: что недельный агент сделал с планом (запись из program_change_actions). */
@@ -59,6 +61,10 @@ function hasExerciseSnapshot(action?: AppliedActionLike | null): boolean {
 /** Строка о применении; пусто — изменение осталось предложением. */
 export function appliedActionLabel(action?: AppliedActionLike | null): string {
   if (!action) return ''
+  // Issue #444: назначение разгрузки агентом показывает неделю, а не подходы.
+  if (action.status === 'applied' && action.after && 'weekStart' in action.after) {
+    return `применено: неделя с ${action.after.weekStart} — разгрузка`
+  }
   const before = action.before?.setsCount
   const after = action.after?.setsCount
   const beforeName = (action.before?.exerciseName ?? '').trim()
@@ -98,7 +104,8 @@ export function canRevertAction(action?: AppliedActionLike | null): boolean {
 function isNoOp(action?: AppliedActionLike | null): boolean {
   if (hasExerciseSnapshot(action)) return false
   const before = action?.before?.setsCount
-  return Number.isFinite(before) && before === action?.after?.setsCount
+  const after = action?.after && 'setsCount' in action.after ? action.after.setsCount : undefined
+  return Number.isFinite(before) && before === after
 }
 
 /** Short "what to do" subtitle, truncated at a word boundary (never mid-word). */
