@@ -40,6 +40,7 @@ vi.mock('./coachProgramReview.js', () => ({
 vi.mock('./coachProgramActions.js', () => ({
   applyAdjustVolumeChanges: vi.fn(),
   applyChangeFocusChanges: vi.fn(),
+  applySwapExerciseChanges: vi.fn(),
   refreshAppliedActionStatuses: vi.fn(),
   revertProgramChangeAction: vi.fn(),
 }))
@@ -64,9 +65,9 @@ vi.mock('../../src/domain/estimatedOneRepMax.js', () => ({
 const { coachRoutes } = await import('./routes/coachRoutes.js')
 const { pool } = await import('./db.js')
 const { reviewProgram } = await import('./coachProgramReview.js')
-const { applyAdjustVolumeChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { applyAdjustVolumeChanges, applySwapExerciseChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
 const { buildPersonalModelNote, loadAthleteSignalsNote } = await import('./coachProgramReviewContext.js')
-const { loadUserProfile, loadUserWorkoutDays, loadCoachMemoryForUser, loadRecentHistory } = await import('./services/programService.js')
+const { loadUserProfile, loadUserWorkoutDays, loadCoachMemoryForUser, loadRecentHistory, loadExerciseLibrary } = await import('./services/programService.js')
 
 // Helper: find a route handler by path + method in the Express router stack.
 function findRoute(method, path) {
@@ -317,6 +318,66 @@ describe('Issue #420: применение и отмена изменения п
     expect(applyAdjustVolumeChanges).toHaveBeenCalledWith(connectedClient, expect.objectContaining({ userId: 'oleg' }))
     expect(res.body.review.changes[0].appliedAction).toEqual({ id: 'a1', status: 'applied' })
     expect(connectedClient.release).toHaveBeenCalled()
+  })
+
+  // Issue #442: предложение swap_exercise внутри белого списка применяется и
+  // возвращается в appliedAction со снимками до/после.
+  it('GET /coach/program-review применяет swap_exercise из белого списка', async () => {
+    vi.stubEnv('ALLOWED_USER_IDS', '')
+    vi.mocked(reviewProgram).mockResolvedValue({
+      date: NOW_ISO,
+      summary: 'ok',
+      rating: 'good',
+      changes: [{
+        type: 'swap_exercise',
+        description: 'Заменить упражнение',
+        rationale: 'застой',
+        exerciseName: 'Жим штанги лёжа',
+        newExerciseName: 'Жим гантелей лёжа',
+        priority: 'high',
+      }],
+      nextWeekFocus: 'держим',
+    })
+    vi.mocked(loadUserProfile).mockResolvedValue({
+      userId: 'oleg', goal: 'сила', level: 'intermediate', age: 30,
+      workoutsPerWeek: 3, bannedExercises: [], preferredExercises: [],
+    })
+    vi.mocked(loadUserWorkoutDays).mockResolvedValue([{
+      name: 'День A',
+      exercises: [{
+        name: 'Жим штанги лёжа', programExerciseId: 'pe-1', exerciseId: 'bench-barbell',
+        muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 60, weightStep: 2.5, restSeconds: 90,
+      }],
+    }])
+    vi.mocked(loadCoachMemoryForUser).mockResolvedValue({
+      coachMemory: null, coachState: null, e1rmHistories: [], profile: null,
+      history: [], blockGoal: null, weeklyVolume: null,
+    })
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+    vi.mocked(loadExerciseLibrary).mockResolvedValue([
+      { id: 'bench-barbell', name: 'Жим штанги лёжа', muscleGroup: 'Грудь', equipment: 'barbell', exerciseType: 'compound', movementPattern: 'push' },
+      { id: 'bench-dumbbell', name: 'Жим гантелей лёжа', muscleGroup: 'Грудь', equipment: 'dumbbell', exerciseType: 'compound', movementPattern: 'push' },
+    ])
+    vi.mocked(applySwapExerciseChanges).mockImplementationOnce(async (_client, { changes }) => {
+      changes[0].appliedAction = {
+        id: 'a2',
+        status: 'applied',
+        before: { exerciseId: 'bench-barbell', exerciseName: 'Жим штанги лёжа', setsCount: 3 },
+        after: { exerciseId: 'bench-dumbbell', exerciseName: 'Жим гантелей лёжа', setsCount: 3 },
+      }
+    })
+
+    const res = makeRes()
+    await handlerOf('get', '/coach/program-review/:userId')(
+      { params: { userId: 'oleg' }, body: {} },
+      res,
+    )
+
+    expect(loadExerciseLibrary).toHaveBeenCalled()
+    expect(applySwapExerciseChanges).toHaveBeenCalledWith(connectedClient, expect.objectContaining({ userId: 'oleg' }))
+    expect(res.body.review.changes[0].appliedAction.status).toBe('applied')
+    expect(res.body.review.changes[0].appliedAction.after.exerciseId)
+      .not.toBe(res.body.review.changes[0].appliedAction.before.exerciseId)
   })
 
   // Агент читает личную модель (#418) и ответы атлета (#419); недоступная

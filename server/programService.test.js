@@ -107,3 +107,39 @@ describe('updateProgramExercise — частичное обновление не
     expect(params[1]).toBe(4)
   })
 })
+
+// Issue #442: swap_exercise меняет само упражнение слота и цель дня. Новые
+// колонки тоже идут через coalesce — старые вызовы (adjust_volume) их не
+// передают и не затирают.
+describe('updateProgramExercise — замена упражнения (#442)', () => {
+  it('с exerciseId и todayGoal UPDATE пишет exercise_id и today_goal, остальное coalesce', async () => {
+    const client = {
+      query: vi.fn().mockImplementation(async (text) => {
+        if (text.includes('where pe.id = $1')) return { rows: [{ user_id: 'oleg' }], rowCount: 1 }
+        if (text.includes('update public.program_exercises')) return { rows: [{ id: 'pe-1' }], rowCount: 1 }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    const result = await updateProgramExercise(client, {
+      id: 'pe-1',
+      exerciseId: 'bench-dumbbell',
+      setsCount: 3,
+      repMin: 8,
+      repMax: 12,
+      targetWeight: 30,
+      weightStep: 2.5,
+      restSeconds: 90,
+      todayGoal: '30×8/30×8/30×8',
+    })
+
+    expect(result).toEqual({ id: 'pe-1' })
+    const [sql, params] = client.query.mock.calls.find(([text]) => text.includes('update public.program_exercises'))
+    for (const column of ['exercise_id', 'today_goal']) {
+      expect(sql).toMatch(new RegExp(`${column}\\s*=\\s*coalesce\\(`, 'i'))
+    }
+    expect(params[0]).toBe('pe-1')
+    expect(params[8]).toBe('bench-dumbbell')
+    expect(params[9]).toBe('30×8/30×8/30×8')
+  })
+})

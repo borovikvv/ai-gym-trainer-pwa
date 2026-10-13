@@ -6,7 +6,7 @@ vi.mock('./services/programService.js', () => ({
   updateProgramExercise: vi.fn(),
 }))
 
-const { applyAdjustVolumeChange, applyAdjustVolumeChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { applyAdjustVolumeChange, applyAdjustVolumeChanges, applySwapExerciseChange, applySwapExerciseChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
 const { updateProgramExercise } = await import('./services/programService.js')
 
 const NOW = new Date('2026-07-09T12:00:00Z')
@@ -325,6 +325,180 @@ describe('applyAdjustVolumeChanges (#420)', () => {
 
     expect(changes[0].appliedAction).toBeUndefined()
     expect(client.query).not.toHaveBeenCalled()
+  })
+})
+
+// Issue #442: замена упражнения применяется из детерминированного белого списка
+// генератора. Вес/повторы нового упражнения считает applyPrescription.
+describe('applySwapExerciseChange (#442)', () => {
+  const library = [
+    { id: 'bench-barbell', name: 'Жим штанги лёжа', muscleGroup: 'Грудь', equipment: 'barbell', exerciseType: 'compound', movementPattern: 'push', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 60, weightStep: 2.5, restSeconds: 90 },
+    { id: 'bench-dumbbell', name: 'Жим гантелей лёжа', muscleGroup: 'Грудь', equipment: 'dumbbell', exerciseType: 'compound', movementPattern: 'push', setsCount: 3, repMin: 8, repMax: 12, targetWeight: 30, weightStep: 2.5, restSeconds: 90 },
+    { id: 'squat', name: 'Присед', muscleGroup: 'Ноги', equipment: 'barbell', exerciseType: 'compound', movementPattern: 'squat', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 80, weightStep: 5, restSeconds: 120 },
+  ]
+
+  function swapProgramDays() {
+    return [{
+      name: 'День A',
+      exercises: [{
+        name: 'Жим штанги лёжа', programExerciseId: 'pe-1', exerciseId: 'bench-barbell', id: 'bench-barbell',
+        muscleGroup: 'Грудь', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 60, weightStep: 2.5, restSeconds: 90,
+      }],
+    }]
+  }
+
+  function swapChange(newExerciseName, exerciseName = 'Жим штанги лёжа') {
+    return { type: 'swap_exercise', description: '', rationale: 'застой', exerciseName, newExerciseName, priority: 'high' }
+  }
+
+  function swapInput(overrides = {}) {
+    return {
+      userId: 'oleg',
+      change: swapChange('Жим гантелей лёжа'),
+      programDays: swapProgramDays(),
+      exerciseLibrary: library,
+      coachState: null,
+      coachMemory: null,
+      profile: { userId: 'oleg', age: 30, bannedExercises: [] },
+      history: [],
+      now: NOW,
+      ...overrides,
+    }
+  }
+
+  it('применяет замену из белого списка и пишет снимок before/after', async () => {
+    const client = insertClient()
+    const result = await applySwapExerciseChange(client, swapInput())
+
+    expect(result.status).toBe('applied')
+    expect(result.before.exerciseId).toBe('bench-barbell')
+    expect(result.after.exerciseId).toBe('bench-dumbbell')
+    expect(updateProgramExercise).toHaveBeenCalledWith(client, expect.objectContaining({
+      id: 'pe-1',
+      exerciseId: 'bench-dumbbell',
+    }))
+  })
+
+  it('вне белого списка (другая группа) — unmatched, БД не трогаем', async () => {
+    const client = { query: vi.fn() }
+    const result = await applySwapExerciseChange(client, swapInput({ change: swapChange('Присед') }))
+
+    expect(result.status).toBe('unmatched')
+    expect(updateProgramExercise).not.toHaveBeenCalled()
+    expect(client.query).not.toHaveBeenCalled()
+  })
+
+  it('кандидат той же группы в бан-листе — unmatched', async () => {
+    const client = { query: vi.fn() }
+    const result = await applySwapExerciseChange(client, swapInput({
+      profile: { userId: 'oleg', age: 30, bannedExercises: ['Жим гантелей лёжа'] },
+    }))
+
+    expect(result.status).toBe('unmatched')
+    expect(updateProgramExercise).not.toHaveBeenCalled()
+  })
+
+  // Issue #171: подростку на осевом свободновесном движении нельзя назначить
+  // подход короче пяти повторов. Проверяем, что метаданные и профиль реально
+  // дошли до applyPrescription: убирать их — регрессия ровно на #171.
+  it('подросток: осевое свободновесное движение получает repMin не ниже 5', async () => {
+    const client = insertClient()
+    const teenLibrary = [
+      library[0],
+      { ...library[1], repMin: 3, repMax: 6 },
+      library[2],
+    ]
+    const result = await applySwapExerciseChange(client, swapInput({
+      profile: { userId: 'oleg', age: 15, bannedExercises: [] },
+      exerciseLibrary: teenLibrary,
+    }))
+
+    expect(result.status).toBe('applied')
+    expect(result.after.exerciseId).toBe('bench-dumbbell')
+    expect(result.after.repMin).toBeGreaterThanOrEqual(5)
+    expect(updateProgramExercise.mock.calls.at(-1)[1].repMin).toBeGreaterThanOrEqual(5)
+  })
+
+  it('не трогает изменения других типов и сбой одного не роняет проход', async () => {
+    const client = insertClient()
+    const echo = client.query.getMockImplementation()
+    let inserts = 0
+    client.query.mockImplementation(async (text, params) => {
+      if (text.includes('insert into public.program_change_actions') && inserts++ === 0) {
+        throw new Error('connection reset')
+      }
+      return echo(text, params)
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const changes = [
+      { ...swapChange('Жим гантелей лёжа'), appliedAction: undefined },
+      { type: 'adjust_volume', description: '', rationale: '', exerciseName: 'Жим штанги лёжа', newSetsCount: 4, priority: 'low' },
+      swapChange('Жим гантелей лёжа'),
+    ]
+
+    await applySwapExerciseChanges(client, {
+      userId: 'oleg',
+      changes,
+      programDays: swapProgramDays(),
+      exerciseLibrary: library,
+      coachState: null,
+      coachMemory: null,
+      profile: { userId: 'oleg', age: 30, bannedExercises: [] },
+      history: [],
+      now: NOW,
+    })
+
+    expect(changes[0].appliedAction).toBeUndefined()
+    expect(changes[1].appliedAction).toBeUndefined()
+    expect(changes[2].appliedAction).toMatchObject({ status: 'applied' })
+  })
+})
+
+describe('revertProgramChangeAction — swap_exercise (#442)', () => {
+  function swapActionRow() {
+    return {
+      id: 'action-swap',
+      user_id: 'oleg',
+      program_exercise_id: 'pe-1',
+      change_type: 'swap_exercise',
+      status: 'applied',
+      before: { exerciseId: 'bench-barbell', exerciseName: 'Жим штанги лёжа', setsCount: 3, repMin: 8, repMax: 10, targetWeight: 60, weightStep: 2.5, restSeconds: 90 },
+      after: { exerciseId: 'bench-dumbbell', exerciseName: 'Жим гантелей лёжа', setsCount: 3, repMin: 8, repMax: 12, targetWeight: 30, weightStep: 2.5, restSeconds: 90 },
+      rationale: 'застой',
+      safety_note: 'замена в белом списке',
+      applied_at: '2026-07-09T00:00:00.000Z',
+      reverted_at: null,
+      created_at: '2026-07-09T00:00:00.000Z',
+    }
+  }
+
+  function swapRevertClient(initial) {
+    return {
+      query: vi.fn(async (text) => {
+        if (text.includes('update public.program_change_actions')) {
+          return { rows: [{ ...initial, status: 'reverted', reverted_at: '2026-07-09T13:00:00.000Z' }], rowCount: 1 }
+        }
+        if (text.includes('from public.program_change_actions')) {
+          return { rows: [initial], rowCount: 1 }
+        }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+  }
+
+  it('возвращает прежнее упражнение с его предписанием', async () => {
+    const client = swapRevertClient(swapActionRow())
+    const result = await revertProgramChangeAction(client, { actionId: 'action-swap', userId: 'oleg' })
+
+    expect(result.status).toBe('reverted')
+    expect(updateProgramExercise).toHaveBeenCalledWith(client, expect.objectContaining({
+      id: 'pe-1',
+      exerciseId: 'bench-barbell',
+      setsCount: 3,
+      repMin: 8,
+      repMax: 10,
+      targetWeight: 60,
+    }))
   })
 })
 

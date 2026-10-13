@@ -14,15 +14,21 @@
 // Двигатель не пишет килограммы и повторы — только число подходов. Веса
 // пересчитает генератор плана после применения.
 
-import type { AgeRecoveryPhase, WorkoutHistoryEntry } from '../shared/types.js'
+import type { AgeRecoveryPhase, CoachMemory, CoachState, WorkoutHistoryEntry } from '../shared/types.js'
 import type { DbClient } from './dbClient.js'
-import type { ProgramChange, ProgramChangeAppliedAction } from './coachProgramReview.js'
+import type { AdjustVolumeSnapshot, ProgramChange, ProgramChangeAppliedAction, SwapExerciseSnapshot } from './coachProgramReview.js'
 import { buildMuscleVolumeSnapshot } from './buildVolumeSnapshot.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { labelFor, normalizeExerciseMuscleGroup, normalizeMuscleGroup } from '../shared/muscleGroups.js'
 import { updateProgramExercise } from './services/programService.js'
 import { loadWeeklyVolumeTargets, updateWeeklyVolumeTargetSets } from './weeklyVolumeTargets.js'
 import { assertAllowedRowOwner } from './privateUsers.js'
+import { formatWeight } from '../shared/format.js'
+import type { CoachMemoryForGenerator, LibraryExerciseInput, ProfileForGenerator } from './plannedWorkoutGenerator.js'
+import { normalizeExerciseLibrary } from './workoutExerciseSelection.js'
+import { emptyPreferences, hasActivePainFlag, isBannedExercise, isCoachMemoryRestricted, isHighFatigue, normalizeText } from './workoutExerciseEligibility.js'
+import { applyPrescription } from './workoutLoadPrescription.js'
+import { getUserTrainingPolicy } from './userTrainingPolicies.js'
 
 interface ProgramExerciseForActions {
   id?: string
@@ -31,6 +37,13 @@ interface ProgramExerciseForActions {
   name?: string
   muscleGroup?: string
   setsCount?: number
+  // Issue #442: полное предписание слота нужно для снимка before/after при замене.
+  repMin?: number
+  repMax?: number
+  targetWeight?: number
+  weightStep?: number
+  restSeconds?: number
+  equipment?: string | null
 }
 
 export interface ProgramDayForActions {
@@ -63,6 +76,19 @@ export interface ApplyChangeFocusInput {
   ageRecoveryPhase: AgeRecoveryPhase
   /** Понедельник текущей недели (YYYY-MM-DD): цель этой недели и меняем. */
   weekStart: string
+  now: Date
+}
+
+export interface ApplySwapExerciseInput {
+  userId: string
+  change: ProgramChange
+  programDays: ProgramDayForActions[]
+  /** Справочник упражнений: источник детерминированного белого списка замен. */
+  exerciseLibrary: LibraryExerciseInput[]
+  coachState: CoachState | null
+  coachMemory: CoachMemory | null
+  profile: ProfileForGenerator
+  history: WorkoutHistoryEntry[]
   now: Date
 }
 
@@ -271,6 +297,174 @@ export async function applyChangeFocusChanges(
 }
 
 /**
+ * Issue #442: детерминированный белый список замен для одной группы мышц.
+ * Тот же набор фильтров, что генератор применяет к allowedAlternatives
+ * (plannedWorkoutGenerator:403): та же группа, без дублей слотов, не забанено,
+ * не avoid по памяти тренера, не высокоутомлённая группа и без отметки боли.
+ * isRecoveryRestricted/isCoachDecisionRestricted сознательно не берём: оба
+ * требуют weeklyContext/coachDecision под конкретный день, а недельный обзор
+ * не привязан к сессии.
+ */
+function buildSwapWhitelist(
+  exerciseLibrary: LibraryExerciseInput[],
+  muscleKey: string,
+  usedExerciseIds: Set<string>,
+  coachState: CoachState | null,
+  coachMemory: CoachMemory | null,
+  preferences: ReturnType<typeof emptyPreferences>,
+) {
+  const memory = coachMemory as CoachMemoryForGenerator | null
+  return normalizeExerciseLibrary(exerciseLibrary ?? [])
+    .filter((candidate) => candidate.muscleKey === muscleKey)
+    .filter((candidate) => !usedExerciseIds.has(candidate.id))
+    .filter((candidate) => !isBannedExercise(candidate, preferences))
+    .filter((candidate) => !isCoachMemoryRestricted(candidate.muscleKey, memory))
+    .filter((candidate) => !isHighFatigue(candidate.muscleKey, coachState))
+    .filter((candidate) => !hasActivePainFlag(candidate.id, coachState, memory))
+}
+
+/**
+ * Применяет изменение swap_exercise. Находит упражнение слота по точному
+ * имени, ищет замену в детерминированном белом списке (та же группа мышц +
+ * фильтры генератора) и предписывает новое упражнение через applyPrescription
+ * (вес/повторы/подходы считает генератор; подростковые ограничения #171 —
+ * внутри). Снимок before/after хранит полное предписание слота, поэтому отмена
+ * возвращает прежнее упражнение целиком. unmatched — вне белого списка, БД не
+ * трогали.
+ */
+export async function applySwapExerciseChange(
+  client: DbClient,
+  input: ApplySwapExerciseInput,
+): Promise<ProgramChangeAppliedAction> {
+  const { userId, change, programDays, exerciseLibrary, coachState, coachMemory, profile, history, now } = input
+
+  const exercise = findExerciseByName(programDays, change.exerciseName)
+  const programExerciseId = String(exercise?.programExerciseId ?? exercise?.id ?? '')
+  if (!exercise || !programExerciseId) {
+    return unmatchedAction(userId, programExerciseId, NaN, change, now, 'упражнение не найдено в программе')
+  }
+
+  const muscleKey = normalizeExerciseMuscleGroup(exercise.muscleGroup ?? '', exercise.name ?? '')
+  const preferences = {
+    ...emptyPreferences(),
+    bannedExerciseNames: (profile?.bannedExercises ?? []).map(normalizeText).filter(Boolean),
+  }
+  const usedExerciseIds = new Set<string>()
+  for (const day of programDays ?? []) {
+    for (const item of day.exercises ?? []) {
+      const id = String(item.exerciseId ?? item.id ?? '')
+      if (id) usedExerciseIds.add(id)
+    }
+  }
+
+  const whitelist = buildSwapWhitelist(exerciseLibrary, muscleKey, usedExerciseIds, coachState, coachMemory, preferences)
+  const targetName = normalizeText(change.newExerciseName)
+  const candidate = targetName
+    ? whitelist.find((item) => normalizeText(item.name) === targetName) ?? null
+    : null
+  if (!candidate) {
+    return unmatchedAction(userId, programExerciseId, NaN, change, now, 'замена вне безопасного списка для этой группы мышц')
+  }
+
+  const prescription = applyPrescription({
+    exercise: candidate,
+    profile,
+    coachState,
+    coachMemory: coachMemory as CoachMemoryForGenerator | null,
+    history,
+    lowReadiness: false,
+    userTrainingPolicy: getUserTrainingPolicy(profile),
+  })
+
+  const before: SwapExerciseSnapshot = {
+    exerciseId: String(exercise.exerciseId ?? exercise.id ?? ''),
+    exerciseName: String(exercise.name ?? ''),
+    setsCount: Number(exercise.setsCount),
+    repMin: Number(exercise.repMin),
+    repMax: Number(exercise.repMax),
+    targetWeight: Number(exercise.targetWeight),
+    weightStep: Number(exercise.weightStep),
+    restSeconds: Number(exercise.restSeconds),
+  }
+  const after: SwapExerciseSnapshot = {
+    exerciseId: prescription.exerciseId,
+    exerciseName: prescription.exerciseName,
+    setsCount: prescription.setsCount,
+    repMin: prescription.repMin,
+    repMax: prescription.repMax,
+    targetWeight: prescription.targetWeight,
+    weightStep: prescription.weightStep,
+    restSeconds: prescription.restSeconds,
+  }
+  const coachFocus = `${candidate.name}: замена вместо ${exercise.name} по недельному разбору — ${change.rationale ?? ''}`.slice(0, 500)
+
+  const action = await withTransaction(client, async () => {
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        programExerciseId,
+        change.type,
+        'applied',
+        JSON.stringify(before),
+        JSON.stringify(after),
+        change.rationale ?? null,
+        `замена в белом списке по «${labelFor(muscleKey)}»`,
+        now.toISOString(),
+      ],
+    )
+    await updateProgramExercise(client, {
+      id: programExerciseId,
+      exerciseId: prescription.exerciseId,
+      setsCount: prescription.setsCount,
+      repMin: prescription.repMin,
+      repMax: prescription.repMax,
+      targetWeight: prescription.targetWeight,
+      weightStep: prescription.weightStep,
+      restSeconds: prescription.restSeconds,
+      todayGoal: formatTodayGoal(prescription.targetWeight, prescription.setsCount, prescription.repMin).slice(0, 140),
+      coachFocus,
+    })
+    return mapActionRow(result.rows[0], userId, change)
+  })
+  // Следующие изменения того же прохода видят замену: слот и его предписание
+  // обновлены прямо в programDays.
+  exercise.exerciseId = prescription.exerciseId
+  exercise.id = prescription.exerciseId
+  exercise.name = prescription.exerciseName
+  exercise.muscleGroup = prescription.muscleGroup
+  exercise.setsCount = prescription.setsCount
+  exercise.repMin = prescription.repMin
+  exercise.repMax = prescription.repMax
+  exercise.targetWeight = prescription.targetWeight
+  exercise.weightStep = prescription.weightStep
+  exercise.restSeconds = prescription.restSeconds
+  usedExerciseIds.add(prescription.exerciseId)
+  return action
+}
+
+/**
+ * Применяет все swap_exercise недельного обзора. Сбой одного изменения не
+ * роняет обзор: оно остаётся предложением без appliedAction.
+ */
+export async function applySwapExerciseChanges(
+  client: DbClient,
+  { changes, ...input }: Omit<ApplySwapExerciseInput, 'change'> & { changes: ProgramChange[] },
+): Promise<void> {
+  for (const change of changes) {
+    if (change.type !== 'swap_exercise') continue
+    try {
+      change.appliedAction = await applySwapExerciseChange(client, { ...input, change })
+    } catch (error) {
+      console.error('applySwapExerciseChange (non-fatal):', error instanceof Error ? error.message : error)
+    }
+  }
+}
+
+/**
  * Обзор кэшируется на неделю вместе со статусами действий, а отмена меняет
  * статус только в журнале. Перед отдачей кэша статусы перечитываются оттуда,
  * иначе отменённое изменение снова выглядело бы применённым.
@@ -322,10 +516,14 @@ export async function revertProgramChangeAction(
   }
   if (action.status === 'reverted') return action
 
-  const beforeSetsCount = Number(action.before?.setsCount)
   return withTransaction(client, async () => {
-    // Статус и мутация тоже в одной транзакции: если восстановление подходов
-    // упадёт, запись останется applied и повторный revert снова сработает.
+    // Статус и мутация тоже в одной транзакции: если восстановление упадёт,
+    // запись останется applied и повторный revert снова сработает.
+    //
+    // Issue #442: простая безусловная отмена. CAS-проверка «слот всё ещё занят
+    // упражнением агента» вынесена в отдельный PR (потолок диффа этой задачи).
+    // Принятый риск: если планировщик после тренировки уже заменил упражнение
+    // в этом слоте, отмена перезапишет его более свежее решение.
     const updated = await client.query(
       `update public.program_change_actions
        set status = 'reverted', reverted_at = $2
@@ -333,15 +531,51 @@ export async function revertProgramChangeAction(
        returning ${ACTION_COLUMNS}`,
       [actionId, now.toISOString()],
     )
-    if (Number.isFinite(beforeSetsCount)) {
-      if (action.changeType === 'change_focus') {
-        await updateWeeklyVolumeTargetSets(client, { id: action.programExerciseId, targetSets: beforeSetsCount })
-      } else {
-        await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
-      }
-    }
+    await restoreSnapshot(client, action)
     return mapActionRow(updated.rows[0], userId, null)
   })
+}
+
+/** Issue #442: восстанавливает предписание слота из снимка before. */
+async function restoreSnapshot(client: DbClient, action: ProgramChangeAppliedAction): Promise<void> {
+  if (action.changeType === 'change_focus') {
+    const sets = Number((action.before as AdjustVolumeSnapshot | null)?.setsCount)
+    if (Number.isFinite(sets)) {
+      await updateWeeklyVolumeTargetSets(client, { id: action.programExerciseId, targetSets: sets })
+    }
+    return
+  }
+  if (action.changeType === 'swap_exercise') {
+    const snapshot = action.before as SwapExerciseSnapshot | null
+    if (!snapshot?.exerciseId) return
+    await updateProgramExercise(client, {
+      id: action.programExerciseId,
+      exerciseId: snapshot.exerciseId,
+      setsCount: snapshot.setsCount,
+      repMin: snapshot.repMin,
+      repMax: snapshot.repMax,
+      targetWeight: snapshot.targetWeight,
+      weightStep: snapshot.weightStep,
+      restSeconds: snapshot.restSeconds,
+      todayGoal: formatTodayGoal(snapshot.targetWeight, snapshot.setsCount, snapshot.repMin).slice(0, 140),
+    })
+    return
+  }
+  const beforeSetsCount = Number((action.before as AdjustVolumeSnapshot | null)?.setsCount)
+  if (Number.isFinite(beforeSetsCount)) {
+    await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
+  }
+}
+
+/**
+ * Issue #442: цель дня из предписания (та же формула, что formatTodayGoal в
+ * coachPlanner.ts — функция приватная, дублируем одну строку).
+ */
+function formatTodayGoal(weight: number, setsCount: number, repMin: number): string {
+  const safeWeight = Number(weight)
+  const goal = Number.isFinite(safeWeight) && safeWeight > 0 ? `${formatWeight(safeWeight)}×${repMin}` : String(repMin)
+  const safeSets = Number.isFinite(Number(setsCount)) && Number(setsCount) > 0 ? Math.round(Number(setsCount)) : 1
+  return Array.from({ length: safeSets }, () => goal).join('/')
 }
 
 function findExerciseByName(

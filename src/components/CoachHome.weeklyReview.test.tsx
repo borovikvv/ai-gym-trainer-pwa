@@ -151,7 +151,7 @@ describe('CoachHome — применённые изменения недельн
 
   it('предложение без применения не показывает кнопку отмены', async () => {
     const userEv = userEvent.setup()
-    const suggestionOnly = { ...review, changes: [{ ...review.changes[0], type: 'swap_exercise', appliedAction: undefined }] }
+    const suggestionOnly = { ...review, changes: [{ ...review.changes[0], type: 'change_focus', appliedAction: undefined }] }
     vi.mocked(apiFetch).mockImplementation((url) => (
       String(url).includes('/program-review/') ? jsonResponse({ ok: true, review: suggestionOnly }) : jsonResponse(null, false)
     ))
@@ -161,5 +161,37 @@ describe('CoachHome — применённые изменения недельн
     await userEv.click(await screen.findByTestId('weekly-review-change'))
     expect(screen.queryByRole('button', { name: 'Отменить изменение плана' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('weekly-review-change-status')).not.toBeInTheDocument()
+  })
+
+  // Issue #442: замена упражнения — appliedAction со снимками слота; строка
+  // показывает и старое, и новое имя, статус applied.
+  it('показывает применённую замену упражнения по снимкам appliedAction', async () => {
+    const swapReview = {
+      ...review,
+      changes: [{
+        type: 'swap_exercise',
+        description: 'Заменить упражнение',
+        rationale: 'застой',
+        exerciseName: 'Жим штанги лёжа',
+        priority: 'high',
+        appliedAction: {
+          id: 'action-3',
+          status: 'applied',
+          before: { exerciseId: 'bench-barbell', exerciseName: 'Жим штанги лёжа', setsCount: 3 },
+          after: { exerciseId: 'bench-dumbbell', exerciseName: 'Жим гантелей лёжа', setsCount: 3 },
+          safetyNote: 'замена в пределах безопасного списка',
+        },
+      }],
+    }
+    vi.mocked(apiFetch).mockImplementation((url) => (
+      String(url).includes('/program-review/') ? jsonResponse({ ok: true, review: swapReview }) : jsonResponse(null, false)
+    ))
+
+    render(<CoachHome {...props} />)
+
+    const status = await screen.findByTestId('weekly-review-change-status')
+    expect(status).toHaveAttribute('data-status', 'applied')
+    expect(status).toHaveTextContent('Жим штанги лёжа')
+    expect(status).toHaveTextContent('Жим гантелей лёжа')
   })
 })
