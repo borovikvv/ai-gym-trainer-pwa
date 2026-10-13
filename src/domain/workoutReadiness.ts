@@ -1,6 +1,7 @@
 import type { ExercisePlan, WorkoutDay  } from '../../shared/types'
 import { matchesPainArea } from '../../shared/painAreaMuscleMap'
 import { normalizeExerciseMuscleGroup } from '../../shared/muscleGroups'
+import { isTeenAge } from '../../shared/teenLimits'
 import { formatWeight } from '../lib/format'
 import { getCanonicalExerciseId } from './exerciseIdentity'
 import type { ReadinessCheckIn } from './readinessCheckIn'
@@ -25,7 +26,7 @@ export const readinessOptions: ReadinessOption[] = [
   { mode: 'normal', label: 'Обычно', summary: 'работаем по плану', multiplier: 1 },
   { mode: 'light', label: 'Полегче', summary: 'снизим нагрузку примерно на один шаг', multiplier: 0.95 },
   { mode: 'very_light', label: 'Очень легко', summary: 'сильно снизим объём и вес', multiplier: 0.9 },
-  { mode: 'heavy', label: 'Готов тяжело', summary: 'оставим план и сохраним фокус на технике', multiplier: 1 },
+  { mode: 'heavy', label: 'Готов тяжело', summary: 'прибавим шаг в весе, где это безопасно, и держим фокус на технике', multiplier: 1 },
 ]
 
 export function roundToStep(weight: number, step: number) {
@@ -33,13 +34,18 @@ export function roundToStep(weight: number, step: number) {
   return Number((Math.round(weight / step) * step).toFixed(1))
 }
 
-export function adaptExerciseForReadiness(exercise: ExercisePlan, mode: ReadinessMode, checkIn?: ReadinessCheckIn): ExercisePlan {
+export function adaptExerciseForReadiness(exercise: ExercisePlan, mode: ReadinessMode, checkIn?: ReadinessCheckIn, age?: number | null): ExercisePlan {
   const option = readinessOptions.find((item) => item.mode === mode) ?? readinessOptions[0]
   const targetedState = targetedReadinessState(exercise, checkIn)
   const step = exercise.weightStep || 2.5
-  const nextWeight = mode === 'normal' || mode === 'heavy'
+  const isTeen = isTeenAge(age)
+  const nextWeight = mode === 'normal'
     ? exercise.targetWeight
-    : Math.max(0, roundToStep(exercise.targetWeight * option.multiplier, step))
+    : mode === 'heavy'
+      ? isTeen
+        ? exercise.targetWeight
+        : Math.max(0, roundToStep(exercise.targetWeight + step, step))
+      : Math.max(0, roundToStep(exercise.targetWeight * option.multiplier, step))
   const baseSetsCount = mode === 'very_light'
     ? Math.max(1, exercise.setsCount - 1)
     : exercise.setsCount
@@ -80,9 +86,9 @@ export function adaptExerciseForReadiness(exercise: ExercisePlan, mode: Readines
   }
 }
 
-export function adaptWorkoutDayForReadiness(day: WorkoutDay, mode: ReadinessMode, checkIn?: ReadinessCheckIn): WorkoutDay {
+export function adaptWorkoutDayForReadiness(day: WorkoutDay, mode: ReadinessMode, checkIn?: ReadinessCheckIn, age?: number | null): WorkoutDay {
   const option = readinessOptions.find((item) => item.mode === mode) ?? readinessOptions[0]
-  const exercises = day.exercises.map((exercise) => adaptExerciseForReadiness(exercise, mode, checkIn))
+  const exercises = day.exercises.map((exercise) => adaptExerciseForReadiness(exercise, mode, checkIn, age))
   return {
     ...day,
     id: mode === 'normal' ? day.id : `${day.id}-${mode}`,

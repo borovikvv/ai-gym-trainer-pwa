@@ -235,7 +235,7 @@ function App() {
   }
   const previewWorkoutDay = applyPreviewPainOverrides(
     fitWorkoutDayToAvailableMinutes(
-      adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn),
+      adaptWorkoutDayForReadiness(activeWorkoutDayBase, workoutReadinessMode, readinessCheckIn, activeProfile?.age),
       timeBudgetMinutes(readinessCheckIn),
     ),
     previewPainOverrides,

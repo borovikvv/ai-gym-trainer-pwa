@@ -168,6 +168,31 @@ describe('workout readiness adaptation', () => {
   })
 })
 
+describe('heavy readiness gains weight step for adults (issue #341)', () => {
+  it('добавляет шаг веса взрослому профилю помимо отдыха', () => {
+    const adapted = adaptWorkoutDayForReadiness(workoutDay, 'heavy', defaultReadinessCheckIn, 30)
+
+    const bench = adapted.exercises.find((exercise) => exercise.id === 'bench-press')
+    expect(bench?.targetWeight).toBe(62.5)
+    expect(bench?.restSeconds).toBe(150)
+  })
+
+  it('не добавляет вес подростковому профилю, но оставляет бонус к отдыху', () => {
+    const adapted = adaptWorkoutDayForReadiness(workoutDay, 'heavy', defaultReadinessCheckIn, 15)
+
+    const bench = adapted.exercises.find((exercise) => exercise.id === 'bench-press')
+    expect(bench?.targetWeight).toBe(60)
+    expect(bench?.restSeconds).toBe(150)
+  })
+
+  it('без возраста ведёт себя как взрослый', () => {
+    const adapted = adaptWorkoutDayForReadiness(workoutDay, 'heavy', defaultReadinessCheckIn)
+
+    const bench = adapted.exercises.find((exercise) => exercise.id === 'bench-press')
+    expect(bench?.targetWeight).toBe(62.5)
+  })
+})
+
 describe('fitWorkoutDayToAvailableMinutes', () => {
   const exercise = (overrides: Partial<ExercisePlan> & Pick<ExercisePlan, 'id' | 'name' | 'muscleGroup' | 'targetWeight'>): ExercisePlan => ({
     instruction: '',
