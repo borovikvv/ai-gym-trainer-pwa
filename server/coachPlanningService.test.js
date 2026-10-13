@@ -142,14 +142,14 @@ describe('coach planning service', () => {
     expect(inputs.coachState.muscleGroups.chest.lastTrainedDaysAgo).toBeGreaterThan(0)
   })
 
-  it('Issue #95: falls back to rules when LLM call exceeds timeout (5s)', async () => {
+  it('Issue #95: falls back to rules when LLM call exceeds timeout (12s)', async () => {
     // Enable LLM path
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubEnv('OPENAI_BASE_URL', 'https://llm.example/v1')
 
     // Mock fetch that never resolves within test timeframe — AbortController
-    // will abort it after LLM_TIMEOUT_MS (5s). Use fake timers to avoid
-    // actually waiting 5s.
+    // will abort it after LLM_TIMEOUT_MS (12s). Use fake timers to avoid
+    // actually waiting 12s.
     // Issue #107: planAndApplyNextWorkout now also calls analyzeProgress
     // which makes its own LLM call. Both will timeout and fall back to rules.
     vi.useFakeTimers()
@@ -185,10 +185,10 @@ describe('coach planning service', () => {
       ],
     })
 
-    // Issue #107: advance past BOTH timeouts — analyzeProgress (smart tier,
-    // 12s) and requestLlmCoachPlan (5s). They run sequentially, so 18s covers
-    // both with margin.
-    await vi.advanceTimersByTimeAsync(18000)
+    // Issue #107/#412: advance past BOTH timeouts — analyzeProgress (smart tier,
+    // 12s) and requestLlmCoachPlan (mid, 12s, see #412). They run sequentially,
+    // so 25s covers both (24s) with margin.
+    await vi.advanceTimersByTimeAsync(25000)
     const result = await planPromise
 
     // LLM was called but timed out — we should get a rules-based plan back

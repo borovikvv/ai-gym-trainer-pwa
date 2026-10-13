@@ -59,11 +59,11 @@ interface LlmPlan extends Partial<SafeCoachPlan> {
   nextWorkoutDayId?: string
 }
 
-// Issue #95: cap LLM call duration. Without this, a slow LLM (10-30s) holds
-// the pg connection inside the save transaction, exhausting the pool under
-// concurrent saves. All other LLM callers (coachNarrator, coachProgressAnalysis,
-// coachProgramReview, coachBrain) already use AbortController with 3-5s timeout.
-const LLM_TIMEOUT_MS = 5000
+// Issue #95 → #408 → #412: cap the LLM call so a slow provider falls back to
+// rules instead of hanging. Since #408 planning runs after the response,
+// outside the save transaction, so the cap only bounds the wait; 12s covers
+// the observed max of 7.6s (see #412).
+const LLM_TIMEOUT_MS = 12000
 
 export async function planAndApplyNextWorkout(client: DbClient, completedEntry: CompletedEntry): Promise<SafeCoachPlan | null> {
   const [profile, workoutDays, history, exerciseLibrary] = await Promise.all([

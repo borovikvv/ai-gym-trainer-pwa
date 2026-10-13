@@ -257,7 +257,6 @@ async function requestLlmContent(
       }),
       signal: controller.signal,
     })
-    clearTimeout(timeout)
     if (!response.ok) throw new Error(`LLM HTTP ${response.status}`)
     const body = (await response.json()) as LlmResponseBody
     const choice = body?.choices?.[0]
@@ -276,7 +275,6 @@ async function requestLlmContent(
     })
     return { content: content ?? null, truncated, reason: content ? null : 'empty' }
   } catch (error) {
-    clearTimeout(timeout)
     const reason: LlmFailureReason = error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'http_error'
     logActivity('llm.call', {
       caller: options.caller,
@@ -288,5 +286,9 @@ async function requestLlmContent(
     })
     console.warn(`${options.caller} LLM failed:`, error instanceof Error ? error.message : error)
     return { content: null, truncated: false, reason }
+  } finally {
+    // Issue #412: keep the timer alive until the body is fully read; clearing
+    // it right after fetch resolved left body-reading unbounded.
+    clearTimeout(timeout)
   }
 }
