@@ -49,6 +49,33 @@ describe('ReplacementSheet', () => {
     expect(onChooseReplacement).toHaveBeenCalledWith(expect.objectContaining({ id: 'db-press', name: 'Жим гантелей лёжа' }))
   })
 
+  // Issue #460: имя альтернативы должно матчиться на справочник по
+  // нормализованному имени (регистр, ё/е, пробелы), а не по строгому
+  // toLowerCase() ===. Иначе замена получает id-слаг, которого нет в
+  // справочнике, и её история потом не находится.
+  it('матчит альтернативу на справочник по нормализованному имени', async () => {
+    const user = userEvent.setup()
+    const onChooseReplacement = vi.fn()
+    const libraryExercise = makeExercise({ id: 'cable-row', name: 'Горизонтальная тяга' })
+
+    render(
+      <ReplacementSheet
+        exercise={makeExercise({
+          id: 'deadlift-machine-row',
+          name: 'Тяга в тренажёре',
+          alternatives: [{ name: 'Горизонтальная тяга ', reason: 'если тренажёр занят' }],
+        })}
+        exerciseLibrary={[libraryExercise]}
+        onChooseReplacement={onChooseReplacement}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /выбрать горизонтальная тяга/i }))
+
+    expect(onChooseReplacement).toHaveBeenCalledWith(expect.objectContaining({ id: 'cable-row' }))
+  })
+
   // Issue #375: альтернатива, которой нет в справочнике по точному названию,
   // раньше собиралась копией исходного упражнения с id `<исходный>-alternative-…`,
   // а каноническая нормализация срезала суффикс — замена «становилась» исходным

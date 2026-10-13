@@ -41,11 +41,30 @@ export function canonicalExerciseId(exerciseOrId: string | ExerciseLike | null |
  */
 export const getCanonicalExerciseId = canonicalExerciseId
 
+/**
+ * Normalize a human-readable exercise name for library matching: trim,
+ * lowercase, fold «ё» to «е» and collapse repeated whitespace. No fuzzy
+ * matching — only differences that are not meaningful for identity.
+ */
+export function normalizeExerciseName(name: string | null | undefined): string {
+  return String(name ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/ё/gu, 'е')
+    .replace(/\s+/gu, ' ')
+}
+
 function normalizeGeneratedExerciseId(id: string): string {
-  return String(id ?? '')
-    .replace(/-alternative-.+$/u, '')
-    .replace(/-(extra|replacement)-\d+$/u, '')
-    .replace(/-(light|very_light|heavy)$/u, '')
+  let normalized = String(id ?? '')
+  let previous = ''
+  while (previous !== normalized) {
+    previous = normalized
+    normalized = normalized
+      .replace(/-alternative-.+$/u, '')
+      .replace(/-(extra|replacement)-\d+$/u, '')
+      .replace(/-(light|very_light|heavy)$/u, '')
+  }
+  return normalized
 }
 
 function canonicalIdFromName(name: string): string {
