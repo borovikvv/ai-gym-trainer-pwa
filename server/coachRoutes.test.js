@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Test the requireAllowedUserId middleware logic directly.
 // We extract it from the route module by importing and inspecting the router stack.
@@ -255,6 +255,14 @@ describe('Issue #420: применение и отмена изменения п
     return route.middlewares.at(-1)
   }
 
+  // Issue #420: apply/revert получают dedicated-соединение (транзакция должна
+  // идти на одном соединении), а не пул.
+  let connectedClient
+  beforeEach(() => {
+    connectedClient = { query: vi.fn().mockResolvedValue({ rows: [] }), release: vi.fn() }
+    vi.mocked(pool.connect).mockResolvedValue(connectedClient)
+  })
+
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.clearAllMocks()
@@ -297,8 +305,9 @@ describe('Issue #420: применение и отмена изменения п
       res,
     )
 
-    expect(applyAdjustVolumeChange).toHaveBeenCalledWith(pool, expect.objectContaining({ userId: 'oleg' }))
+    expect(applyAdjustVolumeChange).toHaveBeenCalledWith(connectedClient, expect.objectContaining({ userId: 'oleg' }))
     expect(res.body.review.changes[0].appliedAction).toEqual({ id: 'a1', status: 'applied' })
+    expect(connectedClient.release).toHaveBeenCalled()
   })
 
   it('POST /coach/program-change/:actionId/revert отдаёт обновлённое действие', async () => {
@@ -310,8 +319,9 @@ describe('Issue #420: применение и отмена изменения п
       res,
     )
 
-    expect(revertProgramChangeAction).toHaveBeenCalledWith(pool, { actionId: 'a1', userId: 'oleg' })
+    expect(revertProgramChangeAction).toHaveBeenCalledWith(connectedClient, { actionId: 'a1', userId: 'oleg' })
     expect(res.body).toEqual({ ok: true, action: { id: 'a1', status: 'reverted' } })
+    expect(connectedClient.release).toHaveBeenCalled()
   })
 
   it('POST revert отвечает 404, когда действие не найдено', async () => {

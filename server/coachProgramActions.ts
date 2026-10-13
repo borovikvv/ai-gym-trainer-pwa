@@ -64,6 +64,25 @@ const ACTION_COLUMNS =
   'id, user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at, reverted_at, created_at'
 
 /**
+ * Журнал и мутация упражнения должны применяться вместе: строки в журнале без
+ * изменённого набора подходов (и наоборот) ломают гарантию «применено, можно
+ * отменить». Оборачиваем оба запроса в транзакцию; клиент обязан быть
+ * dedicated-соединением (pool.connect()), а не пулом — у пула begin и commit
+ * могут уехать на разные соединения.
+ */
+async function withTransaction<T>(client: DbClient, run: () => Promise<T>): Promise<T> {
+  await client.query('begin')
+  try {
+    const result = await run()
+    await client.query('commit')
+    return result
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  }
+}
+
+/**
  * Применяет изменение adjust_volume. Находит упражнение по точному (без учёта
  * регистра) имени, проверяет проекцию недельного объёма по группе мышц и
  * урезает, если она выходит за [MEV, MRV]. Возвращает запись действия;
@@ -101,26 +120,29 @@ export async function applyAdjustVolumeChange(
     ? `подрезано: проекция объёма ${projected} вне [${landmarks.mev}, ${landmarks.mrv}] по «${labelFor(muscleKey)}» (фаза ${ageRecoveryPhase})`
     : `в пределах нормы [${landmarks.mev}, ${landmarks.mrv}] по «${labelFor(muscleKey)}» (фаза ${ageRecoveryPhase})`
 
-  await updateProgramExercise(client, { id: programExerciseId, setsCount: finalSetsCount })
-
-  const result = await client.query(
-    `insert into public.program_change_actions
-       (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-     returning ${ACTION_COLUMNS}`,
-    [
-      userId,
-      programExerciseId,
-      change.type,
-      clamped ? 'clamped' : 'applied',
-      JSON.stringify({ setsCount: oldSetsCount }),
-      JSON.stringify({ setsCount: finalSetsCount }),
-      change.rationale ?? null,
-      safetyNote,
-      now.toISOString(),
-    ],
-  )
-  return mapActionRow(result.rows[0], userId, change)
+  return withTransaction(client, async () => {
+    // Сначала журнал, потом мутация: если вставка не прошла (например, не
+    // накатили миграцию), число подходов не меняется и «тихой» порчи нет.
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        programExerciseId,
+        change.type,
+        clamped ? 'clamped' : 'applied',
+        JSON.stringify({ setsCount: oldSetsCount }),
+        JSON.stringify({ setsCount: finalSetsCount }),
+        change.rationale ?? null,
+        safetyNote,
+        now.toISOString(),
+      ],
+    )
+    await updateProgramExercise(client, { id: programExerciseId, setsCount: finalSetsCount })
+    return mapActionRow(result.rows[0], userId, change)
+  })
 }
 
 /**
@@ -149,18 +171,21 @@ export async function revertProgramChangeAction(
   if (action.status === 'reverted') return action
 
   const beforeSetsCount = Number(action.before?.setsCount)
-  if (Number.isFinite(beforeSetsCount)) {
-    await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
-  }
-
-  const updated = await client.query(
-    `update public.program_change_actions
-     set status = 'reverted', reverted_at = $2
-     where id = $1
-     returning ${ACTION_COLUMNS}`,
-    [actionId, now.toISOString()],
-  )
-  return mapActionRow(updated.rows[0], userId, null)
+  return withTransaction(client, async () => {
+    // Статус и мутация тоже в одной транзакции: если восстановление подходов
+    // упадёт, запись останется applied и повторный revert снова сработает.
+    const updated = await client.query(
+      `update public.program_change_actions
+       set status = 'reverted', reverted_at = $2
+       where id = $1
+       returning ${ACTION_COLUMNS}`,
+      [actionId, now.toISOString()],
+    )
+    if (Number.isFinite(beforeSetsCount)) {
+      await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
+    }
+    return mapActionRow(updated.rows[0], userId, null)
+  })
 }
 
 function findExerciseByName(

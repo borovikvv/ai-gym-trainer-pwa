@@ -345,18 +345,30 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
   // предложениями: под них нет готовой мутации. Статус применения кладём в
   // change.appliedAction до кэширования — недельный кэш не даёт применить
   // одно и то же повторно.
+  //
+  // Ограничение v1: клэмп каждого изменения считается по историческим данным
+  // и не видит другие adjust_volume той же группы мышц из этого же прохода.
+  // Два изменения на одну группу в одном обзоре маловероятны; если появятся —
+  // сумму нужно перепроверять отдельно.
   const ageRecoveryPhase = getUserTrainingPolicy(profile)?.ageRecoveryProfile?.phase ?? 'adult'
-  for (const change of review.changes) {
-    if (change.type !== 'adjust_volume') continue
-    change.appliedAction = await applyAdjustVolumeChange(pool, {
-      userId,
-      change,
-      programDays: programDays as ProgramDayForActions[],
-      history,
-      e1rmHistories: e1rmHistories ?? [],
-      ageRecoveryPhase,
-      now: generatedAt,
-    })
+  // Отдельное соединение на весь проход: applyAdjustVolumeChange выполняет
+  // журнал и мутацию в одной транзакции (begin/commit на одном соединении).
+  const applyClient = await pool.connect()
+  try {
+    for (const change of review.changes) {
+      if (change.type !== 'adjust_volume') continue
+      change.appliedAction = await applyAdjustVolumeChange(applyClient, {
+        userId,
+        change,
+        programDays: programDays as ProgramDayForActions[],
+        history,
+        e1rmHistories: e1rmHistories ?? [],
+        ageRecoveryPhase,
+        now: generatedAt,
+      })
+    }
+  } finally {
+    applyClient.release()
   }
 
   // Save to DB for weekly caching (non-fatal)
@@ -378,9 +390,14 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
 coachRoutes.post('/coach/program-change/:actionId/revert', requireAllowedUserId, async (req, res) => {
   const userId = String(req.body?.userId ?? '')
   const actionId = String(req.params.actionId ?? '')
-  const action = await revertProgramChangeAction(pool, { actionId, userId })
-  if (!action) return res.status(404).json({ error: 'program change action not found' })
-  res.json({ ok: true, action })
+  const client = await pool.connect()
+  try {
+    const action = await revertProgramChangeAction(client, { actionId, userId })
+    if (!action) return res.status(404).json({ error: 'program change action not found' })
+    res.json({ ok: true, action })
+  } finally {
+    client.release()
+  }
 })
 
 // Issue #86: AI Level 4 — training record status + export

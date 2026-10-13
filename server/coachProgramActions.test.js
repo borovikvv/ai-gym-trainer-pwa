@@ -40,26 +40,32 @@ function adjustChange(newSetsCount, exerciseName = 'Жим лёжа') {
   }
 }
 
-// Эхо-клиент: строку строит из bind-параметров вставки.
+// Эхо-клиент: строку строит из bind-параметров вставки. Управляющие команды
+// транзакции (begin/commit/rollback) отдаём как есть.
 function insertClient() {
   return {
-    query: vi.fn(async (_text, params) => ({
-      rows: [{
-        id: 'action-1',
-        user_id: params[0],
-        program_exercise_id: params[1],
-        change_type: params[2],
-        status: params[3],
-        before: params[4],
-        after: params[5],
-        rationale: params[6],
-        safety_note: params[7],
-        applied_at: params[8],
-        reverted_at: null,
-        created_at: '2026-07-09T00:00:00.000Z',
-      }],
-      rowCount: 1,
-    })),
+    query: vi.fn(async (text, params) => {
+      if (text === 'begin' || text === 'commit' || text === 'rollback') {
+        return { rows: [], rowCount: null }
+      }
+      return {
+        rows: [{
+          id: 'action-1',
+          user_id: params[0],
+          program_exercise_id: params[1],
+          change_type: params[2],
+          status: params[3],
+          before: params[4],
+          after: params[5],
+          rationale: params[6],
+          safety_note: params[7],
+          applied_at: params[8],
+          reverted_at: null,
+          created_at: '2026-07-09T00:00:00.000Z',
+        }],
+        rowCount: 1,
+      }
+    }),
   }
 }
 
@@ -134,6 +140,32 @@ describe('applyAdjustVolumeChange (#420)', () => {
     expect(updateProgramExercise).not.toHaveBeenCalled()
     expect(client.query).not.toHaveBeenCalled()
   })
+
+  it('вставка в журнал упала — упражнение не мутируется, транзакция откатывается', async () => {
+    const client = {
+      query: vi.fn(async (text) => {
+        if (text === 'begin' || text === 'rollback') return { rows: [], rowCount: null }
+        if (text.includes('insert into public.program_change_actions')) {
+          throw new Error('relation "program_change_actions" does not exist')
+        }
+        return { rows: [], rowCount: 0 }
+      }),
+    }
+
+    await expect(applyAdjustVolumeChange(client, {
+      userId: 'oleg',
+      change: adjustChange(5),
+      programDays: programDaysWith('Жим лёжа', 3),
+      history: historyWithSets('Грудь', 'Жим лёжа', 10),
+      e1rmHistories: [],
+      ageRecoveryPhase: 'adult',
+      now: NOW,
+    })).rejects.toThrow('does not exist')
+
+    expect(updateProgramExercise).not.toHaveBeenCalled()
+    expect(client.query).toHaveBeenCalledWith('rollback')
+    expect(client.query).not.toHaveBeenCalledWith('commit')
+  })
 })
 
 describe('revertProgramChangeAction (#420)', () => {
@@ -197,5 +229,17 @@ describe('revertProgramChangeAction (#420)', () => {
     const client = { query: vi.fn(async () => ({ rows: [], rowCount: 0 })) }
     const result = await revertProgramChangeAction(client, { actionId: 'missing', userId: 'oleg' })
     expect(result).toBeNull()
+  })
+
+  it('восстановление подходов упало — статус откатывается, повтор сработает', async () => {
+    const client = revertClient(actionRow('applied'))
+    updateProgramExercise.mockRejectedValueOnce(new Error('update failed'))
+
+    await expect(
+      revertProgramChangeAction(client, { actionId: 'action-1', userId: 'oleg' }),
+    ).rejects.toThrow('update failed')
+
+    expect(client.query).toHaveBeenCalledWith('rollback')
+    expect(client.query).not.toHaveBeenCalledWith('commit')
   })
 })
