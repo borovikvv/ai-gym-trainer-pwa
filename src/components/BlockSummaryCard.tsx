@@ -6,60 +6,97 @@ import { useEffect, useState } from 'react'
 import type { BlockSummary } from '../../shared/types'
 import { fetchBlockSummaryFromApi, isProgramApiConfigured } from '../data/programApi'
 import { formatWeight, pluralRu } from '../lib/format'
+import { SectionList } from './ui'
 
 function formatKg(value: number) {
   return `${formatWeight(value)} кг`
 }
 
 export function BlockSummaryView({ summary }: { summary: BlockSummary }) {
+  const goalDot = summary.goal.status === 'achieved' ? 'review-card__dot--low' : 'review-card__dot--medium'
+
   return (
-    <div className="card top-gap block-summary-card" data-testid="block-summary">
-      <div className="ser" style={{ fontSize: 22, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 2px' }}>
-        Итог блока
-      </div>
-      <div className="muted">{summary.weeks} {pluralRu(summary.weeks, 'неделя', 'недели', 'недель')}</div>
-
-      <div data-testid="block-summary-goal" data-status={summary.goal.status}>
-        <b>{summary.goal.title}</b>
-        <div className="muted">по факту {formatKg(summary.goal.actual)} из {formatKg(summary.goal.target)}</div>
-      </div>
-
-      {summary.gains.length > 0 && (
-        <div>
-          <div className="muted">Выросло</div>
-          {summary.gains.map((gain) => (
-            <div key={gain.exerciseId} data-testid="block-summary-gain">
-              <b>{gain.exerciseName}</b><span> +{formatKg(gain.delta)}</span>
-            </div>
-          ))}
+    <SectionList title="Итог блока">
+      <div className="review-card block-summary-card" data-testid="block-summary">
+        <div className="muted block-summary-card__subtitle">
+          {summary.weeks} {pluralRu(summary.weeks, 'неделя', 'недели', 'недель')}
         </div>
-      )}
 
-      {summary.stalled.length > 0 && (
-        <div>
-          <div className="muted">Застой</div>
-          {summary.stalled.map((item) => (
-            <div key={item.exerciseId} data-testid="block-summary-stalled">
-              <b>{item.exerciseName}</b>
-              <div className="muted">
-                {item.weeks} нед без прироста{item.diagnosisNote ? ` · ${item.diagnosisNote}` : ''}
+        <div
+          className="review-card__row review-card__row--static"
+          data-testid="block-summary-goal"
+          data-status={summary.goal.status}
+        >
+          <span className={`review-card__dot ${goalDot}`} aria-hidden="true" />
+          <div className="review-card__body">
+            <div className="review-card__title">{summary.goal.title}</div>
+            <div className="review-card__meta">
+              по факту {formatKg(summary.goal.actual)} из {formatKg(summary.goal.target)}
+            </div>
+          </div>
+        </div>
+
+        {summary.gains.length > 0 && (
+          <div>
+            <div className="block-summary-card__group-label">Выросло</div>
+            {summary.gains.map((gain) => (
+              <div
+                key={gain.exerciseId}
+                className="review-card__row review-card__row--static"
+                data-testid="block-summary-gain"
+              >
+                <span className="review-card__dot review-card__dot--low" aria-hidden="true" />
+                <div className="review-card__body">
+                  <div className="review-card__title">{gain.exerciseName}</div>
+                </div>
+                <span className="review-card__value review-card__value--success">+{formatKg(gain.delta)}</span>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        )}
+
+        {summary.stalled.length > 0 && (
+          <div>
+            <div className="block-summary-card__group-label">Застой</div>
+            {summary.stalled.map((item) => (
+              <div
+                key={item.exerciseId}
+                className="review-card__row review-card__row--static"
+                data-testid="block-summary-stalled"
+              >
+                <span className="review-card__dot review-card__dot--medium" aria-hidden="true" />
+                <div className="review-card__body">
+                  <div className="review-card__title">{item.exerciseName}</div>
+                  <div className="review-card__meta">
+                    {item.weeks} нед без прироста{item.diagnosisNote ? ` · ${item.diagnosisNote}` : ''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="review-card__row review-card__row--static" data-testid="block-summary-adherence">
+          <div className="review-card__body">
+            <div className="review-card__title">Соблюдение плана</div>
+            {summary.adherence.skipped > 0 && (
+              <div className="review-card__meta">пропущено {summary.adherence.skipped}</div>
+            )}
+          </div>
+          <div className="review-card__value">
+            {summary.adherence.done} из {summary.adherence.planned}
+          </div>
         </div>
-      )}
 
-      <div data-testid="block-summary-adherence">
-        План соблюдён: {summary.adherence.done} из {summary.adherence.planned}
-        {summary.adherence.skipped > 0 && <span className="muted"> · пропущено {summary.adherence.skipped}</span>}
+        <div className="review-card__row review-card__row--static" data-testid="block-summary-next">
+          <div className="review-card__body">
+            <div className="review-card__title">Следующий блок</div>
+            {summary.next.goalTitle && <div className="review-card__meta">{summary.next.goalTitle}</div>}
+            <div className="review-card__meta">{summary.next.why}</div>
+          </div>
+        </div>
       </div>
-
-      <div data-testid="block-summary-next">
-        <b>Следующий блок</b>
-        {summary.next.goalTitle && <div>{summary.next.goalTitle}</div>}
-        <div className="muted">{summary.next.why}</div>
-      </div>
-    </div>
+    </SectionList>
   )
 }
 

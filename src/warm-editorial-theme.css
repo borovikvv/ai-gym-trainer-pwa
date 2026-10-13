@@ -274,6 +274,33 @@
   font-size: 18px;
   flex: 0 0 auto;
 }
+/* Issue #455: «Итог блока» — строки без действия (не кнопки) */
+.review-card__row--static {
+  cursor: default;
+}
+.review-card__value {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font: 600 14px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-align: right;
+  white-space: nowrap;
+}
+.review-card__value--success {
+  color: var(--success);
+}
+.block-summary-card__subtitle {
+  padding: 10px 2px 4px;
+}
+.block-summary-card__group-label {
+  padding: 6px 2px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
 
 /* Нижняя навигация — прототип: светлая карточка, акцентный активный */
 .nav {

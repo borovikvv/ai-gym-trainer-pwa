@@ -271,7 +271,7 @@ export function ProgressScreen({ progressDashboard, activeUserId }: ProgressScre
       {/* Issue #124: Strength section — e1RM sparklines + delta.
           Only show exercises with >= 2 data points (need a trend).
           Clean empty state when no data. */}
-      <div className="ser" style={{ fontSize: 22, fontWeight: 500, color: 'var(--text-primary)', margin: '22px 0 2px' }}>Сила</div>
+      <div style={{ fontSize: 22, fontWeight: 500, color: 'var(--text-primary)', margin: '22px 0 2px' }}>Сила</div>
       <div style={{ font: '500 12px var(--font-ui)', color: 'var(--text-tertiary)', marginBottom: 10 }}>Расчётный максимум на 1 повтор, кг</div>
       {progressDashboard.e1RMHistories.filter((ex) => ex.sparkline.length >= 2).length > 0 ? (
         <div className="e1rm-sparkline-grid">
