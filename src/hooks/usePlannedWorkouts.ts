@@ -6,6 +6,7 @@ import {
   generatePlannedWorkoutInApi,
   isProgramApiConfigured,
   loadPlannedWorkoutsFromApi,
+  markPlannedWorkoutUnavailableInApi,
   updatePlannedWorkoutInApi,
   type PlannedWorkout,
 } from '../data/programApi'
@@ -184,6 +185,22 @@ export function usePlannedWorkouts({
     }
   }
 
+  // Issue #445: атлет сообщает, что день недоступен. Сервер сам переносит
+  // тренировку в пределах недели; текст зависит от результата переноса.
+  async function markPlannedWorkoutUnavailable(workoutId: string) {
+    try {
+      const { plannedWorkouts: items, moved } = await markPlannedWorkoutUnavailableInApi(workoutId)
+      setPlannedWorkouts(items)
+      const refreshed = items.find((workout) => workout.id === workoutId)
+      if (refreshed?.workoutDay) selectWorkoutDay(refreshed.workoutDay, false)
+      if (moved?.status === 'applied') notify('Тренировка перенесена на другой день')
+      else if (moved?.status === 'unmatched') notify('Не нашлось свободного дня для переноса')
+      else notify('День отмечен недоступным')
+    } catch {
+      notify('Не удалось отметить день недоступным')
+    }
+  }
+
   return {
     selectedWeekDates: plannedDateKeys,
     editingPlannedWorkoutId,
@@ -197,6 +214,7 @@ export function usePlannedWorkouts({
     savePlannedWorkoutDate,
     regeneratePlannedWorkout,
     cancelPlannedWorkout,
+    markPlannedWorkoutUnavailable,
     refreshPlannedWorkouts,
     resetPlanningStart: () => setWeekStartDate(todayDateInputValue()),
   }
