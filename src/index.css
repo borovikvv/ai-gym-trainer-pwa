@@ -162,6 +162,12 @@ body {
   color: var(--text-primary);
 }
 
+/* Issue #454: гасим резиновый отскок документа в iOS standalone-PWA. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 button,
 input,
 select,
