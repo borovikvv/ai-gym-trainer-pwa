@@ -1444,6 +1444,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Issue #458 — тихая метка удержания экрана во время тренировки. */
+.wake-lock-indicator {
+  font: 500 11px var(--font-ui);
+  color: var(--text-tertiary);
+  min-width: 0;
+  text-align: right;
+}
+.wake-lock-indicator[data-state="rejected"],
+.wake-lock-indicator[data-state="unsupported"] {
+  color: var(--warning);
+}
+
 /* --- Set chips row: равномерно на всю ширину, не зависит от 3 подходов. --- */
 .set-chips {
   display: grid;

@@ -136,38 +136,3 @@ export function requestNotificationPermissionOnce() {
     // не поддерживается — молча
   }
 }
-
-/**
- * Держать экран включённым, пока active=true (тренировка идёт).
- * Feature-detected: без поддержки Wake Lock просто ничего не делает.
- */
-export function useWakeLock(active: boolean) {
-  useEffect(() => {
-    if (!active) return
-    type WakeLockSentinel = { release: () => Promise<void> }
-    const wakeLockApi = (navigator as unknown as { wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinel> } }).wakeLock
-    if (!wakeLockApi) return
-
-    let sentinel: WakeLockSentinel | null = null
-    let released = false
-    const acquire = () => {
-      wakeLockApi.request('screen')
-        .then((lock) => {
-          if (released) void lock.release().catch(() => undefined)
-          else sentinel = lock
-        })
-        .catch(() => undefined)
-    }
-    acquire()
-    // Wake Lock снимается системой при уходе в фон — возвращаем при показе.
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') acquire()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => {
-      released = true
-      document.removeEventListener('visibilitychange', handleVisibility)
-      void sentinel?.release().catch(() => undefined)
-    }
-  }, [active])
-}

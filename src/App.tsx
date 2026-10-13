@@ -22,7 +22,8 @@ import { useProgramEditing } from './hooks/useProgramEditing'
 import { useQuestionnaire } from './hooks/useQuestionnaire'
 import { useActiveWorkoutContext } from './hooks/useActiveWorkoutContext'
 import { useUserSelection } from './hooks/useUserSelection'
-import { useRestTimer, useWakeLock } from './hooks/useRestTimer'
+import { useRestTimer } from './hooks/useRestTimer'
+import { useWakeLock } from './hooks/useWakeLock'
 import { formatWeight } from './lib/format'
 import { createWorkoutHistoryEntry } from './domain/workoutHistory'
 import { computeSessionRepDeviation } from './domain/repExpectation'
@@ -199,7 +200,8 @@ function App() {
     },
   })
   // Фаза 3.2: экран не гаснет во время тренировки (feature-detected).
-  useWakeLock(screen === 'session')
+  // Issue #458: статус лока показываем на экране «Зал» честно, включая отказ.
+  const wakeLockStatus = useWakeLock(screen === 'session')
   const [manualWorkoutDaySelected, setManualWorkoutDaySelected] = useState(false)
   // Issue #339: выбор пользователя на предпросмотре при боли — замена/пропуск.
   // Сбрасывается при смене дня и чек-ина ниже.
@@ -635,6 +637,7 @@ function App() {
         {(screen === 'preview' || screen === 'session' || screen === 'review') && (
           <GymPage
             screen={screen}
+            wakeLockStatus={wakeLockStatus}
             activeWorkoutDay={activeWorkoutDay}
             previewWorkoutDay={previewWorkoutDay}
             activeExercise={activeExercise}

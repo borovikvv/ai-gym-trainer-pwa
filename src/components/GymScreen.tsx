@@ -10,9 +10,12 @@ import { InfoHint } from './ui'
 import { CurrentStepCard } from './CurrentStepCard'
 import { PainQuestionnaire } from './PainQuestionnaire'
 import { Plus, Trash2 } from 'lucide-react'
+import type { WakeLockStatus } from '../hooks/useWakeLock'
 
 type GymScreenProps = {
   activeWorkoutDay: WorkoutDay
+  // Issue #458: честный индикатор удержания экрана во время тренировки.
+  wakeLockStatus: WakeLockStatus
   activeExercise: ExercisePlan
   activeExerciseIndex: number
   activeLog: ExerciseLog
@@ -48,6 +51,7 @@ type GymScreenProps = {
 
 export function GymScreen({
   activeWorkoutDay,
+  wakeLockStatus,
   activeExercise,
   activeExerciseIndex,
   activeLog,
@@ -154,6 +158,17 @@ export function GymScreen({
           <div className="session-top-bar__progress-fill" style={{ width: `${progressFraction * 100}%` }} />
         </div>
         <span className="session-top-bar__counter">{activeExerciseIndex + 1} / {totalExercises}</span>
+        {wakeLockStatus !== 'idle' && (
+          <span
+            className="wake-lock-indicator"
+            data-testid="wake-lock-indicator"
+            data-state={wakeLockStatus}
+          >
+            {wakeLockStatus === 'active'
+              ? 'экран не гаснет'
+              : 'экран может погаснуть · Автоблокировка: Никогда'}
+          </span>
+        )}
       </div>
       <span className="sr-only" data-testid="gym-active-day">Вкладка «Зал» · {activeWorkoutDay.name}</span>
       <span className="sr-only" data-testid="gym-progress-counter">Сейчас · {activeExerciseIndex + 1} из {totalExercises}</span>
