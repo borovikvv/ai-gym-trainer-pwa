@@ -149,17 +149,24 @@ export async function incrementRetry(id: number): Promise<void> {
 
 /**
  * Replay all queued requests. Called on 'online' event and app startup.
- * Returns the number of successfully replayed requests.
+ * Returns `sent` — successfully replayed requests, and `abandoned` — requests
+ * removed because they exhausted their retry budget.
  */
-export async function replayQueuedRequests(): Promise<number> {
+export async function replayQueuedRequests(): Promise<{ sent: number; abandoned: number }> {
   const queued = await getQueuedRequests()
-  if (queued.length === 0) return 0
+  if (queued.length === 0) return { sent: 0, abandoned: 0 }
 
   let successCount = 0
+  let abandonedCount = 0
   for (const req of queued) {
     if (!req.id) continue
-    // Skip requests that have failed too many times (5 retries max).
-    if (req.retryCount >= 5) continue
+    // Issue #465: исчерпавшие лимит попыток записи удаляем и считаем как
+    // «не доставлено». Раньше они висели в IndexedDB навсегда и терялись молча.
+    if (req.retryCount >= 5) {
+      await removeQueuedRequest(req.id)
+      abandonedCount++
+      continue
+    }
 
     try {
       const response = await apiFetch(req.url, {
@@ -186,7 +193,7 @@ export async function replayQueuedRequests(): Promise<number> {
       break // No point trying more if we're offline
     }
   }
-  return successCount
+  return { sent: successCount, abandoned: abandonedCount }
 }
 
 /**

@@ -9,7 +9,7 @@ import {
   type ExerciseLog,
   type WorkoutHistoryEntry,
 } from '../domain/workoutHistory'
-import { isWorkoutApiConfigured, loadWorkoutHistoryFromApi, saveWorkoutEntryToApi } from '../data/workoutApi'
+import { isWorkoutApiConfigured, loadWorkoutHistoryFromApi, saveWorkoutEntryToApi, WorkoutSaveError } from '../data/workoutApi'
 import { saveHistory } from './useProgramData'
 import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabaseClient'
 import { saveWorkoutEntryToSupabase } from '../data/workoutRepository'
@@ -101,22 +101,36 @@ export function useWorkoutSave({
                   await reloadProgramDataForUser(activeUserId)
                   clearActiveWorkoutDraft()
                   notify(saveResult?.debrief?.summary ? `Тренировка сохранена. ${saveResult.debrief.summary}` : 'Тренировка сохранена в базе')
-                } catch {
-                  // Issue #39: API failed — enqueue for background sync.
-                  // Data is already in localStorage (saveHistory above),
-                  // so it's not lost. When connectivity returns, the
-                  // queued POST will be replayed automatically.
-                  const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
-                  if (apiBase) {
-                    const { enqueueRequest } = await import('../lib/offlineQueue')
-                    await enqueueRequest(
-                      `${apiBase}/api/workout-history`,
-                      'POST',
-                      baseEntry,
-                      apiAuthHeaders({ 'Content-Type': 'application/json' }),
-                    )
+                } catch (err) {
+                  // Issue #465: 4xx — сервер отверг тело записи. Это не «нет
+                  // интернета»: ретраить нечего, а очередь выбросила бы запрос
+                  // после лимита попыток молча. Говорим явно и не ставим в
+                  // очередь. 401 сюда не попадает — протухшая сессия
+                  // восстановима повторным логином (см. #404).
+                  if (
+                    err instanceof WorkoutSaveError &&
+                    err.status >= 400 &&
+                    err.status < 500 &&
+                    err.status !== 401
+                  ) {
+                    notify(`Тренировка не сохранена: сервер отклонил запрос (HTTP ${err.status}). Откройте тренировку ещё раз и попробуйте сохранить заново.`)
+                  } else {
+                    // Issue #39: API failed — enqueue for background sync.
+                    // Data is already in localStorage (saveHistory above),
+                    // so it's not lost. When connectivity returns, the
+                    // queued POST will be replayed automatically.
+                    const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
+                    if (apiBase) {
+                      const { enqueueRequest } = await import('../lib/offlineQueue')
+                      await enqueueRequest(
+                        `${apiBase}/api/workout-history`,
+                        'POST',
+                        baseEntry,
+                        apiAuthHeaders({ 'Content-Type': 'application/json' }),
+                      )
+                    }
+                    notify('Сохранено локально. Отправим в базу при появлении интернета.')
                   }
-                  notify('Сохранено локально. Отправим в базу при появлении интернета.')
                 }
               } else if (isSupabaseConfigured) {
                 try {

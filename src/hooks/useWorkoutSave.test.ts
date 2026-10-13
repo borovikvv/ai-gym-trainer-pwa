@@ -1,10 +1,40 @@
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWorkoutSave } from './useWorkoutSave'
 import { defaultReadinessCheckIn } from '../domain/readinessCheckIn'
+import { WorkoutSaveError } from '../data/workoutApi'
 import type { WorkoutDay } from '../../shared/types'
 
 vi.mock('./useProgramData', () => ({ saveHistory: vi.fn() }))
+
+const workoutApi = vi.hoisted(() => ({
+  configured: false,
+  saveWorkoutEntryToApi: vi.fn(),
+  loadWorkoutHistoryFromApi: vi.fn(),
+}))
+
+vi.mock('../data/workoutApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../data/workoutApi')>()
+  return {
+    ...actual,
+    get isWorkoutApiConfigured() {
+      return workoutApi.configured
+    },
+    saveWorkoutEntryToApi: workoutApi.saveWorkoutEntryToApi,
+    loadWorkoutHistoryFromApi: workoutApi.loadWorkoutHistoryFromApi,
+  }
+})
+
+const offlineQueue = vi.hoisted(() => ({ enqueueRequest: vi.fn() }))
+
+vi.mock('../lib/offlineQueue', () => ({ enqueueRequest: offlineQueue.enqueueRequest }))
+
+beforeEach(() => {
+  workoutApi.configured = false
+  workoutApi.saveWorkoutEntryToApi.mockReset()
+  workoutApi.loadWorkoutHistoryFromApi.mockReset().mockResolvedValue([])
+  offlineQueue.enqueueRequest.mockReset().mockResolvedValue(undefined)
+})
 
 const workoutDay: WorkoutDay = {
   id: 'day-a',
@@ -112,5 +142,49 @@ describe('useWorkoutSave — issue #419: сигнал ответа атлета'
     await act(async () => { await result.current.saveWorkoutAndExit() })
 
     expect(setDeviationAnswer).toHaveBeenCalledWith('')
+  })
+})
+
+describe('useWorkoutSave — issue #465: 4xx не уходит в очередь', () => {
+  beforeEach(() => {
+    workoutApi.configured = true
+    vi.stubEnv('VITE_API_BASE_URL', 'http://api.test')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('4xx — не ставит в очередь и говорит «тренировка не сохранена»', async () => {
+    workoutApi.saveWorkoutEntryToApi.mockRejectedValue(new WorkoutSaveError(400, 'bad body'))
+    const notify = vi.fn()
+    const { result } = renderHook(() => useWorkoutSave(makeOptions({ notify })))
+
+    await act(async () => { await result.current.saveWorkoutAndExit() })
+
+    expect(offlineQueue.enqueueRequest).not.toHaveBeenCalled()
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('Тренировка не сохранена'))
+  })
+
+  it('сетевой сбой — по-прежнему очередь и «сохранено локально»', async () => {
+    workoutApi.saveWorkoutEntryToApi.mockRejectedValue(new Error('network down'))
+    const notify = vi.fn()
+    const { result } = renderHook(() => useWorkoutSave(makeOptions({ notify })))
+
+    await act(async () => { await result.current.saveWorkoutAndExit() })
+
+    expect(offlineQueue.enqueueRequest).toHaveBeenCalledTimes(1)
+    expect(notify).toHaveBeenCalledWith('Сохранено локально. Отправим в базу при появлении интернета.')
+  })
+
+  it('401 — остаётся в очереди, не «отказ»', async () => {
+    workoutApi.saveWorkoutEntryToApi.mockRejectedValue(new WorkoutSaveError(401, 'unauthorized'))
+    const notify = vi.fn()
+    const { result } = renderHook(() => useWorkoutSave(makeOptions({ notify })))
+
+    await act(async () => { await result.current.saveWorkoutAndExit() })
+
+    expect(offlineQueue.enqueueRequest).toHaveBeenCalledTimes(1)
+    expect(notify).toHaveBeenCalledWith('Сохранено локально. Отправим в базу при появлении интернета.')
   })
 })

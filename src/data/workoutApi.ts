@@ -40,6 +40,17 @@ export type WorkoutSaveResponse = {
   debrief: WorkoutDebrief | null
 }
 
+// Issue #465: код ответа нужен вызывающему, чтобы отличить «сервер отверг
+// запись» (4xx) от «не дошло» (сеть/5xx). По образцу ProgramLoadError.
+export class WorkoutSaveError extends Error {
+  status: number
+
+  constructor(status: number, body: string) {
+    super(`API save failed: ${status} ${body}`)
+    this.status = status
+  }
+}
+
 export async function saveWorkoutEntryToApi(entry: WorkoutHistoryEntry): Promise<WorkoutSaveResponse | null> {
   if (!apiBaseUrl) return null
   const response = await apiFetch(`${apiBaseUrl}/api/workout-history`, {
@@ -49,7 +60,7 @@ export async function saveWorkoutEntryToApi(entry: WorkoutHistoryEntry): Promise
   })
   if (!response.ok) {
     const body = await response.text()
-    throw new Error(`API save failed: ${response.status} ${body}`)
+    throw new WorkoutSaveError(response.status, body)
   }
   const body = (await response.json()) as { coachPlan?: CoachPlanResponse | null; debrief?: WorkoutDebrief | null }
   return { coachPlan: body.coachPlan ?? null, debrief: body.debrief ?? null }
