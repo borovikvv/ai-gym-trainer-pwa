@@ -267,6 +267,21 @@ export function reconcileWeeklyVolume(targetSets: number, actualSets: number): {
 const SELECT_COLUMNS = `id, user_id, week_start, muscle_key, target_sets, reason, previous_target_sets,
   action, block_goal_id, actual_sets, verdict, reviewed_at`
 
+/**
+ * Issue #443: правка недельной цели подходов группы из недельного агента
+ * (change_focus). Меняется только target_sets: reason/action/previous_target_sets —
+ * бухгалтерия decideWeeklyVolumeTarget, ручная правка агента их не переписывает.
+ */
+export async function updateWeeklyVolumeTargetSets(
+  client: DbClient,
+  { id, targetSets }: { id: string; targetSets: number },
+): Promise<void> {
+  await client.query(
+    `update public.weekly_volume_targets set target_sets = $2 where id = $1`,
+    [id, targetSets],
+  )
+}
+
 export async function loadWeeklyVolumeTargets(client: DbClient, userId: string, weekStart: string): Promise<Record<string, WeeklyVolumeTarget>> {
   const result = await client.query(
     `select ${SELECT_COLUMNS} from public.weekly_volume_targets

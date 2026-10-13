@@ -39,6 +39,7 @@ vi.mock('./coachProgramReview.js', () => ({
 }))
 vi.mock('./coachProgramActions.js', () => ({
   applyAdjustVolumeChanges: vi.fn(),
+  applyChangeFocusChanges: vi.fn(),
   refreshAppliedActionStatuses: vi.fn(),
   revertProgramChangeAction: vi.fn(),
 }))
