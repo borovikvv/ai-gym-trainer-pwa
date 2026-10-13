@@ -141,6 +141,50 @@ describe('applyAdjustVolumeChange (#420)', () => {
     expect(client.query).not.toHaveBeenCalled()
   })
 
+  // Issue #420: раньше updateProgramExercise получал только { id, setsCount } и
+  // при полной перезаписи колонок обнулял not null rep_min/rep_max — на реальной
+  // БД это роняло весь apply (и весь недельный обзор). Здесь мок подменяем на
+  // настоящую функцию и проверяем, что её UPDATE частичный (coalesce).
+  it('с настоящим updateProgramExercise частичное обновление не затирает NOT NULL', async () => {
+    const actual = await vi.importActual('./services/programService.js')
+    updateProgramExercise.mockImplementationOnce(actual.updateProgramExercise)
+
+    const query = vi.fn(async (text) => {
+      if (text === 'begin' || text === 'commit' || text === 'rollback') return { rows: [], rowCount: null }
+      if (text.includes('insert into public.program_change_actions')) {
+        return {
+          rows: [{
+            id: 'action-1', user_id: 'oleg', program_exercise_id: 'pe-1',
+            change_type: 'adjust_volume', status: 'applied',
+            before: JSON.stringify({ setsCount: 3 }), after: JSON.stringify({ setsCount: 5 }),
+            rationale: null, safety_note: null,
+            applied_at: NOW.toISOString(), reverted_at: null, created_at: NOW.toISOString(),
+          }],
+          rowCount: 1,
+        }
+      }
+      if (text.includes('where pe.id = $1')) return { rows: [{ user_id: 'oleg' }], rowCount: 1 }
+      if (text.includes('update public.program_exercises')) return { rows: [{ id: 'pe-1' }], rowCount: 1 }
+      return { rows: [], rowCount: 0 }
+    })
+
+    const result = await applyAdjustVolumeChange({ query }, {
+      userId: 'oleg',
+      change: adjustChange(5),
+      programDays: programDaysWith('Жим лёжа', 3),
+      history: historyWithSets('Грудь', 'Жим лёжа', 10),
+      e1rmHistories: [],
+      ageRecoveryPhase: 'adult',
+      now: NOW,
+    })
+
+    expect(result.status).toBe('applied')
+    const updateCall = query.mock.calls.find(([text]) => text.includes('update public.program_exercises'))
+    expect(updateCall).toBeDefined()
+    expect(updateCall[0]).toMatch(/rep_min\s*=\s*coalesce\(/i)
+    expect(updateCall[1][1]).toBe(5)
+  })
+
   it('вставка в журнал упала — упражнение не мутируется, транзакция откатывается', async () => {
     const client = {
       query: vi.fn(async (text) => {
