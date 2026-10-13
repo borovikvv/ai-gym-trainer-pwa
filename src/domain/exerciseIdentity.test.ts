@@ -8,6 +8,10 @@ describe('exercise identity', () => {
     expect(getCanonicalExerciseId({ id: 'cable-curl-replacement-1780844563272', name: 'Сгибание рук на нижнем блоке' })).toBe('cable-curl')
   })
 
+  it('collapses a chain of replacement suffixes to the base exercise (issue #460)', () => {
+    expect(getCanonicalExerciseId({ id: 'cable-row-replacement-1786124420031-replacement-1786200000000', name: 'Горизонтальная тяга' })).toBe('cable-row')
+  })
+
   it('uses explicit canonical ids before generated id cleanup', () => {
     expect(getCanonicalExerciseId({ id: 'custom-session-id', canonicalExerciseId: 'plank', name: 'Планка' })).toBe('plank')
   })

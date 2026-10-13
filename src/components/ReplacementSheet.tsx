@@ -1,5 +1,5 @@
 import type { ExercisePlan  } from '../../shared/types'
-import { getCanonicalExerciseId } from '../domain/exerciseIdentity'
+import { getCanonicalExerciseId, normalizeExerciseName } from '../domain/exerciseIdentity'
 
 type ReplacementSheetProps = {
         exercise: ExercisePlan
@@ -11,7 +11,7 @@ type ReplacementSheetProps = {
 export function ReplacementSheet({ exercise, exerciseLibrary, onChooseReplacement, onClose }: ReplacementSheetProps) {
         const replacementOptions = exercise.alternatives.map((alternative) => ({
                 alternative,
-                exercise: exerciseLibrary.find((item) => item.name.toLowerCase() === alternative.name.toLowerCase()) ?? {
+                exercise: exerciseLibrary.find((item) => normalizeExerciseName(item.name) === normalizeExerciseName(alternative.name)) ?? {
                         ...exercise,
                         // Issue #375: у заглушки своя идентичность — по названию. Id с суффиксом
                         // исходного упражнения (`<исходный>-alternative-…`) канонизируется в

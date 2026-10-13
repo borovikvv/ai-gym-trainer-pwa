@@ -6,4 +6,4 @@
  * existing `../domain/exerciseIdentity` import sites in src/.
  */
 
-export { canonicalExerciseId, getCanonicalExerciseId } from '../../shared/exerciseIdentity'
+export { canonicalExerciseId, getCanonicalExerciseId, normalizeExerciseName } from '../../shared/exerciseIdentity'
