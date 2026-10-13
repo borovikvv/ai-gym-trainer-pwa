@@ -30,6 +30,10 @@ Every LLM call is logged to stdout as an `llm.call` activity event with
 `{ caller, tier, model, promptTokens, completionTokens, maxTokens, truncated, latencyMs, ok }` —
 use it to track real cost per tier.
 
+Budget rules (issue #427): the caller's timeout must be ≥ p99 latency on its
+prompts and `maxTokens` ≥ p99 response length with a 10 % margin (checked by the
+self-audit). Never change `LLM_MODEL_*` without a run on real prompts (#451).
+
 ## Deploy Steps
 
 ```bash

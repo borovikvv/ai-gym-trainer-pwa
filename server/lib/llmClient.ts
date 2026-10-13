@@ -271,6 +271,7 @@ async function requestLlmContent(
       maxTokens: options.maxTokens ?? null,
       truncated,
       latencyMs: Date.now() - startedAt,
+      timeoutMs,
       ok: Boolean(content),
     })
     return { content: content ?? null, truncated, reason: content ? null : 'empty' }
@@ -281,6 +282,8 @@ async function requestLlmContent(
       tier: options.tier,
       model,
       latencyMs: Date.now() - startedAt,
+      timeoutMs,
+      reason,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
     })
