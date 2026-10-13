@@ -32,7 +32,7 @@ const library = [
 
 describe('ExerciseLibraryScreen', () => {
   it('uses generated images for replacement exercise ids through canonical identity', () => {
-    expect(exerciseGuideImageSrc('assisted-pull-up-replacement-1780844823365')).toBe('/exercise-guides/assisted-pull-up-gpt.png')
+    expect(exerciseGuideImageSrc('assisted-pull-up-replacement-1780844823365')).toBe('/exercise-guides/assisted-pull-up-gpt.webp')
   })
 
   it('filters exercises by search text and muscle group without changing the exercise data', async () => {
