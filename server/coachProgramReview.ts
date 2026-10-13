@@ -41,6 +41,30 @@ interface ProgramReviewInput {
 
 export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focus' | 'add_deload'
 
+/** Issue #420: статус применённого/отменённого действия над планом. */
+export type ProgramChangeActionStatus = 'applied' | 'clamped' | 'unmatched' | 'reverted'
+
+/**
+ * Issue #420: запись об изменении плана, применённом агентом. Хранится в
+ * public.program_change_actions, отдаётся на фронт внутри review.changes[i].
+ * Двигатель применения — server/coachProgramActions.ts. `unmatched` — план не
+ * изменялся (упражнение не найдено), строки в БД нет, id пустой.
+ */
+export interface ProgramChangeAppliedAction {
+  id: string
+  userId: string
+  programExerciseId: string
+  changeType: ProgramChangeType
+  status: ProgramChangeActionStatus
+  before: { setsCount: number } | null
+  after: { setsCount: number } | null
+  rationale: string | null
+  safetyNote: string | null
+  appliedAt: string | null
+  revertedAt: string | null
+  createdAt: string
+}
+
 export interface ProgramChange {
   type: ProgramChangeType
   description: string
@@ -51,6 +75,8 @@ export interface ProgramChange {
   newExerciseName?: string
   newSetsCount?: number
   priority: 'high' | 'medium' | 'low'
+  /** Issue #420: результат применения для adjust_volume; остальные типы — без него. */
+  appliedAction?: ProgramChangeAppliedAction
 }
 
 export interface ProgramReview {

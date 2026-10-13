@@ -11,6 +11,7 @@ import { canonicalExerciseId } from '../../shared/exerciseIdentity.js'
 import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../activityLog.js'
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
+import { applyAdjustVolumeChange, revertProgramChangeAction, type ProgramDayForActions } from '../coachProgramActions.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { requireAllowedUserId } from '../privateUsers.js'
@@ -319,6 +320,7 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
   } catch (goalErr) {
     console.warn('refreshGoalProgress (non-fatal):', goalErr instanceof Error ? goalErr.message : goalErr)
   }
+  const generatedAt = new Date()
   const review = await reviewProgram({
     userId,
     history,
@@ -334,8 +336,28 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
       bannedExercises: profile.bannedExercises,
       preferredExercises: profile.preferredExercises,
     },
-    now: new Date(),
+    now: generatedAt,
   })
+
+  // Issue #420: недельный агент применяет adjust_volume автоматически (решение
+  // владельца 5-7), с возможностью отмены. Рамки объёма — детерминированный
+  // гейт внутри applyAdjustVolumeChange. Остальные типы изменений остаются
+  // предложениями: под них нет готовой мутации. Статус применения кладём в
+  // change.appliedAction до кэширования — недельный кэш не даёт применить
+  // одно и то же повторно.
+  const ageRecoveryPhase = getUserTrainingPolicy(profile)?.ageRecoveryProfile?.phase ?? 'adult'
+  for (const change of review.changes) {
+    if (change.type !== 'adjust_volume') continue
+    change.appliedAction = await applyAdjustVolumeChange(pool, {
+      userId,
+      change,
+      programDays: programDays as ProgramDayForActions[],
+      history,
+      e1rmHistories: e1rmHistories ?? [],
+      ageRecoveryPhase,
+      now: generatedAt,
+    })
+  }
 
   // Save to DB for weekly caching (non-fatal)
   try {
@@ -349,6 +371,16 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
   }
 
   res.json({ ok: true, review })
+})
+
+// Issue #420: отмена применённого недельным агентом изменения плана.
+// Владелец строки проверяется внутри revertProgramChangeAction.
+coachRoutes.post('/coach/program-change/:actionId/revert', requireAllowedUserId, async (req, res) => {
+  const userId = String(req.body?.userId ?? '')
+  const actionId = String(req.params.actionId ?? '')
+  const action = await revertProgramChangeAction(pool, { actionId, userId })
+  if (!action) return res.status(404).json({ error: 'program change action not found' })
+  res.json({ ok: true, action })
 })
 
 // Issue #86: AI Level 4 — training record status + export
