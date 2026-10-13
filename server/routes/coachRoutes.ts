@@ -12,7 +12,7 @@ import { buildCoachNextSetEvent, buildWorkoutTodayEvent, logActivity } from '../
 import { analyzeProgress } from '../coachProgressAnalysis.js'
 import { reviewProgram } from '../coachProgramReview.js'
 import { buildPersonalModelNote, loadAthleteSignalsNote } from '../coachProgramReviewContext.js'
-import { applyAdjustVolumeChanges, applyAddDeloadChanges, applyChangeFocusChanges, refreshAppliedActionStatuses, revertProgramChangeAction, type ProgramDayForActions } from '../coachProgramActions.js'
+import { applyAdjustVolumeChanges, applyAddDeloadChanges, applyChangeFocusChanges, applySwapExerciseChanges, refreshAppliedActionStatuses, revertProgramChangeAction, type ProgramDayForActions } from '../coachProgramActions.js'
 import { countTrainingRecords, exportTrainingRecords } from "../coachTrainingRecord.js"
 import { buildAllExerciseE1RMHistories, e1rmOptionsForProfile } from '../../src/domain/estimatedOneRepMax.js'
 import { requireAllowedUserId } from '../privateUsers.js'
@@ -313,10 +313,12 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
   }
 
   // No cache → generate new review
-  const [profile, programDays, memoryResult] = await Promise.all([
+  const [profile, programDays, memoryResult, exerciseLibrary] = await Promise.all([
     loadUserProfile(pool, userId),
     loadUserWorkoutDays(pool, userId),
     loadCoachMemoryForUser(pool, userId),
+    // Issue #442: белый список замен агент строит из полного справочника.
+    loadExerciseLibrary(pool),
   ])
   const { coachMemory, coachState, e1rmHistories, latestAppliedAddDeloadAt } = memoryResult
   const history = await loadRecentHistory(pool, userId)
@@ -386,7 +388,21 @@ coachRoutes.get('/coach/program-review/:userId', requireAllowedUserId, llmRateLi
       weekStart: dateToDateOnly(startOfWeek(generatedAt)),
       now: generatedAt,
     })
+    // Issue #442: замена упражнения — после adjust_volume, чтобы не менять состав
+    // programDays раньше, чем adjust_volume найдёт упражнения по именам.
+    await applySwapExerciseChanges(applyClient, {
+      userId,
+      changes: review.changes,
+      programDays: programDays as ProgramDayForActions[],
+      exerciseLibrary: exerciseLibrary as Parameters<typeof applySwapExerciseChanges>[1]['exerciseLibrary'],
+      coachState,
+      coachMemory,
+      profile: profile as Parameters<typeof applySwapExerciseChanges>[1]['profile'],
+      history,
+      now: generatedAt,
+    })
     // Issue #444: назначение разгрузочной недели агентом (гейт внутри).
+    // Последним: каскад пересобирает неделю уже с заменами и новыми целями.
     await applyAddDeloadChanges(applyClient, {
       userId,
       changes: review.changes,

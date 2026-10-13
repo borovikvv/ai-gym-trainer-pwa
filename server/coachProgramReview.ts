@@ -49,6 +49,29 @@ export type ProgramChangeType = 'swap_exercise' | 'adjust_volume' | 'change_focu
 export type ProgramChangeActionStatus = 'applied' | 'clamped' | 'unmatched' | 'reverted'
 
 /**
+ * Issue #420/#442: снимок числа подходов — база для adjust_volume/change_focus.
+ */
+export interface AdjustVolumeSnapshot {
+  setsCount: number
+}
+
+/**
+ * Issue #442: полный снимок слота упражнения для swap_exercise. Хранит всё
+ * предписание, чтобы отмена вернула прежнее упражнение целиком, а не только
+ * число подходов. `exerciseId` отличает его от AdjustVolumeSnapshot.
+ */
+export interface SwapExerciseSnapshot {
+  exerciseId: string
+  exerciseName: string
+  setsCount: number
+  repMin: number
+  repMax: number
+  targetWeight: number
+  weightStep: number
+  restSeconds: number
+}
+
+/**
  * Issue #420: запись об изменении плана, применённом агентом. Хранится в
  * public.program_change_actions, отдаётся на фронт внутри review.changes[i].
  * Двигатель применения — server/coachProgramActions.ts. `unmatched` — план не
@@ -60,9 +83,9 @@ export interface ProgramChangeAppliedAction {
   programExerciseId: string
   changeType: ProgramChangeType
   status: ProgramChangeActionStatus
-  before: { setsCount: number } | { scheduledDate: string } | null
+  before: AdjustVolumeSnapshot | SwapExerciseSnapshot | { scheduledDate: string } | null
   /** Issue #444: add_deload хранит назначенную неделю в after.weekStart. */
-  after: { setsCount: number } | { scheduledDate: string } | { weekStart: string } | null
+  after: AdjustVolumeSnapshot | SwapExerciseSnapshot | { scheduledDate: string } | { weekStart: string } | null
   rationale: string | null
   safetyNote: string | null
   appliedAt: string | null

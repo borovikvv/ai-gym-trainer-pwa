@@ -32,14 +32,30 @@ export function changeTitle(change: ProgramChangeLike): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+/**
+ * Issue #420: снимок числа подходов (adjust_volume / change_focus).
+ * Issue #442: снимок слота упражнения (swap_exercise) — отличается наличием
+ * exerciseName; по нему и выбираем формат строки.
+ */
+export type AppliedActionSnapshot = {
+  setsCount?: number
+  exerciseId?: string
+  exerciseName?: string
+  /** Issue #444: add_deload не меняет подходы — хранит назначенную неделю. */
+  weekStart?: string
+}
+
 /** Issue #420: что недельный агент сделал с планом (запись из program_change_actions). */
 export type AppliedActionLike = {
   id: string
   status: string
-  before?: { setsCount: number } | null
-  /** Issue #444: add_deload не меняет подходы — хранит назначенную неделю. */
-  after?: { setsCount: number } | { weekStart: string } | null
+  before?: AppliedActionSnapshot | null
+  after?: AppliedActionSnapshot | null
   safetyNote?: string | null
+}
+
+function hasExerciseSnapshot(action?: AppliedActionLike | null): boolean {
+  return Boolean(action?.before?.exerciseName ?? action?.after?.exerciseName)
 }
 
 /** Строка о применении; пусто — изменение осталось предложением. */
@@ -50,13 +66,20 @@ export function appliedActionLabel(action?: AppliedActionLike | null): string {
     return `применено: неделя с ${action.after.weekStart} — разгрузка`
   }
   const before = action.before?.setsCount
-  const after = action.after && 'setsCount' in action.after ? action.after.setsCount : undefined
-  const sets = Number.isFinite(before) && Number.isFinite(after) ? `: подходов ${before} → ${after}` : ''
+  const after = action.after?.setsCount
+  const beforeName = (action.before?.exerciseName ?? '').trim()
+  const afterName = (action.after?.exerciseName ?? '').trim()
+  // Issue #442: замена — показываем оба имени упражнения.
+  const detail = beforeName && afterName
+    ? `: ${beforeName} → ${afterName}`
+    : Number.isFinite(before) && Number.isFinite(after)
+      ? `: подходов ${before} → ${after}`
+      : ''
   switch (action.status) {
-    case 'applied': return `применено${sets}`
+    case 'applied': return `применено${detail}`
     case 'clamped': return isNoOp(action)
       ? 'оставлено без изменений: объём уже на границе безопасного'
-      : `применено с поправкой на безопасный объём${sets}`
+      : `применено с поправкой на безопасный объём${detail}`
     case 'reverted': return 'отменено'
     case 'unmatched': return 'не применено: упражнения нет в программе'
     default: return ''
@@ -74,8 +97,12 @@ export function canRevertAction(action?: AppliedActionLike | null): boolean {
   return Boolean(action?.id) && (action?.status === 'applied' || action?.status === 'clamped') && !isNoOp(action)
 }
 
-/** Гейт оставил прежнее число подходов: действие записано, но план не изменился. */
+/**
+ * Гейт оставил прежнее число подходов: действие записано, но план не изменился.
+ * Замена упражнения никогда не no-op — она всегда меняет слот.
+ */
 function isNoOp(action?: AppliedActionLike | null): boolean {
+  if (hasExerciseSnapshot(action)) return false
   const before = action?.before?.setsCount
   const after = action?.after && 'setsCount' in action.after ? action.after.setsCount : undefined
   return Number.isFinite(before) && before === after

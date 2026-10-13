@@ -142,8 +142,10 @@ export async function updateUserProfile(client: DbClient, { userId, age, heightC
   return result.rows[0]
 }
 
-export async function updateProgramExercise(client: DbClient, { id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus }: {
+export async function updateProgramExercise(client: DbClient, { id, exerciseId, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus, todayGoal }: {
   id: string
+  // Issue #442: swap_exercise меняет само упражнение слота и цель дня.
+  exerciseId?: string
   setsCount?: number
   repMin?: number
   repMax?: number
@@ -151,6 +153,7 @@ export async function updateProgramExercise(client: DbClient, { id, setsCount, r
   weightStep?: number
   restSeconds?: number
   coachFocus?: string
+  todayGoal?: string
 }) {
   const owner = await client.query(
     `select p.user_id
@@ -176,10 +179,12 @@ export async function updateProgramExercise(client: DbClient, { id, setsCount, r
          target_weight = coalesce($5, target_weight),
          weight_step = coalesce($6, weight_step),
          rest_seconds = coalesce($7, rest_seconds),
-         coach_focus = coalesce($8, coach_focus)
+         coach_focus = coalesce($8, coach_focus),
+         exercise_id = coalesce($9, exercise_id),
+         today_goal = coalesce($10, today_goal)
      where id = $1
      returning id`,
-    [id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus],
+    [id, setsCount, repMin, repMax, targetWeight, weightStep, restSeconds, coachFocus, exerciseId, todayGoal],
   )
   return result.rows[0] ?? null
 }
