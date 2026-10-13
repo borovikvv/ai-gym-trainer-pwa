@@ -62,9 +62,9 @@ registerRoute(
 
 // Справочные картинки упражнений — нужны офлайн (Issue #39).
 registerRoute(
-  /\/exercise-guides\/.*\.(png|svg|jpg)$/i,
+  /\/exercise-guides\/.*\.(webp|svg)$/i,
   new StaleWhileRevalidate({
-    cacheName: 'exercise-guides-v2',
+    cacheName: 'exercise-guides-v3',
     plugins: [
       new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 }),
     ],

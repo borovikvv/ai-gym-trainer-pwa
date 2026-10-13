@@ -5,10 +5,12 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 HERMES_ROOT = Path(os.environ.get("HERMES_AGENT_ROOT", "/usr/local/lib/hermes-agent"))
+REPO_ROOT = Path(__file__).resolve().parent.parent
 # Default to this repo's public/exercise-guides (two levels up from scripts/).
 # Override with EXERCISE_GUIDE_DIR for server runs.
 OUT_DIR = Path(os.environ.get("EXERCISE_GUIDE_DIR", Path(__file__).resolve().parent.parent / "public" / "exercise-guides"))
@@ -123,8 +125,9 @@ def main() -> int:
     try:
         for item in EXERCISES:
             out_path = OUT_DIR / f"{item['id']}-gpt.png"
-            if out_path.exists() and out_path.stat().st_size > 1000:
-                results.append({"id": item["id"], "status": "exists", "path": str(out_path)})
+            webp_path = out_path.with_suffix(".webp")
+            if webp_path.exists() and webp_path.stat().st_size > 1000:
+                results.append({"id": item["id"], "status": "exists", "path": str(webp_path)})
                 continue
             prompt = build_prompt(item)
             print(json.dumps({"event": "generate", "id": item["id"], "model": MODEL}, ensure_ascii=False), flush=True)
@@ -133,16 +136,17 @@ def main() -> int:
                 raise RuntimeError(f"{item['id']}: {result.get('error') or result}")
             source = Path(result["image"])
             shutil.copyfile(source, out_path)
+            subprocess.run(["node", str(REPO_ROOT / "scripts" / "convert-exercise-guides-to-webp.mjs"), str(out_path)], check=True)
             manifest = {
                 "id": item["id"],
                 "name": item["name"],
                 "model": result.get("model") or MODEL,
                 "provider": result.get("provider") or "openai-codex",
-                "image": str(out_path),
+                "image": str(webp_path),
                 "prompt": prompt,
             }
             (OUT_DIR / f"{item['id']}-gpt.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-            results.append({"id": item["id"], "status": "generated", "path": str(out_path)})
+            results.append({"id": item["id"], "status": "generated", "path": str(webp_path)})
             print(json.dumps(results[-1], ensure_ascii=False), flush=True)
     finally:
         if previous_model is None:
