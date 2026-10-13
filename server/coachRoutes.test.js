@@ -39,6 +39,7 @@ vi.mock('./coachProgramReview.js', () => ({
 }))
 vi.mock('./coachProgramActions.js', () => ({
   applyAdjustVolumeChanges: vi.fn(),
+  applyAddDeloadChanges: vi.fn(),
   refreshAppliedActionStatuses: vi.fn(),
   revertProgramChangeAction: vi.fn(),
 }))
@@ -63,7 +64,7 @@ vi.mock('../../src/domain/estimatedOneRepMax.js', () => ({
 const { coachRoutes } = await import('./routes/coachRoutes.js')
 const { pool } = await import('./db.js')
 const { reviewProgram } = await import('./coachProgramReview.js')
-const { applyAdjustVolumeChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
+const { applyAdjustVolumeChanges, applyAddDeloadChanges, refreshAppliedActionStatuses, revertProgramChangeAction } = await import('./coachProgramActions.js')
 const { buildPersonalModelNote, loadAthleteSignalsNote } = await import('./coachProgramReviewContext.js')
 const { loadUserProfile, loadUserWorkoutDays, loadCoachMemoryForUser, loadRecentHistory } = await import('./services/programService.js')
 
@@ -316,6 +317,36 @@ describe('Issue #420: применение и отмена изменения п
     expect(applyAdjustVolumeChanges).toHaveBeenCalledWith(connectedClient, expect.objectContaining({ userId: 'oleg' }))
     expect(res.body.review.changes[0].appliedAction).toEqual({ id: 'a1', status: 'applied' })
     expect(connectedClient.release).toHaveBeenCalled()
+  })
+
+  // Issue #444: add_deload с пройденным гейтом применяется тем же проходом.
+  it('GET /coach/program-review применяет add_deload при пройденном гейте', async () => {
+    vi.stubEnv('ALLOWED_USER_IDS', '')
+    vi.mocked(reviewProgram).mockResolvedValue({
+      date: NOW_ISO,
+      summary: 'ok',
+      rating: 'needs_adjustment',
+      changes: [{ type: 'add_deload', description: 'Разгрузка', rationale: 'высокая усталость', priority: 'high' }],
+      nextWeekFocus: 'разгружаемся',
+    })
+    vi.mocked(loadUserProfile).mockResolvedValue({ userId: 'oleg', age: 30 })
+    vi.mocked(loadUserWorkoutDays).mockResolvedValue([])
+    vi.mocked(loadCoachMemoryForUser).mockResolvedValue({
+      coachMemory: null, coachState: null, e1rmHistories: [], latestAppliedAddDeloadAt: null,
+    })
+    vi.mocked(loadRecentHistory).mockResolvedValue([])
+    vi.mocked(applyAddDeloadChanges).mockImplementationOnce(async (_client, { changes }) => {
+      changes[0].appliedAction = { id: 'a2', status: 'applied', after: { weekStart: '2026-07-06' } }
+    })
+
+    const res = makeRes()
+    await handlerOf('get', '/coach/program-review/:userId')(
+      { params: { userId: 'oleg' }, body: {} },
+      res,
+    )
+
+    expect(applyAddDeloadChanges).toHaveBeenCalledWith(connectedClient, expect.objectContaining({ userId: 'oleg' }))
+    expect(res.body.review.changes[0].appliedAction).toEqual({ id: 'a2', status: 'applied', after: { weekStart: '2026-07-06' } })
   })
 
   // Агент читает личную модель (#418) и ответы атлета (#419); недоступная

@@ -37,15 +37,20 @@ export type AppliedActionLike = {
   id: string
   status: string
   before?: { setsCount: number } | null
-  after?: { setsCount: number } | null
+  /** Issue #444: add_deload не меняет подходы — хранит назначенную неделю. */
+  after?: { setsCount: number } | { weekStart: string } | null
   safetyNote?: string | null
 }
 
 /** Строка о применении; пусто — изменение осталось предложением. */
 export function appliedActionLabel(action?: AppliedActionLike | null): string {
   if (!action) return ''
+  // Issue #444: назначение разгрузки агентом показывает неделю, а не подходы.
+  if (action.status === 'applied' && action.after && 'weekStart' in action.after) {
+    return `применено: неделя с ${action.after.weekStart} — разгрузка`
+  }
   const before = action.before?.setsCount
-  const after = action.after?.setsCount
+  const after = action.after && 'setsCount' in action.after ? action.after.setsCount : undefined
   const sets = Number.isFinite(before) && Number.isFinite(after) ? `: подходов ${before} → ${after}` : ''
   switch (action.status) {
     case 'applied': return `применено${sets}`
@@ -72,7 +77,8 @@ export function canRevertAction(action?: AppliedActionLike | null): boolean {
 /** Гейт оставил прежнее число подходов: действие записано, но план не изменился. */
 function isNoOp(action?: AppliedActionLike | null): boolean {
   const before = action?.before?.setsCount
-  return Number.isFinite(before) && before === action?.after?.setsCount
+  const after = action?.after && 'setsCount' in action.after ? action.after.setsCount : undefined
+  return Number.isFinite(before) && before === after
 }
 
 /** Short "what to do" subtitle, truncated at a word boundary (never mid-word). */

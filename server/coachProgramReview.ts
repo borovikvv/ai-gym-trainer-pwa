@@ -61,7 +61,8 @@ export interface ProgramChangeAppliedAction {
   changeType: ProgramChangeType
   status: ProgramChangeActionStatus
   before: { setsCount: number } | null
-  after: { setsCount: number } | null
+  /** Issue #444: add_deload хранит назначенную неделю в after.weekStart. */
+  after: { setsCount: number } | { weekStart: string } | null
   rationale: string | null
   safetyNote: string | null
   appliedAt: string | null

@@ -14,13 +14,15 @@
 // Двигатель не пишет килограммы и повторы — только число подходов. Веса
 // пересчитает генератор плана после применения.
 
-import type { AgeRecoveryPhase, WorkoutHistoryEntry } from '../shared/types.js'
+import type { AgeRecoveryPhase, MesocycleState, WorkoutHistoryEntry } from '../shared/types.js'
 import type { DbClient } from './dbClient.js'
 import type { ProgramChange, ProgramChangeAppliedAction } from './coachProgramReview.js'
 import { buildMuscleVolumeSnapshot } from './buildVolumeSnapshot.js'
 import { getVolumeLandmarks } from './volumeLandmarks.js'
 import { labelFor, normalizeExerciseMuscleGroup } from '../shared/muscleGroups.js'
 import { updateProgramExercise } from './services/programService.js'
+import { cascadeRegenerateFutureWorkouts } from './services/plannedWorkoutService.js'
+import { dateToDateOnly, endOfWeek, startOfWeek } from './utils.js'
 import { assertAllowedRowOwner } from './privateUsers.js'
 
 interface ProgramExerciseForActions {
@@ -60,6 +62,16 @@ export interface RevertProgramChangeInput {
   actionId: string
   userId: string
   now?: Date
+}
+
+/** Issue #444: вход применения add_deload — назначение разгрузочной недели. */
+export interface ApplyAddDeloadInput {
+  userId: string
+  change: ProgramChange
+  mesocycleState: MesocycleState | null
+  /** Момент последнего применённого агентом add_deload (для гейта «не чаще цикла»). */
+  latestAppliedAddDeloadAt: Date | string | null
+  now: Date
 }
 
 /** program_exercises.sets_count: check (sets_count > 0). */
@@ -183,6 +195,96 @@ export async function applyAdjustVolumeChanges(
 }
 
 /**
+ * Issue #444: назначение разгрузочной недели агентом. Гейт детерминированный:
+ *  - неделя уже разгрузочная (календарь или MRV/боль сработали раньше агента);
+ *  - первая неделя цикла — разгрузка слишком рано;
+ *  - агент уже назначал разгрузку в этом цикле (cycleStartedOn).
+ * Не прошёл гейт — unmatched: плана не касались, строки в БД нет.
+ */
+export async function applyAddDeloadChange(
+  client: DbClient,
+  input: ApplyAddDeloadInput,
+): Promise<ProgramChangeAppliedAction> {
+  const { userId, change, mesocycleState, latestAppliedAddDeloadAt, now } = input
+
+  if (mesocycleState?.isDeload) {
+    return unmatchedAction(userId, '', NaN, change, now, 'неделя уже разгрузочная')
+  }
+  if (mesocycleState && mesocycleState.weekInCycle <= 1) {
+    return unmatchedAction(userId, '', NaN, change, now, 'первая неделя цикла — разгрузка слишком рано')
+  }
+  if (latestAppliedAddDeloadAt && mesocycleState?.cycleStartedOn) {
+    const last = new Date(latestAppliedAddDeloadAt).getTime()
+    const cycleStart = new Date(`${mesocycleState.cycleStartedOn}T00:00:00`).getTime()
+    if (Number.isFinite(last) && Number.isFinite(cycleStart) && last >= cycleStart) {
+      return unmatchedAction(userId, '', NaN, change, now, 'разгрузка уже назначена агентом в этом цикле')
+    }
+  }
+
+  const weekStart = dateToDateOnly(startOfWeek(now))
+  return withTransaction(client, async () => {
+    const result = await client.query(
+      `insert into public.program_change_actions
+         (user_id, program_exercise_id, change_type, status, before, after, rationale, safety_note, applied_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning ${ACTION_COLUMNS}`,
+      [
+        userId,
+        '',
+        change.type,
+        'applied',
+        null,
+        JSON.stringify({ weekStart }),
+        change.rationale ?? null,
+        `агентом назначена разгрузочная неделя с ${weekStart}`,
+        now.toISOString(),
+      ],
+    )
+    return mapActionRow(result.rows[0], userId, change)
+  })
+}
+
+/** Число дней от now до конца календарной недели, не меньше одного. */
+function daysToEndOfWeek(now: Date): number {
+  return Math.max(1, Math.ceil((endOfWeek(now).getTime() - now.getTime()) / 86_400_000))
+}
+
+/**
+ * Issue #444: применяет add_deload из недельного обзора. Второе назначение в
+ * том же проходе блокируется локальным флагом (без похода в БД). После первого
+ * успешного применения оставшиеся запланированные тренировки недели
+ * пересобираются, чтобы стать разгрузочными. Сбой одного изменения не роняет
+ * обзор.
+ */
+export async function applyAddDeloadChanges(
+  client: DbClient,
+  { changes, ...input }: Omit<ApplyAddDeloadInput, 'change'> & { changes: ProgramChange[] },
+): Promise<void> {
+  let appliedThisPass = false
+  for (const change of changes) {
+    if (change.type !== 'add_deload') continue
+    try {
+      if (appliedThisPass) {
+        change.appliedAction = unmatchedAction(input.userId, '', NaN, change, input.now, 'разгрузка уже назначена в этом обзоре')
+        continue
+      }
+      const action = await applyAddDeloadChange(client, { ...input, change })
+      change.appliedAction = action
+      if (action.status === 'applied') {
+        appliedThisPass = true
+        try {
+          await cascadeRegenerateFutureWorkouts(client, { userId: input.userId, horizonDays: daysToEndOfWeek(input.now) })
+        } catch (error) {
+          console.error('applyAddDeloadChanges cascade (non-fatal):', error instanceof Error ? error.message : error)
+        }
+      }
+    } catch (error) {
+      console.error('applyAddDeloadChange (non-fatal):', error instanceof Error ? error.message : error)
+    }
+  }
+}
+
+/**
  * Обзор кэшируется на неделю вместе со статусами действий, а отмена меняет
  * статус только в журнале. Перед отдачей кэша статусы перечитываются оттуда,
  * иначе отменённое изменение снова выглядело бы применённым.
@@ -235,7 +337,7 @@ export async function revertProgramChangeAction(
   if (action.status === 'reverted') return action
 
   const beforeSetsCount = Number(action.before?.setsCount)
-  return withTransaction(client, async () => {
+  const reverted = await withTransaction(client, async () => {
     // Статус и мутация тоже в одной транзакции: если восстановление подходов
     // упадёт, запись останется applied и повторный revert снова сработает.
     const updated = await client.query(
@@ -245,11 +347,22 @@ export async function revertProgramChangeAction(
        returning ${ACTION_COLUMNS}`,
       [actionId, now.toISOString()],
     )
-    if (Number.isFinite(beforeSetsCount)) {
+    // Issue #444: у add_deload нет упражнения — снимаем только назначение.
+    if (action.changeType !== 'add_deload' && Number.isFinite(beforeSetsCount)) {
       await updateProgramExercise(client, { id: action.programExerciseId, setsCount: beforeSetsCount })
     }
     return mapActionRow(updated.rows[0], userId, null)
   })
+  // Issue #444: после снятия назначения пересобираем неделю, иначе разгрузочные
+  // тренировки останутся разгрузочными. Сбой не фатален — статус уже отменён.
+  if (action.changeType === 'add_deload') {
+    try {
+      await cascadeRegenerateFutureWorkouts(client, { userId, horizonDays: daysToEndOfWeek(now) })
+    } catch (error) {
+      console.error('revertProgramChangeAction cascade (non-fatal):', error instanceof Error ? error.message : error)
+    }
+  }
+  return reverted
 }
 
 function findExerciseByName(
