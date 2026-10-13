@@ -7,13 +7,18 @@ import {
   isDegenerate,
   isUndersampled,
   LLM_FALLBACK_SHARE_ALARM_THRESHOLD,
+  LLM_MAX_TOKENS_HEADROOM,
   LLM_OUTCOME_MIN_SAMPLE,
+  llmBudgetAlarms,
   llmOutcomeAlarms,
   loadSignalValues,
   normalizeE1rmTrendValue,
+  parseLlmCallLine,
   parseLlmOutcomeLine,
+  percentile,
   readAvgRepDeviation,
   readClamped,
+  tallyLlmCalls,
   tallyLlmOutcomes,
   tallyWeightAdherence,
   totalObservations,
@@ -417,5 +422,114 @@ describe('llmOutcomeAlarms (issue #426)', () => {
     expect(topLine).toContain('d: 4')
     expect(topLine).toContain('c: 2')
     expect(topLine).not.toContain('a: 1')
+  })
+})
+
+describe('parseLlmCallLine (issue #427)', () => {
+  function llmCallLine(fields) {
+    return `TRAINER_EVENT ${JSON.stringify({ event: 'llm.call', ...fields })}`
+  }
+
+  it('разбирает вызов во все поля', () => {
+    const line = llmCallLine({
+      caller: 'coachNarrator', model: 'gpt-4o-mini', latencyMs: 1234,
+      ok: true, truncated: false, completionTokens: 42, maxTokens: 500, timeoutMs: 6000, reason: null,
+    })
+    expect(parseLlmCallLine(line)).toEqual({
+      caller: 'coachNarrator', model: 'gpt-4o-mini', latencyMs: 1234,
+      ok: true, truncated: false, completionTokens: 42, maxTokens: 500, timeoutMs: 6000, reason: null,
+    })
+  })
+
+  it('старое событие без timeoutMs разбирается с timeoutMs: null', () => {
+    const parsed = parseLlmCallLine(llmCallLine({ caller: 'x', model: 'm', latencyMs: 10, ok: true }))
+    expect(parsed.timeoutMs).toBeNull()
+    expect(parsed.maxTokens).toBeNull()
+  })
+
+  it('invalid_json и прочий мусор → null, не бросает', () => {
+    expect(parseLlmCallLine('TRAINER_EVENT {битый')).toBeNull()
+    expect(parseLlmCallLine('обычная строка без маркера')).toBeNull()
+    expect(parseLlmCallLine('')).toBeNull()
+    expect(parseLlmCallLine(`TRAINER_EVENT ${JSON.stringify({ event: 'llm.outcome', caller: 'x', outcome: 'ok' })}`)).toBeNull()
+    expect(parseLlmCallLine(llmCallLine({ caller: 'x', model: 'm', ok: false, error: 'invalid_json' }))).toBeNull()
+    expect(parseLlmCallLine(llmCallLine({ caller: 'x', model: 'm' }))).toBeNull()
+  })
+})
+
+describe('percentile (issue #427)', () => {
+  it('nearest-rank: p95 = 95, p99 = 99 на 1..100; один элемент; пустой → null', () => {
+    const values = Array.from({ length: 100 }, (_, index) => index + 1)
+    expect(percentile(values, 95)).toBe(95)
+    expect(percentile(values, 99)).toBe(99)
+    expect(percentile([7], 99)).toBe(7)
+    expect(percentile([], 99)).toBeNull()
+  })
+})
+
+describe('tallyLlmCalls (issue #427)', () => {
+  function callEvent(overrides = {}) {
+    return {
+      caller: 'a', model: 'm1', latencyMs: 100, ok: true, truncated: false,
+      completionTokens: 10, maxTokens: 500, timeoutMs: 6000, reason: null, ...overrides,
+    }
+  }
+
+  it('две модели одного вызывающего — две корзины', () => {
+    const tally = tallyLlmCalls([
+      callEvent({ caller: 'a', model: 'm1' }),
+      callEvent({ caller: 'a', model: 'm2' }),
+      callEvent({ caller: 'b', model: 'm1' }),
+    ])
+    expect(tally.size).toBe(3)
+    expect(tally.get('a × m1').total).toBe(1)
+    expect(tally.get('a × m2').total).toBe(1)
+    expect(tally.get('b × m1').total).toBe(1)
+  })
+
+  it('таймауты считаются по reason; timeoutMs/maxTokens — последнее ненулевое', () => {
+    const tally = tallyLlmCalls([
+      callEvent({ reason: 'timeout', ok: false, timeoutMs: 5000, maxTokens: 400 }),
+      callEvent({ reason: 'http_error', ok: false, timeoutMs: null, maxTokens: null }),
+      callEvent({ timeoutMs: 9000, maxTokens: 800 }),
+    ])
+    expect(tally.get('a × m1').timeouts).toBe(1)
+    expect(tally.get('a × m1').timeoutMs).toBe(9000)
+    expect(tally.get('a × m1').maxTokens).toBe(800)
+  })
+})
+
+describe('llmBudgetAlarms (issue #427)', () => {
+  function bucket(overrides = {}) {
+    return {
+      caller: 'a', model: 'm', total: 10, latencies: [], completionTokens: [],
+      timeouts: 0, truncated: 0, timeoutMs: 6000, maxTokens: null, ...overrides,
+    }
+  }
+  const codes = (overrides) => llmBudgetAlarms(bucket(overrides)).map((alarm) => alarm.code)
+
+  it('9 вызовов → только undersampled, остальное не судим', () => {
+    expect(codes({ total: 9, timeoutMs: null, maxTokens: 1000, truncated: 1 })).toEqual(['undersampled'])
+  })
+
+  it('p99 ≥ таймаута → timeout_binding, p99 < таймаута → его нет', () => {
+    expect(codes({ latencies: repeat([6000], 10), timeoutMs: 6000 })).toContain('timeout_binding')
+    expect(codes({ latencies: repeat([100], 10), timeoutMs: 6000 })).not.toContain('timeout_binding')
+  })
+
+  it('обрезанный ответ → truncated', () => {
+    expect(codes({ truncated: 1, timeoutMs: null })).toContain('truncated')
+  })
+
+  it('p99 токенов 950 при maxTokens 1000 → max_tokens_headroom, при 800 → нет', () => {
+    expect(LLM_MAX_TOKENS_HEADROOM).toBe(0.9)
+    expect(codes({ completionTokens: [...repeat([100], 9), 950], maxTokens: 1000 })).toContain('max_tokens_headroom')
+    expect(codes({ completionTokens: [...repeat([100], 9), 800], maxTokens: 1000 })).not.toContain('max_tokens_headroom')
+  })
+
+  it('без timeoutMs → timeout_unknown, а не timeout_binding', () => {
+    const result = codes({ timeoutMs: null, latencies: repeat([6000], 10) })
+    expect(result).toContain('timeout_unknown')
+    expect(result).not.toContain('timeout_binding')
   })
 })

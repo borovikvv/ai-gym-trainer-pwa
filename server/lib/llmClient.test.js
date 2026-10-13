@@ -20,6 +20,7 @@ function responseWithFinish(content, finishReason) {
 
 // Issue #412: headers resolve immediately but the body arrives after delayMs;
 // an abort before that rejects json() — mirroring fetch (undici) in Node.
+// Node's AbortError is an Error, jsdom's DOMException is not: use a named Error.
 function slowBodyFetch(delayMs, content = '{"a":1}') {
   return vi.fn(async (_url, init) => ({
     ok: true,
@@ -28,7 +29,9 @@ function slowBodyFetch(delayMs, content = '{"a":1}') {
         const timer = setTimeout(() => resolve({ choices: [{ message: { content } }] }), delayMs)
         init.signal.addEventListener('abort', () => {
           clearTimeout(timer)
-          reject(new DOMException('This operation was aborted', 'AbortError'))
+          const error = new Error('This operation was aborted')
+          error.name = 'AbortError'
+          reject(error)
         })
       }),
   }))
@@ -137,6 +140,21 @@ describe('llmClient', () => {
       expect(event).toBeDefined()
       expect(event.ok).toBe(false)
       expect(event.error).toMatch(/abort/i)
+      expect(event.reason).toBe('timeout')
+      expect(event.timeoutMs).toBe(50)
+    })
+
+    it('logs the effective timeoutMs on a successful call', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse('{"a":1}')))
+      await requestLlmJson({ tier: 'fast', system: 's', prompt: 'p', caller: 'test', timeoutMs: 500 })
+      const event = logSpy.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.startsWith('TRAINER_EVENT '))
+        .map((line) => JSON.parse(line.slice('TRAINER_EVENT '.length)))
+        .find((body) => body.event === 'llm.call')
+      expect(event).toBeDefined()
+      expect(event.timeoutMs).toBe(500)
     })
 
     it('reads a fast body within the timeout', async () => {

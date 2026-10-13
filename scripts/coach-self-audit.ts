@@ -98,6 +98,12 @@ export const LLM_OUTCOME_MIN_SAMPLE = 10
  */
 export const LLM_FALLBACK_SHARE_ALARM_THRESHOLD = 0.5
 
+/**
+ * Issue #427 (часть А): доля `maxTokens`, при превышении которой p99 длины
+ * ответа уже не оставляет «запаса» в 10 %.
+ */
+export const LLM_MAX_TOKENS_HEADROOM = 0.9
+
 // --- Чистая арифметика (проверяется в coach-self-audit.test.js) -------------
 
 export interface SignalStats {
@@ -212,6 +218,10 @@ function fmtShare(value: number): string {
   return `${Math.round(value * 100)} %`
 }
 
+function fmtMs(value: number | null): string {
+  return value === null ? '-' : `${value} мс`
+}
+
 // --- Исходы LLM-вызовов (issue #426) ----------------------------------------
 
 export interface LlmOutcomeEvent {
@@ -286,6 +296,112 @@ export function llmOutcomeAlarms(caller: string, tally: LlmOutcomeCallerTally): 
   const top = [...tally.reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
   if (top.length > 0) {
     alarms.push(`  топ причин ${caller}: ${top.map(([reason, n]) => `${reason}: ${n}`).join(', ')}`)
+  }
+  return alarms
+}
+
+// --- Бюджеты LLM-вызовов (issue #427, часть А) ------------------------------
+
+export interface LlmCallLine {
+  caller: string; model: string; latencyMs: number
+  ok: boolean; truncated: boolean
+  completionTokens: number | null; maxTokens: number | null; timeoutMs: number | null
+  reason: string | null
+}
+
+/** Строка журнала → событие `llm.call`; мусор, чужое событие и llm.outcome → null. */
+export function parseLlmCallLine(line: string): LlmCallLine | null {
+  if (typeof line !== 'string') return null
+  const marker = 'TRAINER_EVENT '
+  const start = line.indexOf(marker)
+  if (start === -1) return null
+  let body: Record<string, unknown>
+  try {
+    body = JSON.parse(line.slice(start + marker.length).trim()) as Record<string, unknown>
+  } catch {
+    return null
+  }
+  if (body.event !== 'llm.call') return null
+  if (typeof body.latencyMs !== 'number' || !Number.isFinite(body.latencyMs)) return null
+  const caller = typeof body.caller === 'string' ? body.caller : ''
+  const model = typeof body.model === 'string' && body.model.length > 0 ? body.model : '?'
+  return {
+    caller, model, latencyMs: body.latencyMs,
+    ok: body.ok === true, truncated: body.truncated === true,
+    completionTokens: finiteOrNull(body.completionTokens),
+    maxTokens: finiteOrNull(body.maxTokens),
+    timeoutMs: finiteOrNull(body.timeoutMs),
+    reason: typeof body.reason === 'string' ? body.reason : null,
+  }
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** nearest-rank: отсортировать, взять `ceil(p/100 · n) − 1`; пустой → null. */
+export function percentile(values: number[], p: number): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const rank = Math.ceil((p / 100) * sorted.length) - 1
+  return sorted[Math.min(Math.max(rank, 0), sorted.length - 1)]
+}
+
+export interface LlmCallBucket {
+  caller: string; model: string; total: number
+  latencies: number[]; completionTokens: number[]
+  timeouts: number; truncated: number
+  timeoutMs: number | null; maxTokens: number | null
+}
+
+export type LlmCallTally = Map<string, LlmCallBucket>
+
+/** Корзины «вызывающий × модель»: completionTokens только из ok; timeoutMs/maxTokens — последнее ненулевое. */
+export function tallyLlmCalls(events: LlmCallLine[]): LlmCallTally {
+  const tally: LlmCallTally = new Map()
+  for (const event of events) {
+    const key = `${event.caller} × ${event.model}`
+    const bucket = tally.get(key) ?? {
+      caller: event.caller, model: event.model, total: 0,
+      latencies: [], completionTokens: [], timeouts: 0, truncated: 0,
+      timeoutMs: null, maxTokens: null,
+    }
+    bucket.total += 1
+    bucket.latencies.push(event.latencyMs)
+    if (event.ok && event.completionTokens !== null) bucket.completionTokens.push(event.completionTokens)
+    if (event.reason === 'timeout') bucket.timeouts += 1
+    if (event.truncated) bucket.truncated += 1
+    if (event.timeoutMs !== null) bucket.timeoutMs = event.timeoutMs
+    if (event.maxTokens !== null) bucket.maxTokens = event.maxTokens
+    tally.set(key, bucket)
+  }
+  return tally
+}
+
+export interface LlmBudgetAlarm { code: string; line: string }
+
+/** Тревоги по бюджетам пары «вызывающий × модель»; тесты проверяют `code`. */
+export function llmBudgetAlarms(bucket: LlmCallBucket): LlmBudgetAlarm[] {
+  const name = `${bucket.caller} × ${bucket.model}`
+  if (bucket.total < LLM_OUTCOME_MIN_SAMPLE) {
+    return [{ code: 'undersampled', line: `  ${name}: мало данных (${bucket.total} < ${LLM_OUTCOME_MIN_SAMPLE}), о бюджетах не судим` }]
+  }
+  const alarms: LlmBudgetAlarm[] = []
+  const p99Latency = percentile(bucket.latencies, 99)
+  if (bucket.timeoutMs === null) {
+    alarms.push({ code: 'timeout_unknown', line: `  ${name}: таймаут в журнале не записан (старые события) — сверить с LLM_TIMEOUT_* вручную` })
+  } else if (p99Latency !== null && p99Latency >= bucket.timeoutMs) {
+    // задержка оборванного вызова ≈ таймауту: при таймаутах p99 — оценка снизу.
+    alarms.push({ code: 'timeout_binding', line: `  !!! ТАЙМАУТ В УПОР: ${name} p99 ${p99Latency} мс ≥ таймаута ${bucket.timeoutMs} мс` })
+  }
+  if (bucket.truncated > 0) {
+    alarms.push({ code: 'truncated', line: `  !!! ОБРЕЗАНО: ${name} обрезанных ответов ${bucket.truncated}` })
+  }
+  if (bucket.maxTokens !== null) {
+    const p99Tokens = percentile(bucket.completionTokens, 99)
+    if (p99Tokens !== null && p99Tokens > LLM_MAX_TOKENS_HEADROOM * bucket.maxTokens) {
+      alarms.push({ code: 'max_tokens_headroom', line: `  !!! МАЛ ЗАПАС maxTokens: ${name} p99 токенов ${p99Tokens} > ${fmtShare(LLM_MAX_TOKENS_HEADROOM)} от maxTokens ${bucket.maxTokens}` })
+    }
   }
   return alarms
 }
@@ -706,15 +822,21 @@ async function main(): Promise<void> {
     // check-llm-health.sh: сам скрипт журнал не читает. Без SELF_AUDIT_LOG_FILE
     // раздел пропускается — это ожидаемо, выгрузка лога остаётся ручным шагом,
     // как и туннель к БД. Без этого раздела самоаудит исходы LLM не покажет.
-    lines.push('## Исходы LLM-вызовов (журнал)')
+    //
+    // Issue #427 (часть А): из той же выгрузки строится раздел бюджетов,
+    // поэтому файл читается один раз, а строки отдаются обоим парсерам.
     const auditLogFile = process.env.SELF_AUDIT_LOG_FILE
+    const rawLogLines = auditLogFile && existsSync(auditLogFile)
+      ? readFileSync(auditLogFile, 'utf8').split('\n')
+      : null
+
+    lines.push('## Исходы LLM-вызовов (журнал)')
     if (!auditLogFile) {
       lines.push('  источник не настроен (SELF_AUDIT_LOG_FILE), пропускаем')
-    } else if (!existsSync(auditLogFile)) {
+    } else if (rawLogLines === null) {
       lines.push(`  файл журнала не найден: ${auditLogFile}, пропускаем`)
     } else {
-      const events = readFileSync(auditLogFile, 'utf8')
-        .split('\n')
+      const events = rawLogLines
         .map(parseLlmOutcomeLine)
         .filter((event): event is LlmOutcomeEvent => event !== null)
       const outcomeTally = tallyLlmOutcomes(events)
@@ -724,6 +846,38 @@ async function main(): Promise<void> {
         for (const [caller, bucket] of outcomeTally) {
           lines.push(`  ${caller}: всего ${bucket.total}, исходы ${fmtCounts(bucket.outcomes)}; причины ${fmtCounts(bucket.reasons)}`)
           lines.push(...llmOutcomeAlarms(caller, bucket))
+        }
+      }
+    }
+    lines.push('')
+
+    // Issue #427 (часть А): правило из DEPLOYMENT.md — таймаут ≥ p99 задержки,
+    // `maxTokens` ≥ p99 длины ответа с запасом. Раздел только показывает.
+    lines.push('## Бюджеты LLM-вызовов (журнал)')
+    lines.push('Правило #427: таймаут вызывающего ≥ p99 задержки на его промптах,')
+    lines.push('`maxTokens` ≥ p99 длины ответа с запасом 10 %.')
+    if (!auditLogFile) {
+      lines.push('  источник не настроен (SELF_AUDIT_LOG_FILE), пропускаем')
+    } else if (rawLogLines === null) {
+      lines.push(`  файл журнала не найден: ${auditLogFile}, пропускаем`)
+    } else {
+      const callTally = tallyLlmCalls(
+        rawLogLines
+          .map(parseLlmCallLine)
+          .filter((event): event is LlmCallLine => event !== null),
+      )
+      if (callTally.size === 0) {
+        lines.push('  событий llm.call не найдено')
+      } else {
+        for (const bucket of callTally.values()) {
+          const p50 = percentile(bucket.latencies, 50)
+          const p95 = percentile(bucket.latencies, 95)
+          const p99 = percentile(bucket.latencies, 99)
+          const p99Tokens = percentile(bucket.completionTokens, 99)
+          lines.push(
+            `  ${bucket.caller} × ${bucket.model}: вызовов ${bucket.total}; задержка p50 ${fmtMs(p50)} / p95 ${fmtMs(p95)} / p99 ${fmtMs(p99)} (таймаут ${fmtMs(bucket.timeoutMs)}); таймаутов ${bucket.timeouts}, обрезано ${bucket.truncated}; p99 токенов ${p99Tokens ?? '-'} (maxTokens ${bucket.maxTokens ?? '-'})`,
+          )
+          lines.push(...llmBudgetAlarms(bucket).map((alarm) => alarm.line))
         }
       }
     }
