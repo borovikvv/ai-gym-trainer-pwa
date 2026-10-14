@@ -20,4 +20,11 @@ describe('exercise identity', () => {
     expect(getCanonicalExerciseId({ id: 'seated-calf-raise-alternative-икры-в-жиме-ногами-replacement-1786124420031', name: 'Подъёмы на икры сидя' })).toBe('seated-calf-raise')
     expect(getCanonicalExerciseId({ id: 'cable-fly-alternative-svedeniya-v-krossovere', name: 'Сведение в кроссовере' })).toBe('cable-fly')
   })
+
+  it('canonicalizes post-migration replacement ids to the actually performed exercise (issue #459)', () => {
+    expect(getCanonicalExerciseId({ id: 'overhead-triceps-extension-replacement-1790707098405', name: 'Разгибание рук из-за головы' })).toBe('overhead-triceps-extension')
+    expect(getCanonicalExerciseId({ id: 'machine-lateral-raise-replacement-1789922493248', name: 'Разведение в тренажёре' })).toBe('machine-lateral-raise')
+    expect(getCanonicalExerciseId({ id: 'икры-в-жиме-ногами-replacement-1785863568148', name: 'Икры в жиме ногами' })).toBe('икры-в-жиме-ногами')
+    expect(getCanonicalExerciseId({ id: 'сгибание-ног-сидя-replacement-1783617976555', name: 'Сгибание ног сидя' })).toBe('сгибание-ног-сидя')
+  })
 })
