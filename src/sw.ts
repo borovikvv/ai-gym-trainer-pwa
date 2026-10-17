@@ -13,12 +13,11 @@ import { StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { clientsClaim } from 'workbox-core'
 import { resolveNavigation } from './sw/navigationHandler'
+import { PAGES_CACHE, clearPagesCacheOnActivate } from './sw/pagesCache'
 
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>
 }
-
-const PAGES_CACHE = 'app-pages'
 
 // Новая версия SW должна вставать в строй сразу после установки: иначе
 // исправление навигации доедет до устройства только после перезапуска
@@ -27,6 +26,13 @@ self.skipWaiting()
 clientsClaim()
 
 cleanupOutdatedCaches()
+
+// Issue #473: кэш оболочки не привязан к сборке, поэтому при активации нового
+// воркера его нужно снести — иначе офлайн-фолбэк навигации отдаст index.html
+// прошлой сборки с уже удалёнными чанками и получится белый экран.
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clearPagesCacheOnActivate(self.caches))
+})
 
 // ВАЖЕН ПОРЯДОК: маршруты проверяются в порядке регистрации, а маршрут прекеша
 // (precacheAndRoute) совпадает с навигацией на `/` через directoryIndex
