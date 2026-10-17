@@ -13,6 +13,7 @@ import { StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { clientsClaim } from 'workbox-core'
 import { resolveNavigation } from './sw/navigationHandler'
+import { resolveGatedAsset } from './sw/assetGateHandler'
 
 declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>
@@ -56,6 +57,31 @@ registerRoute(
       putCached: async (url, response) => {
         const cache = await caches.open(PAGES_CACHE)
         await cache.put(url, response)
+      },
+    }),
+)
+
+// Подресурсы оболочки за входом (#474): /assets/*, манифест, иконки, index.html.
+// Без сессии гейт отдаёт редирект/HTML портала вместо JS/CSS — модульный граф
+// не собирается и приложение белеет. Отдаём копию из прекеша, если есть, иначе
+// синтетический 401 и сигнал клиенту перейти на портал. Регистрируется после
+// навигаций и до прекеша: прекеш-роут перехватил бы эти URL первым.
+registerRoute(
+  ({ url }) =>
+    /^\/(assets\/|manifest\.webmanifest$|pwa-.*\.png$|apple-touch-icon\.png$|index\.html$)/.test(
+      url.pathname,
+    ),
+  ({ request }) =>
+    resolveGatedAsset(request, {
+      // redirect: 'manual' — редирект входа должен дойти до SW как редирект, а
+      // не превратиться в HTML портала по адресу ассета.
+      fetchImpl: (req) => fetch(req, { redirect: 'manual' }),
+      matchCached: async (url) =>
+        (await caches.match(url)) ?? (await matchPrecache(url)) ?? undefined,
+      notifyClients: (message) => {
+        void self.clients
+          .matchAll({ type: 'window' })
+          .then((clients) => clients.forEach((client) => client.postMessage(message)))
       },
     }),
 )
