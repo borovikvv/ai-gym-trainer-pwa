@@ -3,8 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.tsx'
+import { listenForSessionExpired } from './data/sessionExpiredListener'
 import { installPwaRecovery } from './lib/pwaRecovery'
 import { scheduleUpdateChecks } from './lib/swUpdateCheck'
+
+if ('serviceWorker' in navigator) {
+  listenForSessionExpired()
+}
 
 // Issue #473: ошибка загрузки модуля (сервер отдал HTML вместо ассета) должна
 // один раз привести к очистке кэшей и перезагрузке, а не к белому экрану.
