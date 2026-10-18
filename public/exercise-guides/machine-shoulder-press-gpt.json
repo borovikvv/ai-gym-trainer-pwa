@@ -1,0 +1,10 @@
+{
+  "id": "machine-shoulder-press",
+  "name": "Жим в тренажёре",
+  "model": "krea/krea-2/medium",
+  "provider": "krea",
+  "aspect_ratio": "3:2",
+  "style_reference": "public/exercise-guides/assisted-pull-up-gpt.webp",
+  "image": "public/exercise-guides/machine-shoulder-press-gpt.webp",
+  "prompt": "Premium instructional fitness illustration of a seated machine shoulder press. The same athletic man in a charcoal grey t-shirt and black shorts sits upright on a plate-loaded or selectorized shoulder press machine, back flat against the pad, feet flat on the floor. Shown pressing the handles overhead to near full arm extension, plus a faint semi-transparent ghost of him in the start position with handles at shoulder height and elbows under the wrists. Subtle golden gradient arrows showing the vertical pressing path. Side 3/4 view, full body and machine visible. Realistic modern gym with warm wooden slat walls and concrete textures, softly blurred equipment in the background, warm neutral tones, cinematic soft lighting with rim light. Clean, uncluttered, no text, no letters, no logos."
+}

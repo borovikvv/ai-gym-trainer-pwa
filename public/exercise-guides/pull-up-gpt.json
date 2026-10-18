@@ -1,0 +1,10 @@
+{
+  "id": "pull-up",
+  "name": "Подтягивания",
+  "model": "krea/krea-2/medium",
+  "provider": "krea",
+  "aspect_ratio": "3:2",
+  "style_reference": "public/exercise-guides/assisted-pull-up-gpt.webp",
+  "image": "public/exercise-guides/pull-up-gpt.webp",
+  "prompt": "Premium instructional fitness illustration of a pull-up. One athletic man in a charcoal grey t-shirt and black shorts hangs from a straight pull-up bar with an overhand grip slightly wider than shoulders, pulling his chest up toward the bar with elbows driving down, body straight without swinging, legs together. A faint semi-transparent ghost of the athlete in the dead-hang bottom position with arms fully extended, and a subtle golden gradient arrow showing the upward path. Side 3/4 view, full body visible. Realistic modern gym with warm wooden slat walls and concrete textures, softly blurred equipment in the background, warm neutral tones, cinematic soft lighting with rim light. Clean, uncluttered, no text, no letters, no logos."
+}
