@@ -1,0 +1,10 @@
+{
+  "id": "machine-lateral-raise",
+  "name": "Разведение в тренажёре",
+  "model": "krea/krea-2/medium",
+  "provider": "krea",
+  "aspect_ratio": "3:2",
+  "style_reference": "public/exercise-guides/assisted-pull-up-gpt.webp",
+  "image": "public/exercise-guides/machine-lateral-raise-gpt.webp",
+  "prompt": "Instructional fitness photo-illustration of a seated machine lateral raise, top position. One athletic man in a charcoal grey t-shirt and black shorts sits upright on a lateral raise machine, back against the pad. His two arms, and only two arms, are raised straight out to the sides at shoulder height like a letter T, elbows slightly bent, outer upper arms pressing against two padded lever arms that pivot at his shoulders. Two subtle golden gradient curved arrows under his arms show the arms sweeping upward and outward. Straight front view, symmetrical composition, full upper body and machine visible. Realistic modern gym with warm wooden slat walls and concrete textures, softly blurred equipment in the background, warm neutral tones, cinematic soft lighting with rim light. Clean, uncluttered, no text, no letters, no logos."
+}
