@@ -36,10 +36,10 @@ const PENDING_ILLUSTRATION = new Set(['back-extension']) // #478
 
 describe('exerciseGuideImageSrc — у каждого упражнения справочника есть иллюстрация', () => {
   it.each(ALL_EXERCISE_LIBRARY_IDS.filter((id) => !PENDING_ILLUSTRATION.has(id)))(
-    '%s не падает на generic.svg',
+    '%s ссылается на webp-иллюстрацию',
     (id) => {
       const src = exerciseGuideImageSrc(id)
-      expect(src.endsWith('/generic.svg')).toBe(false)
+      expect(src.endsWith('.webp')).toBe(true)
       expect(existsSync(join(process.cwd(), 'public', src))).toBe(true)
     },
   )
