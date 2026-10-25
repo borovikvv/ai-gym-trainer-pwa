@@ -277,7 +277,7 @@ function buildWeekBuckets(history: WorkoutHistoryEntry[], now: Date): WeekBucket
 
   if (completedSessions.length === 0) return []
 
-  // Use a Map keyed by ISO week string "YYYY-Www"
+  // Use a Map keyed by the Monday date of the ISO week "YYYY-MM-DD"
   const weekMap = new Map<string, WeekBucket>()
   for (const session of completedSessions) {
     const isoWeek = isoWeekKey(session.completedAtDate)
@@ -509,11 +509,7 @@ function loadingPhaseName(weekInCycle: number, totalLoadingWeeks: number): Mesoc
 // ---------------------------------------------------------------------------
 
 function isoWeekKey(date: Date): string {
-  const d = new Date(date)
-  const jan4 = new Date(d.getFullYear(), 0, 4)
-  const oneDay = 86_400_000
-  const weekNumber = Math.ceil(((d.getTime() - jan4.getTime()) / oneDay + jan4.getDay() + 1) / 7)
-  return `${d.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`
+  return dateToDateOnly(startOfWeek(date))
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {

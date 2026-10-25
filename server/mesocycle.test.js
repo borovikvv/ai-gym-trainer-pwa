@@ -1086,3 +1086,39 @@ describe('issue #288: перерыв не должен занижать эффе
     expect(effective).toBe(3)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Issue #480: воскресный якорь не должен сдвигать неделю вперёд
+// ---------------------------------------------------------------------------
+
+describe('computeMesocycleState — воскресный якорь согласован с startOfWeek (#480)', () => {
+  // Teen (3+1): три загрузочные недели вт/чт, последняя сессия — четверг 22.10.
+  const history = [
+    session('2026-10-06T12:00:00Z'),
+    session('2026-10-08T12:00:00Z'),
+    session('2026-10-13T12:00:00Z'),
+    session('2026-10-15T12:00:00Z'),
+    session('2026-10-20T12:00:00Z'),
+    session('2026-10-22T12:00:00Z'),
+  ]
+  const profile = { age: 16, workoutsPerWeek: 2 }
+
+  it('воскресенье последней загрузочной недели → weekInCycle=3, не deload', () => {
+    const result = computeMesocycleState({ profile, history, now: '2026-10-25T20:35:00Z' })
+
+    expect(result.weekInCycle).toBe(3)
+    expect(result.phase).toBe('intensification')
+    expect(result.phase).not.toBe('deload')
+    expect(result.deloadScheduled).toBe(true)
+    expect(result.isDeload).toBe(false)
+  })
+
+  // План issue указывал 2026-11-02, но календарная разгрузочная неделя —
+  // 26.10–01.11; 02.11 — уже новая неделя (новый цикл). Берём её начало.
+  it('понедельник разгрузочной недели (26.10) → deload', () => {
+    const result = computeMesocycleState({ profile, history, now: '2026-10-26T10:00:00Z' })
+
+    expect(result.phase).toBe('deload')
+    expect(result.isDeload).toBe(true)
+  })
+})
