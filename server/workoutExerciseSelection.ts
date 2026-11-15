@@ -7,6 +7,7 @@ import {
   normalizeLegSubMuscles,
 } from '../shared/muscleGroups.js'
 import type { ExerciseAnalysisFlag } from './coachProgressAnalysis.js'
+import { dateToDateOnly, startOfWeek } from './utils.js'
 import {
   emptyPreferences,
   emptyWeeklyContext,
@@ -192,6 +193,30 @@ export function exerciseScore(
   }
   if (exercise.targetWeight > 0) score += 1
   return score
+}
+
+/**
+ * Issue #482: карта «канонический id → ISO-недели использования внутри
+ * текущего блока». Неделя — понедельник её ISO-ключа; учитывается только
+ * выполненная история после cycleStartedOn. Якорь блока — упражнение с ≥2
+ * неделями использования; occupant текущей фазы — использовавшийся в фазе,
+ * начавшейся не раньше phaseStartedOn.
+ */
+export function buildBlockUsageWeeks(history: WorkoutHistoryEntry[], cycleStartedOn: string | null): Map<string, Set<string>> {
+  const usage = new Map<string, Set<string>>()
+  if (!cycleStartedOn) return usage
+  for (const workout of history ?? []) {
+    const completedOn = String(workout?.completedAt ?? '').slice(0, 10)
+    if (!completedOn || completedOn < cycleStartedOn) continue
+    const weekKey = dateToDateOnly(startOfWeek(new Date(workout.completedAt as string)))
+    for (const exercise of workout.exercises ?? []) {
+      const id = canonicalExerciseId(exercise)
+      if (!id) continue
+      if (!usage.has(id)) usage.set(id, new Set())
+      usage.get(id)!.add(weekKey)
+    }
+  }
+  return usage
 }
 
 export function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext = emptyWeeklyContext(), policy = null }: ReasonForExerciseParams): string {

@@ -11,6 +11,7 @@
 
 import type {
   CoachState,
+  MesocycleState,
   MuscleGroupProfileExtended,
   ExerciseProfile,
   WorkoutHistoryEntry,
@@ -29,8 +30,10 @@ import type { ProgressAnalysis, ExerciseAnalysisFlag } from './coachProgressAnal
 // Issue #328: вынесенные модули (чистый перенос кода, логика не менялась).
 import { daysBetweenDates, emptyPreferences, isBannedExercise, isCoachDecisionRestricted, isCoachMemoryRestricted, isHighFatigue, isRecoveryRestricted, isReturningAfterBreak, normalizeText } from './workoutExerciseEligibility.js'
 import { chooseTargetPattern, isIsolationOrAccessory, orderExercisesForWorkout, orderPatternByWeeklyDeficit } from './workoutPatternRotation.js'
-import { chooseBestExerciseForMuscle, exerciseScore, normalizeExerciseLibrary } from './workoutExerciseSelection.js'
+import { buildBlockUsageWeeks, chooseBestExerciseForMuscle, exerciseScore, normalizeExerciseLibrary } from './workoutExerciseSelection.js'
 import { applyPrescription } from './workoutLoadPrescription.js'
+// Issue #482: граница фазы блока для ротации второго эшелона.
+import { phaseStartedOn } from './mesocycle.js'
 
 
 // ---------------------------------------------------------------------------
@@ -268,6 +271,12 @@ export interface WeeklyContext {
   daysSincePreviousWorkout: number | null
   /** Issue #166: остаток недельной цели по группам (цель минус факт). */
   weeklyVolume: Record<string, WeeklyVolumeStatus>
+  /** Issue #482: понедельник первой недели текущего блока (null — блока нет). */
+  cycleStartedOn: string | null
+  /** Issue #482: понедельник недели начала текущей фазы (null — idle/deload/нет цикла). */
+  phaseStartedOn: string | null
+  /** Issue #482: канонический id → ISO-недели использования внутри блока. */
+  blockUsageWeeks: Map<string, Set<string>>
 }
 
 interface EnsureCoreFinisherParams {
@@ -313,9 +322,13 @@ export async function buildGeneratedPlannedWorkout({
   // Issue #171: политика выводится из возраста профиля — передаём профиль,
   // а не один userId.
   const userTrainingPolicy = getUserTrainingPolicy(profile ?? null)
+  // Issue #482: контекст блока — недели использования упражнений после старта
+  // цикла; идёт в скоринг выбора и в ограничения LLM-свапов.
+  const mesocycle = coachState?.mesocycle ?? null
+  const blockUsageWeeks = buildBlockUsageWeeks(history, mesocycle?.cycleStartedOn ?? null)
   const weeklyContext = buildWeeklyContext(
     [...buildCompletedWorkoutContext(history, scheduledDate), ...previousGeneratedWorkouts],
-    { scheduledDate, profile, weeklyVolume },
+    { scheduledDate, profile, weeklyVolume, mesocycle, blockUsageWeeks },
   )
   const decision = (coachDecision ?? buildCoachDecision({ profile, coachState, coachMemory, scheduledDate, previousGeneratedWorkouts })) as CoachDecisionForGenerator
   const readinessScore = Number(coachState?.readinessScore ?? 70)
@@ -666,7 +679,7 @@ function findCoreFinisherReplacementIndex(exercises: GeneratedExercise[]): numbe
 
 function buildWeeklyContext(
   previousGeneratedWorkouts: Array<PreviousGeneratedWorkout | { scheduledDate: string; exercises: PreviousGeneratedWorkout['exercises'] }> = [],
-  { scheduledDate = '', profile, weeklyVolume = null }: { scheduledDate?: string; profile?: ProfileForGenerator; weeklyVolume?: Record<string, WeeklyVolumeStatus> | null } = {},
+  { scheduledDate = '', profile, weeklyVolume = null, mesocycle = null, blockUsageWeeks = new Map() }: { scheduledDate?: string; profile?: ProfileForGenerator; weeklyVolume?: Record<string, WeeklyVolumeStatus> | null; mesocycle?: MesocycleState | null; blockUsageWeeks?: Map<string, Set<string>> } = {},
 ): WeeklyContext {
   const previousExerciseIds = new Set<string>()
   const recentExerciseIds = new Set<string>()
@@ -732,6 +745,10 @@ function buildWeeklyContext(
     calendarWorkoutCountLast7,
     daysSincePreviousWorkout,
     weeklyVolume: weeklyVolume ?? {},
+    // Issue #482: ось периодизации — старт блока и границы фазы для скоринга.
+    cycleStartedOn: mesocycle?.cycleStartedOn ?? null,
+    phaseStartedOn: phaseStartedOn(mesocycle, scheduledDate),
+    blockUsageWeeks,
   }
 }
 

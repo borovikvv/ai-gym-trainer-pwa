@@ -35,6 +35,10 @@ export function emptyWeeklyContext(): WeeklyContext {
     calendarWorkoutCountLast7: 0,
     daysSincePreviousWorkout: null,
     weeklyVolume: {},
+    // Issue #482: контекст блока пуст — скоринг ведёт себя как раньше.
+    cycleStartedOn: null,
+    phaseStartedOn: null,
+    blockUsageWeeks: new Map(),
   }
 }
 
