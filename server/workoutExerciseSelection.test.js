@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildBlockUsageWeeks, chooseBestExerciseForMuscle, exerciseScore, normalizeExerciseLibrary } from './workoutExerciseSelection.js'
+import { buildBlockUsageWeeks, chooseBestExerciseForMuscle, exerciseScore } from './workoutExerciseSelection.js'
 import { emptyPreferences, emptyWeeklyContext } from './workoutExerciseEligibility.js'
 
 // ---------------------------------------------------------------------------
