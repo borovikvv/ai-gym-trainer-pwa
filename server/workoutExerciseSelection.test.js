@@ -168,3 +168,81 @@ describe('exerciseScore: якоря и фаза блока (issue #482)', () => 
     expect(anchorScore).toBeGreaterThan(freshScore)
   })
 })
+
+// ---------------------------------------------------------------------------
+// chooseBestExerciseForMuscle: ротация второго эшелона по под-ключам (issue #482)
+// ---------------------------------------------------------------------------
+
+describe('chooseBestExerciseForMuscle: смена региона стимула на границе фазы (issue #482)', () => {
+  const coachState = { muscleGroups: { legs: { fatigue: 'low' } }, exercises: {} }
+  const library = [
+    libraryExercise({ id: 'hack-squat', name: 'Наклонный жим ногами', muscleKey: 'legs', muscleGroup: 'Ноги', subMuscleKeys: ['quads'] }),
+    libraryExercise({ id: 'leg-curl', name: 'Сгибание ног', muscleKey: 'legs', muscleGroup: 'Ноги', subMuscleKeys: ['hamstrings'] }),
+    libraryExercise({ id: 'leg-press', name: 'Жим ногами в тренажере', muscleKey: 'legs', muscleGroup: 'Ноги', subMuscleKeys: ['quads'] }),
+  ]
+
+  const choose = ({ weeklyContext, history = [] }) => chooseBestExerciseForMuscle({
+    muscleKey: 'legs',
+    library,
+    coachState,
+    coachMemory: null,
+    coachDecision: null,
+    history,
+    usedExerciseIds: new Set(),
+    usedSubMuscleKeys: new Set(),
+    lowReadiness: false,
+    preferences: emptyPreferences(),
+    weeklyContext,
+  })
+
+  it('на границе фазы новый кандидат выбирается с другим под-ключом', () => {
+    // occupant leg-press (quads) — из недели loading; на границе accumulation
+    // слот отходит leg-curl (hamstrings), а не соседу по quadriceps.
+    const weeklyContext = {
+      ...emptyWeeklyContext(),
+      cycleStartedOn: '2026-10-05',
+      phaseStartedOn: '2026-10-12',
+      blockUsageWeeks: new Map([['leg-press', new Set(['2026-10-05'])]]),
+      previousExerciseIds: new Set(['leg-press']),
+    }
+    const history = [workout('2026-10-08T12:00:00Z', ['leg-press'])]
+    expect(choose({ weeklyContext, history })?.id).toBe('leg-curl')
+  })
+
+  it('внутри фазы occupant удерживает слот', () => {
+    const weeklyContext = {
+      ...emptyWeeklyContext(),
+      cycleStartedOn: '2026-10-05',
+      phaseStartedOn: '2026-10-12',
+      blockUsageWeeks: new Map([['leg-press', new Set(['2026-10-12'])]]),
+      previousExerciseIds: new Set(['leg-press']),
+    }
+    const history = [workout('2026-10-15T12:00:00Z', ['leg-press'])]
+    expect(choose({ weeklyContext, history })?.id).toBe('leg-press')
+  })
+
+  it('без кандидата с другим под-ключом — фолбэк на лучшего доступного', () => {
+    const weeklyContext = {
+      ...emptyWeeklyContext(),
+      cycleStartedOn: '2026-10-05',
+      phaseStartedOn: '2026-10-12',
+      blockUsageWeeks: new Map([['leg-press', new Set(['2026-10-05'])]]),
+      previousExerciseIds: new Set(['leg-press']),
+    }
+    const history = [workout('2026-10-08T12:00:00Z', ['leg-press'])]
+    const result = chooseBestExerciseForMuscle({
+      muscleKey: 'legs',
+      library: [library.filter((e) => e.id !== 'leg-curl')[0], library.filter((e) => e.id !== 'leg-curl')[1]],
+      coachState,
+      coachMemory: null,
+      coachDecision: null,
+      history,
+      usedExerciseIds: new Set(),
+      usedSubMuscleKeys: new Set(),
+      lowReadiness: false,
+      preferences: emptyPreferences(),
+      weeklyContext,
+    })
+    expect(result?.id).toBe('hack-squat')
+  })
+})

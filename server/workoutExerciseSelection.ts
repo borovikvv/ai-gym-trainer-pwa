@@ -121,7 +121,25 @@ export function chooseBestExerciseForMuscle({ muscleKey, library, coachState, co
   // отсутствии кандидата со свежим под-ключом откатываемся к прежнему выбору.
   const hasFreshSubMuscle = (exercise: NormalizedLibraryExercise) =>
     exercise.subMuscleKeys.length === 0 || exercise.subMuscleKeys.some((key) => !usedSubMuscleKeys.has(key))
-  return nonPlateau.filter(hasFreshSubMuscle)[0]
+  // Issue #482: на границе фазы блока уходящие occupant'ы этой группы
+  // (использовались в блоке, но не в текущей фазе) уступают слот — новый
+  // кандидат предпочитается с другим регионом стимула (Fonseca et al. 2014:
+  // смена полезна, когда меняет регион, а не название упражнения).
+  const rotatedSubMuscleKeys = new Set<string>()
+  const phaseStart = weeklyContext.phaseStartedOn
+  if (phaseStart) {
+    for (const occupant of library) {
+      if (occupant.muscleKey !== muscleKey) continue
+      const weeks = weeklyContext.blockUsageWeeks?.get(occupant.id)
+      if (!weeks || weeks.size === 0) continue
+      if ([...weeks].some((week) => week >= phaseStart)) continue
+      for (const key of occupant.subMuscleKeys) rotatedSubMuscleKeys.add(key)
+    }
+  }
+  const hasDifferentRegion = (exercise: NormalizedLibraryExercise) =>
+    exercise.subMuscleKeys.length === 0 || !exercise.subMuscleKeys.some((key) => rotatedSubMuscleKeys.has(key))
+  return nonPlateau.filter(hasFreshSubMuscle).filter(hasDifferentRegion)[0]
+    ?? nonPlateau.filter(hasFreshSubMuscle)[0]
     ?? nonPlateau[0]
     ?? candidates.filter(hasFreshSubMuscle)[0]
     ?? candidates[0]
