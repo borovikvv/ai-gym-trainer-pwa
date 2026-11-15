@@ -7,6 +7,7 @@ import {
   normalizeLegSubMuscles,
 } from '../shared/muscleGroups.js'
 import type { ExerciseAnalysisFlag } from './coachProgressAnalysis.js'
+import { dateToDateOnly, startOfWeek } from './utils.js'
 import {
   emptyPreferences,
   emptyWeeklyContext,
@@ -19,6 +20,7 @@ import {
   isRecoveryRestricted,
   latestExerciseHistory,
   matchesExercisePreference,
+  normalizeText,
 } from './workoutExerciseEligibility.js'
 import type {
   CoachDecisionForGenerator,
@@ -119,12 +121,58 @@ export function chooseBestExerciseForMuscle({ muscleKey, library, coachState, co
   // отсутствии кандидата со свежим под-ключом откатываемся к прежнему выбору.
   const hasFreshSubMuscle = (exercise: NormalizedLibraryExercise) =>
     exercise.subMuscleKeys.length === 0 || exercise.subMuscleKeys.some((key) => !usedSubMuscleKeys.has(key))
-  return nonPlateau.filter(hasFreshSubMuscle)[0]
+  // Issue #482: на границе фазы блока уходящие occupant'ы этой группы
+  // (использовались в блоке, но не в текущей фазе) уступают слот — новый
+  // кандидат предпочитается с другим регионом стимула (Fonseca et al. 2014:
+  // смена полезна, когда меняет регион, а не название упражнения).
+  const rotatedSubMuscleKeys = new Set<string>()
+  const phaseStart = weeklyContext.phaseStartedOn
+  if (phaseStart) {
+    for (const occupant of library) {
+      if (occupant.muscleKey !== muscleKey) continue
+      const weeks = weeklyContext.blockUsageWeeks?.get(occupant.id)
+      if (!weeks || weeks.size === 0) continue
+      if ([...weeks].some((week) => week >= phaseStart)) continue
+      for (const key of occupant.subMuscleKeys) rotatedSubMuscleKeys.add(key)
+    }
+  }
+  const hasDifferentRegion = (exercise: NormalizedLibraryExercise) =>
+    exercise.subMuscleKeys.length === 0 || !exercise.subMuscleKeys.some((key) => rotatedSubMuscleKeys.has(key))
+  return nonPlateau.filter(hasFreshSubMuscle).filter(hasDifferentRegion)[0]
+    ?? nonPlateau.filter(hasFreshSubMuscle)[0]
     ?? nonPlateau[0]
     ?? candidates.filter(hasFreshSubMuscle)[0]
     ?? candidates[0]
     ?? null
 }
+
+/**
+ * Issue #482: признак якорного упражнения блока — preferred, слот в прогрессии
+ * (progress_possible) или непрерывная история в текущем блоке (≥2 недели
+ * использования). Якоря держат слот весь блок, второй эшелон ротируется на
+ * границах фаз.
+ */
+export function isAnchorExercise(
+  exercise: { id?: string; name?: string; exerciseId?: string; exerciseName?: string },
+  coachState: CoachState | null,
+  preferences: NormalizedPreferences,
+  weeksInBlock: number,
+): boolean {
+  const id = String(exercise.id ?? exercise.exerciseId ?? '')
+  const name = String(exercise.name ?? exercise.exerciseName ?? '')
+  const isPreferred = preferences.preferredExerciseNames?.some((preference) => {
+    const normalized = normalizeText(preference)
+    return Boolean(normalized) && (normalizeText(id).includes(normalized) || normalizeText(name).includes(normalized))
+  }) ?? false
+  return isPreferred
+    || coachState?.exercises?.[id]?.status === 'progress_possible'
+    || weeksInBlock >= 2
+}
+
+/** Issue #482: ослабленный штраф повтора для слота, удерживаемого внутри блока. */
+const REPEAT_PENALTY_IN_BLOCK = 6
+/** Issue #482: бонус непрерывности якоря — перекрывает «свежесть» кандидата без сигналов. */
+const ANCHOR_HOLD_BONUS = 12
 
 export function exerciseScore(
   exercise: NormalizedLibraryExercise,
@@ -172,12 +220,34 @@ export function exerciseScore(
   if (preferences.exerciseStyle === 'free_weights' && isFreeWeightLike(exercise)) score += 10
   if (preferences.exerciseStyle === 'bodyweight' && exercise.targetWeight === 0) score += 12
   if (isRecoveryRestricted(exercise.muscleKey, weeklyContext)) score -= 9000
+  // Issue #482: ось периодизации в скоринге. Раньше штрафы повтора работали
+  // одинаково во всех фазах блока, поэтому состав дня менялся каждую неделю и
+  // непрерывность прогрессии терялась ровно там, где ротация самая частая
+  // (перевыбранный слот стартовал с дефолта справочника, #263). Теперь:
+  //  - якорь (preferred / progress_possible / ≥2 недели использования в блоке)
+  //    держит слот весь блок — бонус непрерывности и ослабленный штраф;
+  //  - второй эшелон удерживается внутри фазы блока (использовался в текущей
+  //    фазе) и ротируется на её границе (использовался только в предыдущей —
+  //    полный штраф −34);
+  //  - «свежий повтор» ≤3 дней (−120) не ослабляется никому: соседние дни
+  //    должны различаться.
+  //  Без блочного контекста (idle, нет цикла) — прежнее поведение.
+  const blockWeeks = weeklyContext.blockUsageWeeks?.get(exercise.id)
+  const weeksInBlock = blockWeeks?.size ?? 0
+  const usedInCurrentPhase = weeksInBlock > 0 && weeklyContext.phaseStartedOn != null
+    && [...(blockWeeks ?? [])].some((week) => week >= weeklyContext.phaseStartedOn!)
+  const isAnchor = isAnchorExercise(exercise, coachState, preferences, weeksInBlock)
+  if (isAnchor && weeksInBlock > 0) score += ANCHOR_HOLD_BONUS
   if (weeklyContext.recentExerciseIds?.has(exercise.id)) score -= 120
   // Issue #239: предпочтение перевешивает обычную ротацию (previousExerciseIds —
   // окно до 7 дней, 6 дней это нормальный перерыв между тренировками группы),
   // но не «свежий повтор» (recentExerciseIds, ≤3 дня): тренировался позавчера —
   // предпочтение проигрывает альтернативе.
-  if (weeklyContext.previousExerciseIds?.has(exercise.id)) score -= isPreferredExercise ? 10 : 34
+  if (weeklyContext.previousExerciseIds?.has(exercise.id)) {
+    const repeatPenalty = isPreferredExercise ? 10 : 34
+    const holdsSlotInBlock = weeksInBlock > 0 && (isAnchor || usedInCurrentPhase)
+    score -= holdsSlotInBlock ? Math.min(repeatPenalty, REPEAT_PENALTY_IN_BLOCK) : repeatPenalty
+  }
   const previousMuscleCount = weeklyContext.previousMuscleCounts?.get(exercise.muscleKey) ?? 0
   if (previousMuscleCount > 1 && !preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score -= 6
   const recentMuscleCount = weeklyContext.recentMuscleCounts?.get(exercise.muscleKey) ?? 0
@@ -192,6 +262,30 @@ export function exerciseScore(
   }
   if (exercise.targetWeight > 0) score += 1
   return score
+}
+
+/**
+ * Issue #482: карта «канонический id → ISO-недели использования внутри
+ * текущего блока». Неделя — понедельник её ISO-ключа; учитывается только
+ * выполненная история после cycleStartedOn. Якорь блока — упражнение с ≥2
+ * неделями использования; occupant текущей фазы — использовавшийся в фазе,
+ * начавшейся не раньше phaseStartedOn.
+ */
+export function buildBlockUsageWeeks(history: WorkoutHistoryEntry[], cycleStartedOn: string | null): Map<string, Set<string>> {
+  const usage = new Map<string, Set<string>>()
+  if (!cycleStartedOn) return usage
+  for (const workout of history ?? []) {
+    const completedOn = String(workout?.completedAt ?? '').slice(0, 10)
+    if (!completedOn || completedOn < cycleStartedOn) continue
+    const weekKey = dateToDateOnly(startOfWeek(new Date(workout.completedAt as string)))
+    for (const exercise of workout.exercises ?? []) {
+      const id = canonicalExerciseId(exercise)
+      if (!id) continue
+      if (!usage.has(id)) usage.set(id, new Set())
+      usage.get(id)!.add(weekKey)
+    }
+  }
+  return usage
 }
 
 export function reasonForExercise({ exercise, coachState, recent, lowReadiness, weeklyContext = emptyWeeklyContext(), policy = null }: ReasonForExerciseParams): string {

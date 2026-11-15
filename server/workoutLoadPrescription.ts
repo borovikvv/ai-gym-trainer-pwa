@@ -94,7 +94,17 @@ export function applyPrescription({ exercise, profile, coachState, coachMemory =
   // завышал помощь ровно так же (#173). Нет ни одного реального сигнала —
   // остаётся прежний полный пул, поведение для новых упражнений не меняется.
   const realWeightCandidates = [historicWeight, coachWorkingWeight].filter((weight) => Number.isFinite(weight) && weight > 0)
-  const candidatePool = invariantSuspended && realWeightCandidates.length > 0 ? realWeightCandidates : weightCandidates
+  // Issue #263: при приостановке инварианта пул — только реальные сигналы.
+  // Issue #482 (Дополнение 1): пул сужается до реальных сигналов и в обычный
+  // день — program_exercises.target_weight отстаёт от факта в обе стороны
+  // (ручные сборки, замены в зале не доезжают до программы), а канонизованная
+  // история (подходы под суффиксными id замен, см. #459/#460/#471) — источник
+  // истины. Программный вес остаётся стартовой точкой только для слотов без
+  // единой записи; в здоровых данных это no-op, т.к. таргет синхронизируется с
+  // фактом клампом после каждой тренировки (clampCoachPlanToNextWorkout).
+  // Инвариант #136 не страдает: берётся максимум реальных сигналов, он не ниже
+  // рабочего веса; направление (assistance) учитывается resolveCandidates ниже.
+  const candidatePool = realWeightCandidates.length > 0 ? realWeightCandidates : weightCandidates
   let baseWeight = candidatePool.length > 0
     ? candidatePool.reduce((best, weight) => resolveCandidates(best, weight, direction))
     : exercise.targetWeight

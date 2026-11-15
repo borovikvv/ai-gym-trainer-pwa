@@ -247,6 +247,27 @@ describe('resolvePlannedSwaps', () => {
     expect(swaps.size).toBe(0)
   })
 
+  it('issue #482: игнорирует предложение для заблокированного слота (якорь)', () => {
+    const swaps = resolvePlannedSwaps(
+      [bench],
+      [{ exerciseId: 'bench-press', replaceWithExerciseId: 'incline-press' }],
+      [inclineChest],
+      new Set(['bench-press']),
+    )
+    expect(swaps.size).toBe(0)
+  })
+
+  it('issue #482: незаблокированный слот меняется как раньше', () => {
+    const dips = { ...bench, exerciseId: 'dips', exerciseName: 'Отжимания на брусьях' }
+    const swaps = resolvePlannedSwaps(
+      [bench, dips],
+      [{ exerciseId: 'dips', replaceWithExerciseId: 'incline-press' }],
+      [inclineChest],
+      new Set(['bench-press']),
+    )
+    expect(swaps.get('dips')).toBe('incline-press')
+  })
+
   it('skips prescription refinement for a swapped slot (generator re-prescribes it)', () => {
     const swaps = resolvePlannedSwaps([bench], [{ exerciseId: 'bench-press', replaceWithExerciseId: 'incline-press' }], [inclineChest])
     const { exercises, changed } = clampRefinedPlannedExercises(

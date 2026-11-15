@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { buildGeneratedPlannedWorkout } from './plannedWorkoutGenerator.js'
+import { blockedSwapSlotIds as computeBlockedSwapSlots, buildGeneratedPlannedWorkout } from './plannedWorkoutGenerator.js'
+import { emptyPreferences, emptyWeeklyContext } from './workoutExerciseEligibility.js'
 
 const profile = {
   userId: 'vyacheslav',
@@ -228,10 +229,13 @@ describe('planned workout generator', () => {
     })
   })
 
-  // Issue #139 (единый источник весов): вес из program_exercises (решение
-  // LLM-планировщика, приходит в exercise.targetWeight) авторитетен — прогрессия
-  // программы выше рабочего веса доходит до видимого плана календаря.
-  it('Issue #139: propagates the LLM program progression (targetWeight above working weight) to the plan', async () => {
+  // Issue #482 (Дополнение 1): при наличии истории предписание строится из
+  // канонизованной истории, а не из program_exercises.target_weight — устаревший
+  // программный таргет больше не завышает и не занижает вес. Дух #139 сохранён:
+  // таргет программы синхронизируется с фактом клампом после каждой тренировки
+  // (clampCoachPlanToNextWorkout), а для слотов без истории остаётся стартовой
+  // точкой (второй тест).
+  it('Issue #482: stale program targetWeight (65) does not override history (60)', async () => {
     const coachState = {
       recoveryStatus: 'ready',
       readinessScore: 85,
@@ -242,7 +246,7 @@ describe('planned workout generator', () => {
       },
       exercises: {},
     }
-    // Программа (LLM) подняла жим до 65; фактический рабочий вес пока 60.
+    // Программный таргет 65 отстал от факта: рабочий вес 60, рекомендация 60.
     const library = [
       { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 65, weightStep: 2.5, restSeconds: 150, instruction: 'жим' },
     ]
@@ -267,7 +271,36 @@ describe('planned workout generator', () => {
     })
 
     const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
-    expect(bench?.targetWeight).toBe(65) // program (LLM) weight wins over working 60
+    expect(bench?.targetWeight).toBe(60) // history wins over the stale program target
+  })
+
+  // Дух #139: таргет программы доходит до плана как стартовая точка слота,
+  // у которого ещё нет ни одной записи в истории.
+  it('Issue #139 (narrowed by #482): program target seeds slots without any history', async () => {
+    const coachState = {
+      recoveryStatus: 'ready',
+      readinessScore: 85,
+      weeklyLoadStatus: 'on_plan',
+      muscleGroups: {
+        chest: { fatigue: 'low' }, back: { fatigue: 'low' }, legs: { fatigue: 'low' },
+        shoulders: { fatigue: 'low' }, arms: { fatigue: 'low' }, core: { fatigue: 'low' },
+      },
+      exercises: {},
+    }
+    const library = [
+      { id: 'bench-press', name: 'Жим лёжа', muscleGroup: 'Грудь', setsCount: 3, repMin: 6, repMax: 8, targetWeight: 65, weightStep: 2.5, restSeconds: 150, instruction: 'жим' },
+    ]
+
+    const plan = await buildGeneratedPlannedWorkout({
+      profile: { ...profile, preferences: { focusAreas: ['грудь'], sessionStyle: 'moderate_stable' } },
+      scheduledDate: '2026-06-08',
+      coachState,
+      exerciseLibrary: library,
+      history: [],
+    })
+
+    const bench = plan.exercises.find((exercise) => exercise.exerciseId === 'bench-press')
+    expect(bench?.targetWeight).toBe(65)
   })
 
   it('uses profile preferences to avoid banned exercises and prioritize focus areas', async () => {
@@ -3059,5 +3092,93 @@ describe('planned workout generator — причины облегчения (iss
     expect(bench).toBeDefined()
     expect(bench.intensityTarget).not.toBe('easy')
     expect(bench.easingReasons).toEqual([])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// computeBlockedSwapSlots: LLM-свапы подчиняются периодизации блока (issue #482)
+// ---------------------------------------------------------------------------
+
+describe('blockedSwapSlotIds: LLM-свапы и фаза блока (issue #482)', () => {
+  const mesocycle = {
+    phase: 'accumulation',
+    phaseDescription: '',
+    weekInCycle: 2,
+    cycleStartedOn: '2026-10-05',
+    cycleLength: 5,
+    loadingWeeks: 4,
+    deloadWeeks: 1,
+    isDeload: false,
+    deloadScheduled: false,
+    triggerReason: null,
+    completionRatio: 1,
+    workoutsThisCycle: 4,
+    plannedWorkoutsThisCycle: 4,
+  }
+  const coachState = {
+    userId: 'u',
+    generatedAt: '2026-10-12T00:00:00Z',
+    recoveryStatus: 'ready',
+    readinessScore: 80,
+    weeklyLoadStatus: 'on_plan',
+    daysSinceLastWorkout: 1,
+    mesocycle,
+    warnings: [],
+    muscleGroups: {},
+    exercises: {},
+  }
+  const baseline = [
+    { exerciseId: 'exercise-anchor', exerciseName: 'Тяга блока' },
+    { exerciseId: 'exercise-fresh', exerciseName: 'Тяга гантели' },
+  ]
+  // Якорь — 2 недели в блоке; второй эшелон — без истории блока.
+  const weeklyContext = {
+    ...emptyWeeklyContext(),
+    cycleStartedOn: '2026-10-05',
+    phaseStartedOn: '2026-10-12',
+    blockUsageWeeks: new Map([['exercise-anchor', new Set(['2026-10-05', '2026-10-12'])]]),
+  }
+
+  it('на границе фазы якорь заблокирован, второй эшелон можно менять', () => {
+    // Понедельник недели сессии совпадает с началом фазы — ротация разрешена.
+    const blocked = computeBlockedSwapSlots({ baseline, weeklyContext, coachState, preferences: emptyPreferences(), scheduledDate: '2026-10-12' })
+    expect(blocked.has('exercise-anchor')).toBe(true)
+    expect(blocked.has('exercise-fresh')).toBe(false)
+  })
+
+  it('в середине фазы свапы заблокированы для всех слотов', () => {
+    const blocked = computeBlockedSwapSlots({ baseline, weeklyContext, coachState, preferences: emptyPreferences(), scheduledDate: '2026-10-19' })
+    expect(blocked.has('exercise-anchor')).toBe(true)
+    expect(blocked.has('exercise-fresh')).toBe(true)
+  })
+
+  it('preferred и progress_possible тоже якоря', () => {
+    const preferredWeekly = {
+      ...weeklyContext,
+      blockUsageWeeks: new Map(),
+    }
+    const blockedPreferred = computeBlockedSwapSlots({ baseline, weeklyContext: preferredWeekly, coachState, preferences: { ...emptyPreferences(), preferredExerciseNames: ['тяга блока'] }, scheduledDate: '2026-10-12' })
+    expect(blockedPreferred.has('exercise-anchor')).toBe(true)
+    const stateWithProgress = { ...coachState, exercises: { 'exercise-anchor': { status: 'progress_possible' } } }
+    const blockedProgress = computeBlockedSwapSlots({ baseline, weeklyContext: preferredWeekly, coachState: stateWithProgress, preferences: emptyPreferences(), scheduledDate: '2026-10-12' })
+    expect(blockedProgress.has('exercise-anchor')).toBe(true)
+  })
+
+  it('deload: свапы заблокированы (фаза не активна)', () => {
+    const blocked = computeBlockedSwapSlots({
+      baseline,
+      weeklyContext: { ...weeklyContext, phaseStartedOn: null },
+      coachState: { ...coachState, mesocycle: { ...mesocycle, phase: 'deload', isDeload: true, weekInCycle: 5 } },
+      preferences: emptyPreferences(),
+      scheduledDate: '2026-11-04',
+    })
+    expect(blocked.has('exercise-anchor')).toBe(true)
+    expect(blocked.has('exercise-fresh')).toBe(true)
+  })
+
+  it('без мезоцикла — блокировок нет (прежнее поведение)', () => {
+    const blocked = computeBlockedSwapSlots({ baseline, weeklyContext, coachState: { ...coachState, mesocycle: null }, preferences: emptyPreferences(), scheduledDate: '2026-10-19' })
+    expect(blocked.size).toBe(0)
   })
 })

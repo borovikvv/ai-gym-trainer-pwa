@@ -11,6 +11,7 @@
 
 import type {
   CoachState,
+  MesocycleState,
   MuscleGroupProfileExtended,
   ExerciseProfile,
   WorkoutHistoryEntry,
@@ -29,8 +30,11 @@ import type { ProgressAnalysis, ExerciseAnalysisFlag } from './coachProgressAnal
 // Issue #328: вынесенные модули (чистый перенос кода, логика не менялась).
 import { daysBetweenDates, emptyPreferences, isBannedExercise, isCoachDecisionRestricted, isCoachMemoryRestricted, isHighFatigue, isRecoveryRestricted, isReturningAfterBreak, normalizeText } from './workoutExerciseEligibility.js'
 import { chooseTargetPattern, isIsolationOrAccessory, orderExercisesForWorkout, orderPatternByWeeklyDeficit } from './workoutPatternRotation.js'
-import { chooseBestExerciseForMuscle, exerciseScore, normalizeExerciseLibrary } from './workoutExerciseSelection.js'
+import { buildBlockUsageWeeks, chooseBestExerciseForMuscle, exerciseScore, isAnchorExercise, normalizeExerciseLibrary } from './workoutExerciseSelection.js'
+import { dateToDateOnly, startOfWeek } from './utils.js'
 import { applyPrescription } from './workoutLoadPrescription.js'
+// Issue #482: граница фазы блока для ротации второго эшелона.
+import { phaseStartedOn } from './mesocycle.js'
 
 
 // ---------------------------------------------------------------------------
@@ -268,6 +272,12 @@ export interface WeeklyContext {
   daysSincePreviousWorkout: number | null
   /** Issue #166: остаток недельной цели по группам (цель минус факт). */
   weeklyVolume: Record<string, WeeklyVolumeStatus>
+  /** Issue #482: понедельник первой недели текущего блока (null — блока нет). */
+  cycleStartedOn: string | null
+  /** Issue #482: понедельник недели начала текущей фазы (null — idle/deload/нет цикла). */
+  phaseStartedOn: string | null
+  /** Issue #482: канонический id → ISO-недели использования внутри блока. */
+  blockUsageWeeks: Map<string, Set<string>>
 }
 
 interface EnsureCoreFinisherParams {
@@ -313,9 +323,13 @@ export async function buildGeneratedPlannedWorkout({
   // Issue #171: политика выводится из возраста профиля — передаём профиль,
   // а не один userId.
   const userTrainingPolicy = getUserTrainingPolicy(profile ?? null)
+  // Issue #482: контекст блока — недели использования упражнений после старта
+  // цикла; идёт в скоринг выбора и в ограничения LLM-свапов.
+  const mesocycle = coachState?.mesocycle ?? null
+  const blockUsageWeeks = buildBlockUsageWeeks(history, mesocycle?.cycleStartedOn ?? null)
   const weeklyContext = buildWeeklyContext(
     [...buildCompletedWorkoutContext(history, scheduledDate), ...previousGeneratedWorkouts],
-    { scheduledDate, profile, weeklyVolume },
+    { scheduledDate, profile, weeklyVolume, mesocycle, blockUsageWeeks },
   )
   const decision = (coachDecision ?? buildCoachDecision({ profile, coachState, coachMemory, scheduledDate, previousGeneratedWorkouts })) as CoachDecisionForGenerator
   const readinessScore = Number(coachState?.readinessScore ?? 70)
@@ -420,6 +434,8 @@ export async function buildGeneratedPlannedWorkout({
     profile,
     allowedAlternatives,
     represcribe,
+    // Issue #482: якоря не свапаются, второй эшелон — только на границе фазы.
+    blockedSwapSlotIds: blockedSwapSlotIds({ baseline: baselineOrdered, weeklyContext, coachState, preferences, scheduledDate }),
   })
   const workoutKind = lowReadiness ? 'восстановительная персональная' : 'персональная тренировка'
   return {
@@ -478,6 +494,42 @@ interface RefineBaselineParams {
   allowedAlternatives: NormalizedLibraryExercise[]
   /** Пере-предписать новое упражнение через applyPrescription (для свапов). */
   represcribe: (exercise: NormalizedLibraryExercise) => GeneratedExercise
+  /** Issue #482: слоты, которые LLM не заменяет (якоря; вне границы фазы). */
+  blockedSwapSlotIds: ReadonlySet<string>
+}
+
+/**
+ * Issue #482: слоты, которые LLM не заменяет. Якорные слоты (preferred /
+ * progress_possible / ≥2 недели в блоке) не заменяются вовсе — их смена
+ * обрывает непрерывность прогрессии. Остальные заменяются только в неделю
+ * границы фазы: LLM-свап — тот же источник недельной ротации, что и штрафы
+ * повтора. Deload: фаза не активна — свапы заблокированы; без цикла
+ * ограничений нет (прежнее поведение).
+ */
+export function blockedSwapSlotIds({
+  baseline,
+  weeklyContext,
+  coachState,
+  preferences,
+  scheduledDate,
+}: {
+  baseline: GeneratedExercise[]
+  weeklyContext: WeeklyContext
+  coachState: CoachState | null
+  preferences: NormalizedPreferences
+  scheduledDate: string
+}): Set<string> {
+  const blocked = new Set<string>()
+  const mesocycle = coachState?.mesocycle
+  if (!mesocycle || mesocycle.phase === 'idle' || !mesocycle.cycleStartedOn) return blocked
+  const sessionWeekMonday = dateToDateOnly(startOfWeek(new Date(`${String(scheduledDate).slice(0, 10)}T00:00:00.000Z`)))
+  const rotationAllowed = weeklyContext.phaseStartedOn === sessionWeekMonday
+  for (const exercise of baseline) {
+    const weeksInBlock = weeklyContext.blockUsageWeeks?.get(exercise.exerciseId)?.size ?? 0
+    const isAnchor = isAnchorExercise({ exerciseId: exercise.exerciseId, exerciseName: exercise.exerciseName }, coachState, preferences, weeksInBlock)
+    if (isAnchor || !rotationAllowed) blocked.add(exercise.exerciseId)
+  }
+  return blocked
 }
 
 // Issue #139: прогоняем baseline через LLM-советник. Советник может (1)
@@ -497,6 +549,7 @@ async function refineBaselinePrescriptions({
   profile,
   allowedAlternatives,
   represcribe,
+  blockedSwapSlotIds,
 }: RefineBaselineParams): Promise<{ orderedSelected: GeneratedExercise[]; planSource: 'llm' | 'rules' }> {
   if (!refineWithLlm || baseline.length === 0) {
     return { orderedSelected: baseline, planSource: 'rules' }
@@ -535,6 +588,7 @@ async function refineBaselinePrescriptions({
     options: {
       isDeload: Boolean(mesocycle?.isDeload) || mesocycle?.phase === 'deload',
       maxWeightJumpSteps: Number(userTrainingPolicy?.maxWeightJumpSteps ?? 1),
+      blockedSwapSlotIds,
     },
     context: {
       goal: profile?.goal,
@@ -666,7 +720,7 @@ function findCoreFinisherReplacementIndex(exercises: GeneratedExercise[]): numbe
 
 function buildWeeklyContext(
   previousGeneratedWorkouts: Array<PreviousGeneratedWorkout | { scheduledDate: string; exercises: PreviousGeneratedWorkout['exercises'] }> = [],
-  { scheduledDate = '', profile, weeklyVolume = null }: { scheduledDate?: string; profile?: ProfileForGenerator; weeklyVolume?: Record<string, WeeklyVolumeStatus> | null } = {},
+  { scheduledDate = '', profile, weeklyVolume = null, mesocycle = null, blockUsageWeeks = new Map() }: { scheduledDate?: string; profile?: ProfileForGenerator; weeklyVolume?: Record<string, WeeklyVolumeStatus> | null; mesocycle?: MesocycleState | null; blockUsageWeeks?: Map<string, Set<string>> } = {},
 ): WeeklyContext {
   const previousExerciseIds = new Set<string>()
   const recentExerciseIds = new Set<string>()
@@ -732,6 +786,10 @@ function buildWeeklyContext(
     calendarWorkoutCountLast7,
     daysSincePreviousWorkout,
     weeklyVolume: weeklyVolume ?? {},
+    // Issue #482: ось периодизации — старт блока и границы фазы для скоринга.
+    cycleStartedOn: mesocycle?.cycleStartedOn ?? null,
+    phaseStartedOn: phaseStartedOn(mesocycle, scheduledDate),
+    blockUsageWeeks,
   }
 }
 
