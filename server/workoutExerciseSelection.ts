@@ -20,6 +20,7 @@ import {
   isRecoveryRestricted,
   latestExerciseHistory,
   matchesExercisePreference,
+  normalizeText,
 } from './workoutExerciseEligibility.js'
 import type {
   CoachDecisionForGenerator,
@@ -127,6 +128,34 @@ export function chooseBestExerciseForMuscle({ muscleKey, library, coachState, co
     ?? null
 }
 
+/**
+ * Issue #482: признак якорного упражнения блока — preferred, слот в прогрессии
+ * (progress_possible) или непрерывная история в текущем блоке (≥2 недели
+ * использования). Якоря держат слот весь блок, второй эшелон ротируется на
+ * границах фаз.
+ */
+export function isAnchorExercise(
+  exercise: { id?: string; name?: string; exerciseId?: string; exerciseName?: string },
+  coachState: CoachState | null,
+  preferences: NormalizedPreferences,
+  weeksInBlock: number,
+): boolean {
+  const id = String(exercise.id ?? exercise.exerciseId ?? '')
+  const name = String(exercise.name ?? exercise.exerciseName ?? '')
+  const isPreferred = preferences.preferredExerciseNames?.some((preference) => {
+    const normalized = normalizeText(preference)
+    return Boolean(normalized) && (normalizeText(id).includes(normalized) || normalizeText(name).includes(normalized))
+  }) ?? false
+  return isPreferred
+    || coachState?.exercises?.[id]?.status === 'progress_possible'
+    || weeksInBlock >= 2
+}
+
+/** Issue #482: ослабленный штраф повтора для слота, удерживаемого внутри блока. */
+const REPEAT_PENALTY_IN_BLOCK = 6
+/** Issue #482: бонус непрерывности якоря — перекрывает «свежесть» кандидата без сигналов. */
+const ANCHOR_HOLD_BONUS = 12
+
 export function exerciseScore(
   exercise: NormalizedLibraryExercise,
   coachState: CoachState | null,
@@ -173,12 +202,34 @@ export function exerciseScore(
   if (preferences.exerciseStyle === 'free_weights' && isFreeWeightLike(exercise)) score += 10
   if (preferences.exerciseStyle === 'bodyweight' && exercise.targetWeight === 0) score += 12
   if (isRecoveryRestricted(exercise.muscleKey, weeklyContext)) score -= 9000
+  // Issue #482: ось периодизации в скоринге. Раньше штрафы повтора работали
+  // одинаково во всех фазах блока, поэтому состав дня менялся каждую неделю и
+  // непрерывность прогрессии терялась ровно там, где ротация самая частая
+  // (перевыбранный слот стартовал с дефолта справочника, #263). Теперь:
+  //  - якорь (preferred / progress_possible / ≥2 недели использования в блоке)
+  //    держит слот весь блок — бонус непрерывности и ослабленный штраф;
+  //  - второй эшелон удерживается внутри фазы блока (использовался в текущей
+  //    фазе) и ротируется на её границе (использовался только в предыдущей —
+  //    полный штраф −34);
+  //  - «свежий повтор» ≤3 дней (−120) не ослабляется никому: соседние дни
+  //    должны различаться.
+  //  Без блочного контекста (idle, нет цикла) — прежнее поведение.
+  const blockWeeks = weeklyContext.blockUsageWeeks?.get(exercise.id)
+  const weeksInBlock = blockWeeks?.size ?? 0
+  const usedInCurrentPhase = weeksInBlock > 0 && weeklyContext.phaseStartedOn != null
+    && [...(blockWeeks ?? [])].some((week) => week >= weeklyContext.phaseStartedOn!)
+  const isAnchor = isAnchorExercise(exercise, coachState, preferences, weeksInBlock)
+  if (isAnchor && weeksInBlock > 0) score += ANCHOR_HOLD_BONUS
   if (weeklyContext.recentExerciseIds?.has(exercise.id)) score -= 120
   // Issue #239: предпочтение перевешивает обычную ротацию (previousExerciseIds —
   // окно до 7 дней, 6 дней это нормальный перерыв между тренировками группы),
   // но не «свежий повтор» (recentExerciseIds, ≤3 дня): тренировался позавчера —
   // предпочтение проигрывает альтернативе.
-  if (weeklyContext.previousExerciseIds?.has(exercise.id)) score -= isPreferredExercise ? 10 : 34
+  if (weeklyContext.previousExerciseIds?.has(exercise.id)) {
+    const repeatPenalty = isPreferredExercise ? 10 : 34
+    const holdsSlotInBlock = weeksInBlock > 0 && (isAnchor || usedInCurrentPhase)
+    score -= holdsSlotInBlock ? Math.min(repeatPenalty, REPEAT_PENALTY_IN_BLOCK) : repeatPenalty
+  }
   const previousMuscleCount = weeklyContext.previousMuscleCounts?.get(exercise.muscleKey) ?? 0
   if (previousMuscleCount > 1 && !preferences.focusMuscleKeys?.includes(exercise.muscleKey)) score -= 6
   const recentMuscleCount = weeklyContext.recentMuscleCounts?.get(exercise.muscleKey) ?? 0

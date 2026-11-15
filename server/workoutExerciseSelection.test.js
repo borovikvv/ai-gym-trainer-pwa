@@ -66,3 +66,105 @@ describe('buildBlockUsageWeeks (issue #482)', () => {
     expect(buildBlockUsageWeeks(history, null).size).toBe(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// exerciseScore: якорная механика блока (issue #482)
+// ---------------------------------------------------------------------------
+
+describe('exerciseScore: якоря и фаза блока (issue #482)', () => {
+  const coachState = { muscleGroups: { back: { fatigue: 'low' } }, exercises: {} }
+  // Планируемая неделя: пн 2026-10-19; фаза accumulation началась пн 2026-10-12.
+  const blockContext = (overrides = {}) => ({
+    ...emptyWeeklyContext(),
+    cycleStartedOn: '2026-10-05',
+    phaseStartedOn: '2026-10-12',
+    blockUsageWeeks: new Map(),
+    previousMuscleCounts: new Map(),
+    recentMuscleCounts: new Map(),
+    ...overrides,
+  })
+
+  const anchor = libraryExercise({ id: 'exercise-anchor', name: 'Тяга блока', targetWeight: 20 })
+  const fresh = libraryExercise({ id: 'exercise-fresh', name: 'Тяга гантели', targetWeight: 20 })
+  // Якорь поднимался в двух неделях блока, последний раз 4 дня назад (≤7, >3).
+  const anchorHistory = [
+    workout('2026-10-07T12:00:00Z', ['exercise-anchor']),
+    workout('2026-10-15T12:00:00Z', ['exercise-anchor']),
+  ]
+  const anchorUsedTwoWeeks = new Map([['exercise-anchor', new Set(['2026-10-05', '2026-10-12'])]])
+
+  it('якорь (≥2 недели в блоке) держит слот: обходит свежего кандидата', () => {
+    const weeklyContext = blockContext({
+      previousExerciseIds: new Set(['exercise-anchor']),
+      blockUsageWeeks: anchorUsedTwoWeeks,
+    })
+    const anchorScore = exerciseScore(anchor, coachState, anchorHistory, false, emptyPreferences(), weeklyContext)
+    const freshScore = exerciseScore(fresh, coachState, [], false, emptyPreferences(), weeklyContext)
+    expect(anchorScore).toBeGreaterThan(freshScore)
+  })
+
+  it('без блочного контекста — прежнее поведение: свежий кандидат выигрывает', () => {
+    const weeklyContext = blockContext({
+      previousExerciseIds: new Set(['exercise-anchor']),
+      cycleStartedOn: null,
+      phaseStartedOn: null,
+    })
+    const anchorScore = exerciseScore(anchor, coachState, anchorHistory, false, emptyPreferences(), weeklyContext)
+    const freshScore = exerciseScore(fresh, coachState, [], false, emptyPreferences(), weeklyContext)
+    expect(freshScore).toBeGreaterThan(anchorScore)
+  })
+
+  it('свежий повтор ≤3 дней не ослабляется даже якорю', () => {
+    const weeklyContext = blockContext({
+      recentExerciseIds: new Set(['exercise-anchor']),
+      previousExerciseIds: new Set(['exercise-anchor']),
+      blockUsageWeeks: anchorUsedTwoWeeks,
+    })
+    const anchorScore = exerciseScore(anchor, coachState, anchorHistory, false, emptyPreferences(), weeklyContext)
+    const freshScore = exerciseScore(fresh, coachState, [], false, emptyPreferences(), weeklyContext)
+    expect(freshScore).toBeGreaterThan(anchorScore)
+  })
+
+  it('второй эшелон из текущей фазы удерживает слот', () => {
+    const weeklyContext = blockContext({
+      previousExerciseIds: new Set(['exercise-anchor']),
+      blockUsageWeeks: new Map([['exercise-anchor', new Set(['2026-10-12'])]]),
+    })
+    const anchorScore = exerciseScore(anchor, coachState, [workout('2026-10-15T12:00:00Z', ['exercise-anchor'])], false, emptyPreferences(), weeklyContext)
+    const freshScore = exerciseScore(fresh, coachState, [], false, emptyPreferences(), weeklyContext)
+    expect(anchorScore).toBeGreaterThan(freshScore)
+  })
+
+  it('второй эшелон из предыдущей фазы (граница) ротируется', () => {
+    // Граница фазы: сессия в неделю 12.10, occupant — из недели 05.10 (loading).
+    const weeklyContext = blockContext({
+      previousExerciseIds: new Set(['exercise-anchor']),
+      blockUsageWeeks: new Map([['exercise-anchor', new Set(['2026-10-05'])]]),
+    })
+    const anchorScore = exerciseScore(anchor, coachState, [workout('2026-10-08T12:00:00Z', ['exercise-anchor'])], false, emptyPreferences(), weeklyContext)
+    const freshScore = exerciseScore(fresh, coachState, [], false, emptyPreferences(), weeklyContext)
+    expect(freshScore).toBeGreaterThan(anchorScore)
+  })
+
+  it('progress_possible — якорь и с одной неделей в блоке', () => {
+    const stateWithProgress = { ...coachState, exercises: { 'exercise-anchor': { status: 'progress_possible' } } }
+    const weeklyContext = blockContext({
+      previousExerciseIds: new Set(['exercise-anchor']),
+      blockUsageWeeks: new Map([['exercise-anchor', new Set(['2026-10-12'])]]),
+    })
+    const anchorScore = exerciseScore(anchor, stateWithProgress, [workout('2026-10-15T12:00:00Z', ['exercise-anchor'])], false, emptyPreferences(), weeklyContext)
+    const freshScore = exerciseScore(fresh, coachState, [], false, emptyPreferences(), weeklyContext)
+    expect(anchorScore).toBeGreaterThan(freshScore)
+  })
+
+  it('preferred — якорь и с одной неделей в блоке', () => {
+    const preferences = { ...emptyPreferences(), preferredExerciseNames: ['тяга блока'] }
+    const weeklyContext = blockContext({
+      previousExerciseIds: new Set(['exercise-anchor']),
+      blockUsageWeeks: new Map([['exercise-anchor', new Set(['2026-10-12'])]]),
+    })
+    const anchorScore = exerciseScore(anchor, coachState, [workout('2026-10-15T12:00:00Z', ['exercise-anchor'])], false, preferences, weeklyContext)
+    const freshScore = exerciseScore(fresh, coachState, [], false, emptyPreferences(), weeklyContext)
+    expect(anchorScore).toBeGreaterThan(freshScore)
+  })
+})
