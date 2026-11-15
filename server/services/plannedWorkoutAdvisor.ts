@@ -83,6 +83,9 @@ export interface ClampPlannedOptions {
   isDeload: boolean
   /** Максимальный скачок веса вверх в шагах (политика пользователя). */
   maxWeightJumpSteps: number
+  /** Issue #482: слоты, которые LLM не заменяет (якоря блока; второй эшелон
+   * вне недели границы фазы). Пусто — свапы не ограничены (нет цикла). */
+  blockedSwapSlotIds?: ReadonlySet<string>
 }
 
 export interface RefinePlannedWorkoutContext {
@@ -141,6 +144,9 @@ export function resolvePlannedSwaps(
   baseline: PlannedExercisePrescription[],
   proposals: LlmPrescriptionProposal[] | null | undefined,
   allowedAlternatives: AllowedAlternative[] | null | undefined,
+  // Issue #482: слоты, замена которых запрещена периодизацией блока (якоря,
+  // второй эшелон вне недели границы фазы).
+  blockedSlotIds: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
   const swaps = new Map<string, string>()
   const allowedById = new Map<string, AllowedAlternative>()
@@ -157,6 +163,7 @@ export function resolvePlannedSwaps(
   const claimed = new Set<string>()
 
   for (const slot of baseline) {
+    if (blockedSlotIds.has(slot.exerciseId)) continue // Issue #482: слот закреплён периодизацией блока
     const proposal = proposalBySlot.get(slot.exerciseId)
     const newId = String(proposal?.replaceWithExerciseId ?? '')
     if (!newId || newId === slot.exerciseId) continue
@@ -294,7 +301,8 @@ export async function refinePlannedWorkoutPrescriptions(input: RefinePlannedWork
     return empty
   }
 
-  const swaps = resolvePlannedSwaps(baseline, proposal.exercises, input.allowedAlternatives)
+  // Issue #482: слоты, закреплённые периодизацией блока, LLM не заменяет.
+  const swaps = resolvePlannedSwaps(baseline, proposal.exercises, input.allowedAlternatives, input.options.blockedSwapSlotIds)
   const { exercises, changed } = clampRefinedPlannedExercises(baseline, proposal.exercises, input.options, swaps)
   // Числовой кламп здесь штатный (границы веса/повторов), а не отказ от решения
   // LLM, поэтому degraded/rejected_by_clamp у этого вызывающего нет — только

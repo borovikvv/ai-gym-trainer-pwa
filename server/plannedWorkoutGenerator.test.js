@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { buildGeneratedPlannedWorkout } from './plannedWorkoutGenerator.js'
+import { blockedSwapSlotIds as computeBlockedSwapSlots, buildGeneratedPlannedWorkout } from './plannedWorkoutGenerator.js'
 
 const profile = {
   userId: 'vyacheslav',
@@ -3059,5 +3059,93 @@ describe('planned workout generator — причины облегчения (iss
     expect(bench).toBeDefined()
     expect(bench.intensityTarget).not.toBe('easy')
     expect(bench.easingReasons).toEqual([])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// computeBlockedSwapSlots: LLM-свапы подчиняются периодизации блока (issue #482)
+// ---------------------------------------------------------------------------
+
+describe('blockedSwapSlotIds: LLM-свапы и фаза блока (issue #482)', () => {
+  const mesocycle = {
+    phase: 'accumulation',
+    phaseDescription: '',
+    weekInCycle: 2,
+    cycleStartedOn: '2026-10-05',
+    cycleLength: 5,
+    loadingWeeks: 4,
+    deloadWeeks: 1,
+    isDeload: false,
+    deloadScheduled: false,
+    triggerReason: null,
+    completionRatio: 1,
+    workoutsThisCycle: 4,
+    plannedWorkoutsThisCycle: 4,
+  }
+  const coachState = {
+    userId: 'u',
+    generatedAt: '2026-10-12T00:00:00Z',
+    recoveryStatus: 'ready',
+    readinessScore: 80,
+    weeklyLoadStatus: 'on_plan',
+    daysSinceLastWorkout: 1,
+    mesocycle,
+    warnings: [],
+    muscleGroups: {},
+    exercises: {},
+  }
+  const baseline = [
+    { exerciseId: 'exercise-anchor', exerciseName: 'Тяга блока' },
+    { exerciseId: 'exercise-fresh', exerciseName: 'Тяга гантели' },
+  ]
+  // Якорь — 2 недели в блоке; второй эшелон — без истории блока.
+  const weeklyContext = {
+    ...emptyWeeklyContext(),
+    cycleStartedOn: '2026-10-05',
+    phaseStartedOn: '2026-10-12',
+    blockUsageWeeks: new Map([['exercise-anchor', new Set(['2026-10-05', '2026-10-12'])]]),
+  }
+
+  it('на границе фазы якорь заблокирован, второй эшелон можно менять', () => {
+    // Понедельник недели сессии совпадает с началом фазы — ротация разрешена.
+    const blocked = computeBlockedSwapSlots({ baseline, weeklyContext, coachState, preferences: emptyPreferences(), scheduledDate: '2026-10-12' })
+    expect(blocked.has('exercise-anchor')).toBe(true)
+    expect(blocked.has('exercise-fresh')).toBe(false)
+  })
+
+  it('в середине фазы свапы заблокированы для всех слотов', () => {
+    const blocked = computeBlockedSwapSlots({ baseline, weeklyContext, coachState, preferences: emptyPreferences(), scheduledDate: '2026-10-19' })
+    expect(blocked.has('exercise-anchor')).toBe(true)
+    expect(blocked.has('exercise-fresh')).toBe(true)
+  })
+
+  it('preferred и progress_possible тоже якоря', () => {
+    const preferredWeekly = {
+      ...weeklyContext,
+      blockUsageWeeks: new Map(),
+    }
+    const blockedPreferred = computeBlockedSwapSlots({ baseline, weeklyContext: preferredWeekly, coachState, preferences: { ...emptyPreferences(), preferredExerciseNames: ['тяга блока'] }, scheduledDate: '2026-10-12' })
+    expect(blockedPreferred.has('exercise-anchor')).toBe(true)
+    const stateWithProgress = { ...coachState, exercises: { 'exercise-anchor': { status: 'progress_possible' } } }
+    const blockedProgress = computeBlockedSwapSlots({ baseline, weeklyContext: preferredWeekly, coachState: stateWithProgress, preferences: emptyPreferences(), scheduledDate: '2026-10-12' })
+    expect(blockedProgress.has('exercise-anchor')).toBe(true)
+  })
+
+  it('deload: свапы заблокированы (фаза не активна)', () => {
+    const blocked = computeBlockedSwapSlots({
+      baseline,
+      weeklyContext: { ...weeklyContext, phaseStartedOn: null },
+      coachState: { ...coachState, mesocycle: { ...mesocycle, phase: 'deload', isDeload: true, weekInCycle: 5 } },
+      preferences: emptyPreferences(),
+      scheduledDate: '2026-11-04',
+    })
+    expect(blocked.has('exercise-anchor')).toBe(true)
+    expect(blocked.has('exercise-fresh')).toBe(true)
+  })
+
+  it('без мезоцикла — блокировок нет (прежнее поведение)', () => {
+    const blocked = computeBlockedSwapSlots({ baseline, weeklyContext, coachState: { ...coachState, mesocycle: null }, preferences: emptyPreferences(), scheduledDate: '2026-10-19' })
+    expect(blocked.size).toBe(0)
   })
 })
