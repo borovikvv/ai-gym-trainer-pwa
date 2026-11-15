@@ -224,6 +224,33 @@ export function isDeloadWeek(mesocycleState: MesocycleState | null | undefined):
 }
 
 /**
+ * Issue #482: понедельник недели, с которой началась текущая фаза блока
+ * (YYYY-MM-DD), или null — фаза не активна (idle/deload) или цикл неизвестен.
+ * Граница фазы для ротации второго эшелона — неделя, в которой этот
+ * понедельник совпадает с понедельником планируемой сессии. Фазы внутри
+ * блока: loading — неделя 1, accumulation — с недели 2, intensification —
+ * с недели loadingWeeks. weekInCycle считает и фантомные недели, поэтому
+ * результат клампится к cycleStartedOn.
+ */
+export function phaseStartedOn(
+  mesocycle: MesocycleState | null | undefined,
+  scheduledDate: string,
+): string | null {
+  if (!mesocycle || !mesocycle.cycleStartedOn) return null
+  if (mesocycle.phase === 'idle' || mesocycle.phase === 'deload') return null
+  const phaseStartWeek = mesocycle.phase === 'loading'
+    ? 1
+    : mesocycle.phase === 'accumulation'
+      ? 2
+      : mesocycle.loadingWeeks // intensification
+  const weeksIntoPhase = Math.max(0, mesocycle.weekInCycle - phaseStartWeek)
+  const sessionWeekStart = startOfWeek(new Date(`${String(scheduledDate).slice(0, 10)}T00:00:00.000Z`))
+  sessionWeekStart.setDate(sessionWeekStart.getDate() - weeksIntoPhase * 7)
+  const phaseStart = dateToDateOnly(sessionWeekStart)
+  return phaseStart < mesocycle.cycleStartedOn ? mesocycle.cycleStartedOn : phaseStart
+}
+
+/**
  * Apply deload reductions to an exercise prescription.
  * Called by plannedWorkoutGenerator and coachPlanner when mesocycle.isDeload.
  */

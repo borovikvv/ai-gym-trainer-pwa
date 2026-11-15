@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeMesocycleState, isDeloadWeek, applyDeloadReduction, computeEffectiveWorkoutsPerWeek } from './mesocycle.js'
+import { computeMesocycleState, isDeloadWeek, applyDeloadReduction, computeEffectiveWorkoutsPerWeek, phaseStartedOn } from './mesocycle.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1120,5 +1120,63 @@ describe('computeMesocycleState — воскресный якорь соглас
 
     expect(result.phase).toBe('deload')
     expect(result.isDeload).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #482: phaseStartedOn — понедельник недели начала текущей фазы блока.
+// Граница фазы = неделя, в которой phaseStartedOn совпадает с понедельником
+// планируемой сессии: только тогда разрешена ротация второго эшелона.
+// ---------------------------------------------------------------------------
+
+describe('phaseStartedOn (issue #482)', () => {
+  // Adult (4+1): блок с понедельника 2026-10-05. Недели: 1=loading,
+  // 2–3=accumulation, 4=intensification, 5=deload.
+  const mesocycleFor = (phase, weekInCycle) => ({
+    phase,
+    weekInCycle,
+    cycleStartedOn: '2026-10-05',
+    cycleLength: 5,
+    loadingWeeks: 4,
+    deloadWeeks: 1,
+    isDeload: phase === 'deload',
+    deloadScheduled: false,
+    triggerReason: null,
+    completionRatio: 1,
+    workoutsThisCycle: 4,
+    plannedWorkoutsThisCycle: 4,
+    phaseDescription: '',
+  })
+
+  it('loading (неделя 1) → понедельник первой недели блока', () => {
+    expect(phaseStartedOn(mesocycleFor('loading', 1), '2026-10-08')).toBe('2026-10-05')
+  })
+
+  it('accumulation (неделя 2) → неделя границы фазы = вторая неделя блока', () => {
+    expect(phaseStartedOn(mesocycleFor('accumulation', 2), '2026-10-14')).toBe('2026-10-12')
+  })
+
+  it('accumulation в середине фазы (неделя 3) → та же граница 12.10', () => {
+    expect(phaseStartedOn(mesocycleFor('accumulation', 3), '2026-10-21')).toBe('2026-10-12')
+  })
+
+  it('intensification (неделя 4) → четвёртая неделя блока', () => {
+    expect(phaseStartedOn(mesocycleFor('intensification', 4), '2026-10-28')).toBe('2026-10-26')
+  })
+
+  it('deload и idle → null (периодизация выбора не активна)', () => {
+    expect(phaseStartedOn(mesocycleFor('deload', 5), '2026-11-04')).toBeNull()
+    expect(phaseStartedOn(mesocycleFor('idle', 0), '2026-11-04')).toBeNull()
+  })
+
+  it('без мезоцикла или без cycleStartedOn → null', () => {
+    expect(phaseStartedOn(null, '2026-11-04')).toBeNull()
+    expect(phaseStartedOn({ ...mesocycleFor('loading', 1), cycleStartedOn: null }, '2026-11-04')).toBeNull()
+  })
+
+  it('фантомные недели не уводят границу раньше старта блока', () => {
+    // weekInCycle завышен пропущенными неделями (9 при 5 календарных) —
+    // вычисленная граница уехала бы до начала блока, клампимся к cycleStartedOn.
+    expect(phaseStartedOn(mesocycleFor('intensification', 9), '2026-11-02')).toBe('2026-10-05')
   })
 })
